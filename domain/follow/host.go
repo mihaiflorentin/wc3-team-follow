@@ -69,6 +69,9 @@ type hostState struct {
 	moves map[string]int
 	// invited remembers who was invited to this lobby.
 	invited map[string]bool
+	// heldFull is set once the player was told a full lobby is waiting
+	// for the group; it resets when the lobby isn't full.
+	heldFull bool
 }
 
 // NormalizeHostSettings trims and checks the settings Auto-host needs.
@@ -342,6 +345,17 @@ func (e *Engine) lobbyUpdate(p map[string]any) {
 		return
 	}
 	ready := h.full && len(h.missing) == 0 && len(h.offTeam) == 0
+	switch {
+	case !h.full:
+		h.heldFull = false
+	case !ready && !h.heldFull:
+		h.heldFull = true
+		if len(h.missing) > 0 {
+			e.Note("The lobby is full, but it won't start until " + joinTags(h.missing) + " joined. You can still press Start yourself.")
+		} else {
+			e.Note("The lobby is full, but it won't start until " + joinTags(h.offTeam) + " are on your team. You can still press Start yourself.")
+		}
+	}
 	starting := h.countdown || h.startSent
 	switch {
 	case ready && !starting:
@@ -439,4 +453,15 @@ func (e *Engine) hostSnapshot() dto.HostState {
 		s.CreateAt = &at
 	}
 	return s
+}
+
+// joinTags lists BattleTags as "A", "A and B" or "A, B and C".
+func joinTags(tags []string) string {
+	switch len(tags) {
+	case 0:
+		return ""
+	case 1:
+		return tags[0]
+	}
+	return strings.Join(tags[:len(tags)-1], ", ") + " and " + tags[len(tags)-1]
 }

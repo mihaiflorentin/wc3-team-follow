@@ -350,3 +350,21 @@ func TestHostListsAreNeverNil(t *testing.T) {
 		t.Fatalf("host = %+v", h)
 	}
 }
+
+func TestAFullLobbyWaitingForTheGroupSaysSoOnce(t *testing.T) {
+	f := newFixture(t)
+	_ = f.engine.Configure(dto.FollowConfig{Tags: &[]string{"Jaina#2214", "Thrall#1820"}})
+	s := hostSettings()
+	s.DelaySeconds, s.StartWhenFull = 0, true
+	f.mustHost(s)
+	f.openOwnLobby()
+	full := lobbyWith(seat{name: "Self#1111"}, seat{name: "Friend#1234"}, seat{name: "Computer (Normal)"})
+	f.receive("GameLobbySetup", full)
+	f.receive("GameLobbySetup", full)
+	if n := notes(f, "won't start until Jaina#2214 and Thrall#1820 joined"); n != 1 {
+		t.Fatalf("notes = %d, log = %+v", n, f.state().Log)
+	}
+	if f.count(follow.CmdLobbyStart) != 0 {
+		t.Fatal("started without the group")
+	}
+}
