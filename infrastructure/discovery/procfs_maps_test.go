@@ -148,7 +148,10 @@ func TestLinuxGamePathThroughWineDocumentsLink(t *testing.T) {
 
 func TestLinuxGamePathFallsBackToZ(t *testing.T) {
 	p := procfs{root: filepath.ToSlash(t.TempDir()), home: ""}
-	if got := p.gamePath(context.Background(), nil, "/home/me/maps/z.w3m"); got != "Z:/home/me/maps/z.w3m" {
-		t.Fatalf("got %q", got)
+	// Links are resolved first: on macOS, where this test also runs, /home
+	// links to /System/Volumes/Data/home.
+	want := "Z:" + realPath("/home/me/maps/z.w3m")
+	if got := p.gamePath(context.Background(), nil, "/home/me/maps/z.w3m"); got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }
