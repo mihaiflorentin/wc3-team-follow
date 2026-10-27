@@ -12,6 +12,10 @@ DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 VERSION_PKG := github.com/mihaiflorentin/wc3-team-follow/cmd/cli
 LDFLAGS := -s -w -X $(VERSION_PKG).version=$(VERSION) -X $(VERSION_PKG).commit=$(COMMIT) -X $(VERSION_PKG).date=$(DATE)
 
+# Windows resources (icon, manifest, version) need a numeric X.Y.Z version.
+WIN_VERSION := $(shell echo '$(VERSION)' | sed -E 's/^v//; s/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/; /^[0-9]+\.[0-9]+\.[0-9]+$$/!s/.*/0.0.0/')
+GO_WINRES := go run github.com/tc-hib/go-winres@v0.3.3
+
 # Wails builds the window only with these tags. Linux uses WebKitGTK 4.1.
 TAGS := desktop,production
 LINUX_TAGS := $(TAGS),webkit2_41
@@ -31,7 +35,7 @@ ifeq ($(HOST_OS),linux)
 HOST_TAGS := $(LINUX_TAGS)
 endif
 
-.PHONY: build run clean test vet fmt lint tidy \
+.PHONY: build run clean test vet fmt lint tidy icons winres \
 	build-windows-amd64 build-linux-amd64 build-darwin-arm64 \
 	package-windows-amd64 package-linux-amd64 package-darwin-arm64
 
@@ -44,7 +48,13 @@ build:
 run: build
 	@./$(BUILD_DIR)/$(APP_NAME)
 
-build-windows-amd64:
+## winres: compile the Windows icon, manifest and version into a .syso that
+## go build links into the .exe.
+winres:
+	@$(GO_WINRES) make --in packaging/windows/winres.json --out rsrc --arch amd64 \
+		--file-version $(WIN_VERSION).0 --product-version $(WIN_VERSION).0
+
+build-windows-amd64: winres
 	@echo "==> windows/amd64"
 	@mkdir -p $(DIST_DIR)
 	@GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -tags '$(TAGS)' \
@@ -66,8 +76,13 @@ build-darwin-arm64:
 package-windows-amd64: build-windows-amd64
 	@cd $(DIST_DIR) && rm -f $(APP_NAME)-windows-amd64.zip && zip -q $(APP_NAME)-windows-amd64.zip $(APP_NAME)-windows-amd64.exe
 
+# The Linux tarball carries an icon and a .desktop entry for app launchers.
 package-linux-amd64: build-linux-amd64
-	@cd $(DIST_DIR) && tar -czf $(APP_NAME)-linux-amd64.tar.gz $(APP_NAME)-linux-amd64
+	@rm -rf $(DIST_DIR)/linux && mkdir -p $(DIST_DIR)/linux
+	@cp $(DIST_DIR)/$(APP_NAME)-linux-amd64 $(DIST_DIR)/linux/$(APP_NAME)
+	@cp packaging/icon/icon-512.png $(DIST_DIR)/linux/$(APP_NAME).png
+	@cp packaging/linux/$(APP_NAME).desktop $(DIST_DIR)/linux/
+	@tar -czf $(DIST_DIR)/$(APP_NAME)-linux-amd64.tar.gz -C $(DIST_DIR)/linux .
 
 # The macOS release is an app bundle, ad-hoc signed with the debugger
 # entitlement so it may read the game's menu session (the game is built
@@ -75,7 +90,8 @@ package-linux-amd64: build-linux-amd64
 package-darwin-arm64: build-darwin-arm64
 	@echo "==> $(APP_BUNDLE).app"
 	@rm -rf "$(DIST_DIR)/$(APP_BUNDLE).app"
-	@mkdir -p "$(DIST_DIR)/$(APP_BUNDLE).app/Contents/MacOS"
+	@mkdir -p "$(DIST_DIR)/$(APP_BUNDLE).app/Contents/MacOS" "$(DIST_DIR)/$(APP_BUNDLE).app/Contents/Resources"
+	@cp packaging/icon/AppIcon.icns "$(DIST_DIR)/$(APP_BUNDLE).app/Contents/Resources/"
 	@cp $(DIST_DIR)/$(APP_NAME)-darwin-arm64 "$(DIST_DIR)/$(APP_BUNDLE).app/Contents/MacOS/$(APP_NAME)"
 	@sed -e 's/__VERSION__/$(patsubst v%,%,$(VERSION))/g' packaging/darwin/Info.plist > "$(DIST_DIR)/$(APP_BUNDLE).app/Contents/Info.plist"
 	@codesign --force --sign - --entitlements packaging/darwin/entitlements.plist "$(DIST_DIR)/$(APP_BUNDLE).app"
@@ -83,7 +99,22 @@ package-darwin-arm64: build-darwin-arm64
 
 clean:
 	@echo "==> cleaning build artifacts"
-	@rm -rf $(BUILD_DIR) $(DIST_DIR)
+	@rm -rf $(BUILD_DIR) $(DIST_DIR) rsrc_windows_*.syso
+
+## icons: re-render every icon from packaging/icon/*.svg (macOS, with
+## rsvg-convert, ImageMagick and iconutil). The results are committed.
+icons:
+	@cd packaging/icon && \
+	for s in 16 24 32; do rsvg-convert -w $$s -h $$s icon-small.svg -o win-$$s.png; done && \
+	for s in 48 64 128 256 512; do rsvg-convert -w $$s -h $$s icon.svg -o win-$$s.png; done && \
+	magick win-16.png win-24.png win-32.png win-48.png win-64.png win-128.png win-256.png icon.ico && \
+	cp win-512.png icon-512.png && cp icon-512.png ../../cmd/gui/icon.png && \
+	mkdir -p AppIcon.iconset && \
+	for s in 16 32 128 256 512; do \
+		rsvg-convert -w $$s -h $$s icon-macos.svg -o AppIcon.iconset/icon_$${s}x$${s}.png; \
+		rsvg-convert -w $$((s*2)) -h $$((s*2)) icon-macos.svg -o AppIcon.iconset/icon_$${s}x$${s}@2x.png; \
+	done && \
+	iconutil -c icns AppIcon.iconset -o AppIcon.icns && rm -rf AppIcon.iconset win-*.png
 
 test:
 	@go test ./...

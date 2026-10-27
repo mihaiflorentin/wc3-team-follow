@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c4645"/>
+      <stop offset="1" stop-color="#152120"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.42" r="0.55">
+      <stop offset="0" stop-color="#f2a93b" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#f2a93b" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#plate)" filter="url(#shadow)"/>
+  <rect x="106" y="106" width="812" height="812" rx="179" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="4"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#glow)"/>
+  <g transform="translate(512 512) scale(0.78) translate(-512 -512)" fill="none" stroke="#f2a93b" stroke-linecap="round" stroke-linejoin="round">
+    <!-- The app's mark: a hexagon, and inside it an A-shaped chevron. -->
+    <path d="M512 196 786 354 786 670 512 828 238 670 238 354Z" stroke-width="56"/>
+    <path d="M374 610 512 372 650 610" stroke-width="62"/>
+    <path d="M425 524H599" stroke-width="54"/>
+  </g>
+</svg>

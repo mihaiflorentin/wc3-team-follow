@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Warcraft Team Follow
+Comment=Follow your friends into Warcraft III custom games
+Exec=wc3-team-follow
+Icon=wc3-team-follow
+Terminal=false
+Categories=Game;Utility;
+StartupWMClass=wc3-team-follow

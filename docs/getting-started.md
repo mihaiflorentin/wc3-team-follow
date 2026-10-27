@@ -52,6 +52,16 @@ python3 -m http.server 8000 --directory cmd/gui/frontend
 
 `infrastructure/discovery` tests run against a fake `/proc` and fake memory. To exercise the Linux path end to end, run any process with `exec -a 'C:\Games\Warcraft III.exe' <program>` that listens on `127.0.0.1`, answers `/webui/index.html` with `GlueManager` and holds `/webui-socket/<digits>` in memory, then run `wc3-team-follow discover`.
 
+## Icons
+
+`packaging/icon/` holds the app icon: `icon.svg` (Windows, Linux and the window), `icon-small.svg` (a bolder version for 16–32 px) and `icon-macos.svg` (on Apple's icon grid). `make icons` re-renders `icon.ico`, `icon-512.png`, `AppIcon.icns` and `cmd/gui/icon.png` from them; it needs macOS with `rsvg-convert`, ImageMagick and `iconutil`. The rendered files are committed, so builds need none of these tools.
+
+| OS | Where the icon comes from |
+| --- | --- |
+| Windows | Resource #3 in the `.exe`, the ID Wails loads for the window and taskbar (`make winres`, `packaging/windows/winres.json`) |
+| macOS | `Contents/Resources/AppIcon.icns` in the app bundle, named by `CFBundleIconFile` |
+| Linux | Set on the window at runtime (`cmd/gui/icon.png`), plus the PNG and `.desktop` entry in the tarball |
+
 ## Screenshots
 
 `docs/screenshots/` holds the README images, one per feature, taken from the demo page at 1100×960, rendered at 2× and scaled to 1400 px wide. Retake them after visible interface changes. On macOS they were rendered with an offscreen `WKWebView` (the engine the macOS app uses) with CSS transitions turned off, since an offscreen window doesn't run them.
