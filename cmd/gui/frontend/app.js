@@ -210,7 +210,7 @@ function render(s) {
   if (!s.passwordRequest) $('lobby-password').value = '';
   renderActions(s);
   renderHost(s);
-  renderTeam(s);
+  $('ask-password').checked = Boolean(s.askPassword);
   renderFriends(s);
   renderLog(s);
 }
@@ -263,7 +263,7 @@ function renderParty(s) {
   const open = members.filter(m => m.status === 'open').length;
   $('party-note').textContent = !members.length ? ''
     : s.enabled ? (open ? `${plural(open, 'lobby is', 'lobbies are')} open right now.` : 'Nobody in your group has a lobby open yet.')
-    : 'Your group. Their status updates live.';
+    : '';
 }
 
 function renderActions(s) {
@@ -280,28 +280,6 @@ function renderActions(s) {
 
 function watchedFor(s, tag) {
   return s.watched.find(w => key(w.battleTag) === key(tag));
-}
-
-function teamRow(s, m) {
-  const w = watchedFor(s, m.battleTag);
-  const label = m.isSelf ? '' : (w ? w.label : m.status);
-  const li = el('li', 'person');
-  li.dataset.status = m.isSelf ? 'self' : statusOfLabel(label, w?.open);
-  const name = el('span', 'name', m.battleTag);
-  if (m.isSelf) name.append(el('small', '', 'you'));
-  li.append(avatar(m.battleTag, {badge: Boolean(w?.open)}), name, presence(label));
-  return li;
-}
-
-function renderTeam(s) {
-  $('include-team').checked = s.includeTeam;
-  $('ask-password').checked = Boolean(s.askPassword);
-  const list = $('team');
-  list.replaceChildren();
-  list.dataset.muted = String(!s.includeTeam);
-  if (!s.connected) return list.append(el('li', 'empty', 'Start Warcraft III to see your team.'));
-  for (const m of s.team) list.append(teamRow(s, m));
-  if (!s.team.some(m => !m.isSelf)) list.append(el('li', 'empty', 'Invite friends to a team in Warcraft III to follow them as a group.'));
 }
 
 // Status order for the picker: joinable first, offline last.
@@ -463,7 +441,6 @@ $('confirm-no').onclick = closeConfirm;
 
 $('friend-search').oninput = () => render(state);
 $('show-offline').onchange = () => render(state);
-$('include-team').onchange = event => changeGroup({includeTeam: event.target.checked});
 $('ask-password').onchange = event => configure({askPassword: event.target.checked});
 
 $('friend-form').onsubmit = async event => {

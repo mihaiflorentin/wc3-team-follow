@@ -216,12 +216,12 @@ input, pre, .log, code { user-select: text; }
   cursor: pointer;
   transition: box-shadow .25s, background .25s;
 }
-.autojoin:has(input:checked) {
+.autojoin:has(.host-switch-row input:checked) {
   background: color-mix(in srgb, var(--open) 14%, var(--spruce-deep));
   box-shadow: inset 0 0 0 1.5px var(--open);
 }
-.autojoin:has(input:disabled) { cursor: not-allowed; opacity: .6; }
-.autojoin:has(input:focus-visible) { outline: 2px solid var(--preview); outline-offset: 2px; }
+.autojoin:has(.host-switch-row input:disabled) { cursor: not-allowed; opacity: .6; }
+.autojoin:has(.host-switch-row input:focus-visible) { outline: 2px solid var(--preview); outline-offset: 2px; }
 .autojoin-text { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .autojoin-title {
   display: inline-flex;
@@ -230,7 +230,7 @@ input, pre, .log, code { user-select: text; }
   font: 600 var(--step-1)/1.1 var(--display);
   font-stretch: 85%;
 }
-.autojoin:has(input:checked) .autojoin-title { color: var(--open); }
+.autojoin:has(.host-switch-row input:checked) .autojoin-title { color: var(--open); }
 .autojoin-help { color: var(--lichen); font-size: 12.5px; line-height: 1.45; }
 .autojoin input {
   appearance: none;
@@ -503,8 +503,6 @@ h2 .icon { color: var(--lichen); }
 }
 .switch input:checked { background: var(--online); }
 .switch input:checked::after { transform: translateX(14px); }
-
-#team[data-muted="true"] { opacity: .5; }
 
 /* Activity ----------------------------------------------------------- */
 
@@ -868,3 +866,22 @@ select {
 .hostcard input:disabled { opacity: .45; cursor: not-allowed; }
 .hostcard .host-setup.needs-setup { background: var(--bone); color: var(--spruce-deep); font-weight: 650; }
 .hostcard .host-setup.needs-setup:hover { filter: brightness(1.08); background: var(--bone); }
+
+/* Auto-join card: Ask for lobby passwords as a quiet option under the switch. */
+.joincard { flex-direction: column; align-items: stretch; gap: 10px; cursor: default; }
+.joincard .autojoin-option {
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--spruce-line);
+  font-size: 12.5px;
+  white-space: normal;
+}
+.joincard .autojoin-option input {
+  width: 32px;
+  height: 18px;
+  background: var(--spruce-line);
+}
+.joincard .autojoin-option input::after { top: 2px; left: 2px; width: 14px; height: 14px; }
+.joincard .autojoin-option input:checked { background: var(--online); }
+.joincard .autojoin-option input:checked::after { transform: translateX(14px); background: var(--bone); }
+.joincard .autojoin-option:has(input:focus-visible) { outline: 2px solid var(--preview); outline-offset: 4px; border-radius: 6px; }
