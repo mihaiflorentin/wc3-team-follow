@@ -431,8 +431,9 @@ func (e *Engine) hostSnapshot() dto.HostState {
 	if !h.enabled || phase == "" {
 		phase = HostOff
 	}
+	// Lists are never nil: the window reads them as arrays.
 	s := dto.HostState{Enabled: h.enabled, Settings: h.settings, Phase: phase, Players: h.players, Slots: h.slots, Full: h.full,
-		Missing: slices.Clone(h.missing), OffTeam: slices.Clone(h.offTeam)}
+		Missing: append([]string{}, h.missing...), OffTeam: append([]string{}, h.offTeam...)}
 	if h.enabled && phase == HostWaiting {
 		at := h.createAt.UTC()
 		s.CreateAt = &at

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"runtime"
 	"runtime/debug"
@@ -294,6 +295,9 @@ func (s *Service) read(ctx context.Context, session contract.GameSession) {
 				s.logger.DebugContext(ctx, "companion.event", slog.String("type", ev.MessageType))
 			}
 			s.engine.Receive(ev)
+			if ev.MessageType == "GameLobbySetup" {
+				s.logLobby(ctx, ev)
+			}
 		}
 		s.logStatus()
 		s.mu.Unlock()
@@ -552,4 +556,24 @@ func (s *Service) SearchMaps(ctx context.Context, query string) (dto.MapListing,
 		return listing, errors.New("The search couldn't finish.")
 	}
 	return listing, nil
+}
+
+// logLobby writes Auto-host's view of the lobby, and the lobby update's
+// field names, so the start rules can be checked from a log. It runs with
+// s.mu held.
+func (s *Service) logLobby(ctx context.Context, ev dto.GameEvent) {
+	host := s.engine.Snapshot().Host
+	if !host.Enabled || host.Phase != "lobby" {
+		return
+	}
+	var playerFields []string
+	if players, ok := ev.Payload["players"].([]any); ok && len(players) > 0 {
+		if first, ok := players[0].(map[string]any); ok {
+			playerFields = slices.Sorted(maps.Keys(first))
+		}
+	}
+	s.logger.DebugContext(ctx, "host.lobby",
+		slog.Int("players", host.Players), slog.Int("slots", host.Slots), slog.Bool("full", host.Full),
+		slog.Any("missing", host.Missing), slog.Any("off_team", host.OffTeam),
+		slog.Any("fields", slices.Sorted(maps.Keys(ev.Payload))), slog.Any("player_fields", playerFields))
 }

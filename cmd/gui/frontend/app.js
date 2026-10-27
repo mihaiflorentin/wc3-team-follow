@@ -502,7 +502,7 @@ const listNames = tags => {
 };
 
 function hostHeadline(s) {
-  const h = s.host;
+  const h = {...s.host, missing: s.host.missing ?? [], offTeam: s.host.offTeam ?? []};
   const name = `“${h.settings.gameName}”`;
   const map = h.settings.mapName;
   switch (h.phase) {

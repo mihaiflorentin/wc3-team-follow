@@ -342,3 +342,11 @@ func TestNoInvitesWithoutTheSwitch(t *testing.T) {
 		t.Fatal("invited without Auto-invite")
 	}
 }
+
+func TestHostListsAreNeverNil(t *testing.T) {
+	f := newFixture(t)
+	h := f.state().Host
+	if h.Missing == nil || h.OffTeam == nil {
+		t.Fatalf("host = %+v", h)
+	}
+}
