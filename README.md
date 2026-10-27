@@ -42,6 +42,14 @@ Each system needs one setup step; see [docs/install.md](docs/install.md).
 3. Team Follow now **watches** them: their portraits show who is online or in Warcraft III, and Activity notes when one of them opens a lobby. Watching never joins anything.
 4. To be taken into those lobbies, turn on **Auto-join** while you're on any of the game's menus (main menu, campaigns, profile, Custom Games, and so on). Team Follow then leaves your team and joins the first of them to open a lobby. It pauses while you're in a lobby, a match, a score screen or a queue, and resumes as soon as you're back on a menu. Leave Team Follow running; minimising is fine, and closing it turns Auto-join off.
 
+**Auto-host** is for the player who hosts. In **Set up**, choose a map from your Maps folder (found automatically; you can pick it yourself too), a lobby name, public or private, map visibility, observers and how long to wait. Turn Auto-host on and Team Follow creates the lobby, then waits for you to press Start in Warcraft III. After each match it creates the next one. Optional switches:
+
+- **Start when full**: starts once every slot is taken and everyone you follow is in, and cancels the start if someone leaves before the countdown locks.
+- **Same team**: moves everyone you follow onto your team.
+- **Auto-invite**: invites people you follow who are in Warcraft III but not in your lobby, for friends without Team Follow.
+
+Auto-host and Auto-join are one at a time: turning one on turns the other off.
+
 If a lobby asks for a password, Team Follow asks you for it once and never saves it. If something goes wrong, **Report a problem** gives you a report to copy and opens the folder with Team Follow's log files; send both (see [docs/install.md](docs/install.md#reporting-a-problem)).
 
 How following decides what to join, and when it pauses, is described in [docs/follow-behaviour.md](docs/follow-behaviour.md).

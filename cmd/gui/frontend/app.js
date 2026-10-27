@@ -116,6 +116,7 @@ function hasTargets(s) {
 function tone(s) {
   if (!s.connected) return 'off';
   if (s.passwordRequest) return 'alert';
+  if (s.host?.enabled) return s.host.phase === 'match' ? 'paused' : 'live';
   if (s.enabled && s.paused) return 'paused';
   if (s.enabled) return 'live';
   return hasTargets(s) ? 'watching' : 'off';
@@ -130,6 +131,7 @@ function headline(s) {
     const r = s.passwordRequest;
     return ['This lobby needs a password', `${r.friend}'s lobby “${r.lobby}” asked for one.`];
   }
+  if (s.host?.enabled) return hostHeadline(s);
   if (s.enabled && s.paused) return ['Following, paused for now', s.status];
   if (s.enabled && s.joinPending && s.lastJoin) return [`Joining ${nameOf(s.lastJoin.friend)}…`, s.status];
   if (s.enabled) return [`Following ${plural(n, 'friend', 'friends')}`, 'The first of them to open a lobby gets joined. Joining pauses while you play.'];
@@ -177,7 +179,8 @@ function render(s) {
   const beacon = $('beacon');
   const t = tone(s);
   beacon.dataset.tone = t;
-  $('state-icon').setAttribute('href', `#i-${s.connected && t === 'off' ? 'users' : toneIcon[t]}`);
+  const glyph = s.host?.enabled ? 'crown' : s.connected && t === 'off' ? 'users' : toneIcon[t];
+  $('state-icon').setAttribute('href', `#i-${glyph}`);
   const joinStamp = s.lastJoin?.time;
   if (lastJoinSeen !== undefined && joinStamp && joinStamp !== lastJoinSeen) {
     beacon.classList.remove('flare');
@@ -196,6 +199,7 @@ function render(s) {
   $('password-form').hidden = !s.passwordRequest;
   if (!s.passwordRequest) $('lobby-password').value = '';
   renderActions(s);
+  renderHost(s);
   renderTeam(s);
   renderFriends(s);
   renderLog(s);
@@ -212,7 +216,7 @@ function renderCommand(s) {
 
 function renderSteps(s) {
   const steps = $('steps');
-  steps.hidden = s.enabled || Boolean(s.passwordRequest) || !$('hint-command').hidden;
+  steps.hidden = s.enabled || s.host?.enabled || Boolean(s.passwordRequest) || !$('hint-command').hidden;
   const done = {game: s.connected, people: hasTargets(s), start: false};
   const current = !done.game ? 'game' : !done.people ? 'people' : 'start';
   for (const li of steps.children) {
@@ -407,16 +411,24 @@ function renderLog(s) {
 
 /* Events --------------------------------------------------------------- */
 
+// confirmThen runs action once the player confirms they're in the menus,
+// or right away when the game has already shown it.
+let confirmed = null;
+function confirmThen(toggle, action) {
+  if (state.inMenus) return action();
+  // The game hasn't said which screen it's on: ask before acting.
+  toggle.checked = false;
+  confirmed = action;
+  $('confirm').hidden = false;
+  $('confirm-yes').focus();
+}
+
 $('autojoin').onchange = event => {
   if (!state) return;
   if (!event.target.checked) return configure({enabled: false});
-  if (state.inMenus) return autoJoin(true);
-  // The game hasn't said which screen it's on: ask before joining anything.
-  event.target.checked = false;
-  $('confirm').hidden = false;
-  $('confirm-yes').focus();
+  confirmThen(event.target, () => autoJoin(true));
 };
-$('confirm-yes').onclick = () => { $('confirm').hidden = true; autoJoin(true); };
+$('confirm-yes').onclick = () => { $('confirm').hidden = true; confirmed?.(); confirmed = null; };
 $('confirm-no').onclick = () => { $('confirm').hidden = true; };
 
 $('friend-search').oninput = () => render(state);
@@ -481,6 +493,328 @@ async function boot() {
 }
 boot();
 
+/* Auto-host ------------------------------------------------------------- */
+
+const hostAct = cfg => act(() => bridge.ConfigureHost(cfg));
+const listNames = tags => {
+  const names = tags.map(nameOf);
+  return names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+};
+
+function hostHeadline(s) {
+  const h = s.host;
+  const name = `“${h.settings.gameName}”`;
+  const map = h.settings.mapName;
+  switch (h.phase) {
+    case 'waiting': {
+      if (!h.createAt) return [`Hosting ${name} next`, `On ${map}.`];
+      const secs = Math.max(0, Math.ceil((new Date(h.createAt) - Date.now()) / 1000));
+      if (s.busy || s.inMatch || s.queued) return [`Hosting ${name} next`, `The lobby is created on ${map} once you're back in the game's menus.`];
+      return [secs > 0 ? `Hosting ${name} in ${secs}s` : `Hosting ${name} now`, `On ${map}. Stay in the game's menus.`];
+    }
+    case 'creating':
+      return ['Creating your lobby…', `${name} on ${map}.`];
+    case 'lobby': {
+      const slots = h.slots ? `${h.players} of ${h.slots} slots taken.` : '';
+      const waiting = h.missing.length ? ` Waiting for ${listNames(h.missing)}.` : group(s).length ? ' Everyone you follow is in.' : '';
+      const team = h.offTeam.length ? ` Moving ${listNames(h.offTeam)} to your team.` : '';
+      const start = h.settings.startWhenFull ? ' It starts when full.' : ' Press Start in Warcraft III when you’re ready.';
+      return [`Your lobby ${name} is open`, `${slots}${waiting}${team}${start}`.trim()];
+    }
+    case 'match':
+      return ['Playing your hosted game', h.settings.delaySeconds ? `The next lobby opens ${h.settings.delaySeconds}s after the match.` : 'The next lobby opens right after the match.'];
+  }
+  return [`Hosting ${name}`, ''];
+}
+
+function hostBlocked(s) {
+  const st = s.host.settings;
+  if (!st.mapPath) return 'Choose a map in Set up first.';
+  if (!st.gameName) return 'Name your lobby in Set up first.';
+  if (!s.connected) return 'Waiting for Warcraft III.';
+  if (!s.verifiedBuild) return `Auto-host isn’t available on game build ${s.version} until it’s been tested.`;
+  if (s.busy || s.queued || s.inMatch) return 'Go back to the game’s menus first.';
+  return '';
+}
+
+function hostSummary(st) {
+  if (!st.mapPath) return 'Create your lobby on a map, then wait for your group.';
+  const extras = [st.private ? 'private' : 'public', st.startWhenFull && 'starts when full', st.sameTeam && 'same team', st.inviteGroup && 'invites your group']
+    .filter(Boolean).join(', ');
+  return `${st.mapName}, “${st.gameName || 'no name yet'}”. ${extras.charAt(0).toUpperCase()}${extras.slice(1)}.`;
+}
+
+function renderHost(s) {
+  const h = s.host;
+  if (!h) return;
+  const toggle = $('autohost');
+  const reason = h.enabled ? '' : hostBlocked(s);
+  toggle.checked = h.enabled;
+  toggle.disabled = !h.enabled && Boolean(reason);
+  $('host-help').textContent = hostSummary(h.settings);
+  $('host-blocked').textContent = s.connected || !h.settings.mapPath ? reason : '';
+}
+
+$('autohost').onchange = event => {
+  if (!state) return;
+  if (!event.target.checked) return hostAct({enabled: false});
+  confirmThen(event.target, () => hostAct({enabled: true, fromMenus: true}));
+};
+
+/* Auto-host setup dialog */
+
+let draft = null;
+
+function fillHostForm() {
+  $('host-map-name').textContent = draft.mapName || 'No map chosen';
+  $('host-map-path').textContent = draft.mapPath || '';
+  document.querySelector('.map-pick').dataset.empty = String(!draft.mapPath);
+  $('host-name').value = draft.gameName || '';
+  updateNameCount();
+  for (const radio of document.querySelectorAll('input[name="host-private"]')) radio.checked = (radio.value === 'private') === Boolean(draft.private);
+  $('host-delay').value = String(draft.delaySeconds ?? 10);
+  if (!$('host-delay').value) $('host-delay').value = '10';
+  $('host-visibility').value = String(draft.visibility ?? 0);
+  $('host-observers').value = String(draft.observers ?? 0);
+  $('host-start-full').checked = Boolean(draft.startWhenFull);
+  $('host-same-team').checked = Boolean(draft.sameTeam);
+  $('host-invite').checked = Boolean(draft.inviteGroup);
+  $('host-error').textContent = '';
+}
+
+function updateNameCount() {
+  $('host-name-count').textContent = `${[...$('host-name').value].length}/31`;
+}
+
+$('host-setup').onclick = () => {
+  if (!state) return;
+  draft = {delaySeconds: 10, ...state.host.settings};
+  fillHostForm();
+  $('host-dialog').showModal();
+};
+$('host-name').oninput = updateNameCount;
+$('host-cancel').onclick = () => $('host-dialog').close();
+$('host-choose-map').onclick = () => openMapBrowser(entry => {
+  draft.mapPath = entry.path;
+  draft.mapName = entry.name;
+  $('host-map-name').textContent = entry.name;
+  $('host-map-path').textContent = entry.path;
+  document.querySelector('.map-pick').dataset.empty = 'false';
+});
+
+$('host-form').onsubmit = async event => {
+  event.preventDefault();
+  const settings = {
+    ...draft,
+    gameName: $('host-name').value.trim(),
+    private: document.querySelector('input[name="host-private"]:checked').value === 'private',
+    delaySeconds: Number($('host-delay').value),
+    visibility: Number($('host-visibility').value),
+    observers: Number($('host-observers').value),
+    startWhenFull: $('host-start-full').checked,
+    sameTeam: $('host-same-team').checked,
+    inviteGroup: $('host-invite').checked,
+  };
+  try {
+    render(await bridge.ConfigureHost({settings}));
+    $('host-dialog').close();
+  } catch (err) {
+    $('host-error').textContent = String(err?.message ?? err);
+  }
+};
+
+/* Map browser */
+
+const browser = {folders: [], dir: '', query: '', listing: null, sort: {key: 'name', dir: 1}, selected: null, onChoose: null, timer: 0};
+const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+
+async function openMapBrowser(onChoose) {
+  browser.onChoose = onChoose;
+  browser.selected = null;
+  browser.query = '';
+  $('maps-search').value = '';
+  $('maps-dialog').showModal();
+  await loadFolders();
+  await browse('');
+  $('maps-search').focus();
+}
+
+async function loadFolders() {
+  try { browser.folders = await bridge.MapsFolders(); } catch { browser.folders = []; }
+  const select = $('maps-folder');
+  select.replaceChildren();
+  if (!browser.folders.length) {
+    const option = el('option', '', 'No maps folder found. Use Change folder.');
+    option.value = '';
+    select.append(option);
+    select.disabled = true;
+    return;
+  }
+  select.disabled = browser.folders.length < 2;
+  for (const f of browser.folders) {
+    const option = el('option', '', `${f.path}  (${f.source})`);
+    option.value = f.path;
+    select.append(option);
+  }
+}
+
+async function browse(dir) {
+  browser.dir = dir;
+  browser.query = '';
+  await loadListing(() => bridge.BrowseMaps(dir));
+}
+
+async function loadListing(call) {
+  $('maps-note').textContent = 'Loading…';
+  browser.error = '';
+  try {
+    browser.listing = await call();
+  } catch (err) {
+    browser.listing = {entries: []};
+    browser.error = String(err?.message ?? err);
+  }
+  renderMaps();
+}
+
+function relPath(entry) {
+  return entry.dir ? `${entry.dir}/${entry.name}` : entry.name;
+}
+
+function sortedEntries() {
+  const {key, dir} = browser.sort;
+  const entries = [...(browser.listing?.entries ?? [])];
+  return entries.sort((a, b) => {
+    if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
+    const by = key === 'date' ? new Date(a.modified) - new Date(b.modified) : collator.compare(a.name, b.name);
+    return (by || collator.compare(a.name, b.name)) * dir;
+  });
+}
+
+function renderCrumbs() {
+  const nav = $('maps-crumbs');
+  nav.replaceChildren();
+  if (browser.query) {
+    nav.append(el('span', 'searching', `Results for “${browser.query}”`));
+    return;
+  }
+  const parts = browser.dir ? browser.dir.split('/') : [];
+  const crumb = (label, dir, current) => {
+    const b = el('button', '', label);
+    b.type = 'button';
+    if (current) b.setAttribute('aria-current', 'page');
+    b.onclick = () => browse(dir);
+    return b;
+  };
+  nav.append(crumb('Maps', '', !parts.length));
+  parts.forEach((part, i) => {
+    nav.append(icon('chevron'), crumb(part, parts.slice(0, i + 1).join('/'), i === parts.length - 1));
+  });
+}
+
+function mapRow(entry) {
+  const tr = el('tr');
+  tr.tabIndex = 0;
+  tr.setAttribute('aria-selected', String(browser.selected?.path === entry.path));
+  const name = el('td');
+  const cell = el('div', 'cell-name');
+  const glyph = icon(entry.isFolder ? 'folder' : 'map');
+  glyph.classList.add(entry.isFolder ? 'kind-folder' : 'kind-map');
+  const label = el('div');
+  label.append(el('span', 'map-name', entry.name));
+  if (browser.query && entry.dir) label.append(el('span', 'map-dir', entry.dir));
+  cell.append(glyph, label);
+  name.append(cell);
+  const date = el('td', 'date', entry.modified ? new Date(entry.modified).toLocaleDateString([], {year: 'numeric', month: 'short', day: 'numeric'}) : '');
+  tr.append(name, date);
+  const open = () => entry.isFolder ? browse(relPath(entry)) : choose(entry);
+  tr.onclick = () => {
+    if (entry.isFolder) return browse(relPath(entry));
+    browser.selected = entry;
+    renderMaps();
+  };
+  tr.ondblclick = () => !entry.isFolder && choose(entry);
+  tr.onkeydown = event => {
+    if (event.key === 'Enter') open();
+    if (event.key === 'ArrowDown') tr.nextElementSibling?.focus();
+    if (event.key === 'ArrowUp') tr.previousElementSibling?.focus();
+  };
+  return tr;
+}
+
+function renderMaps() {
+  renderCrumbs();
+  for (const th of document.querySelectorAll('.maps-table th')) {
+    const key = th.querySelector('button').dataset.sort;
+    th.setAttribute('aria-sort', key === browser.sort.key ? (browser.sort.dir > 0 ? 'ascending' : 'descending') : 'none');
+  }
+  const rows = $('maps-rows');
+  rows.replaceChildren();
+  const entries = sortedEntries();
+  if (!entries.length) {
+    const tr = el('tr', 'empty-row');
+    const td = el('td', '', browser.query ? `No map matches “${browser.query}”.` : 'No maps in this folder.');
+    td.colSpan = 2;
+    tr.append(td);
+    rows.append(tr);
+  }
+  for (const entry of entries) rows.append(mapRow(entry));
+  const maps = entries.filter(e => !e.isFolder).length;
+  const folders = entries.length - maps;
+  $('maps-note').textContent = browser.error || (browser.listing?.truncated
+    ? `Showing the first ${maps} matches. Type more of the name to narrow it down.`
+    : [maps && plural(maps, 'map', 'maps'), folders && plural(folders, 'folder', 'folders')].filter(Boolean).join(', '));
+  $('maps-selected').textContent = browser.selected ? browser.selected.name : '';
+  $('maps-choose').disabled = !browser.selected;
+}
+
+function choose(entry) {
+  $('maps-dialog').close();
+  browser.onChoose?.(entry);
+}
+
+for (const button of document.querySelectorAll('.maps-table th button')) {
+  button.onclick = () => {
+    const key = button.dataset.sort;
+    browser.sort = {key, dir: browser.sort.key === key ? -browser.sort.dir : key === 'date' ? -1 : 1};
+    renderMaps();
+  };
+}
+
+$('maps-search').oninput = () => {
+  clearTimeout(browser.timer);
+  const query = $('maps-search').value.trim();
+  browser.timer = setTimeout(() => {
+    if (!query) return browse(browser.dir);
+    browser.query = query;
+    loadListing(() => bridge.SearchMaps(query));
+  }, 250);
+};
+
+$('maps-folder').onchange = async event => {
+  try {
+    await bridge.SetMapsFolder(event.target.value);
+  } catch (err) {
+    browser.error = String(err?.message ?? err);
+  }
+  await loadFolders();
+  await browse('');
+};
+
+$('maps-change-folder').onclick = async () => {
+  try {
+    const dir = await bridge.ChooseMapsFolder(browser.listing?.root ?? '');
+    if (!dir) return;
+  } catch (err) {
+    $('maps-note').textContent = String(err?.message ?? err);
+    return;
+  }
+  await loadFolders();
+  await browse('');
+};
+
+$('maps-cancel').onclick = () => $('maps-dialog').close();
+$('maps-choose').onclick = () => browser.selected && choose(browser.selected);
+
 /* Demo bridge: used only when the page runs outside the app, to preview
    the design in a browser. Pick a scene with ?scene=watching|first|live|
    paused|password|waiting|linux|unverified. */
@@ -503,6 +837,16 @@ function demoBridge() {
     ['Malfurion#2034', 'Offline', false, false, false, '', false],
   ].map(([battleTag, label, inGame, open, away, lobby = '', online = true]) => ({battleTag, label, inGame, open, away, lobby, online, selected: false}));
   const find = tag => roster.find(r => key(r.battleTag) === key(tag));
+  const hostDemo = {mapPath: '/Maps/Download/Legion TD x20.w3x', mapName: 'Legion TD x20', gameName: 'LTD with friends', private: false, visibility: 0, observers: 0, delaySeconds: 10, startWhenFull: false, sameTeam: false, inviteGroup: true};
+  const mapsRoot = '/Users/player/Library/Application Support/Blizzard/Warcraft III/Maps';
+  const day = d => new Date(Date.UTC(2026, 0, 1) + d * 86400000).toISOString();
+  const tree = {
+    '': [['Download', true, 300], ['FrozenThrone', true, 10], ['(2)Lost Temple', false, 5], ['(4)Twisted Meadows', false, 40], ['Legion TD x20', false, 200]],
+    'Download': [['Tower Defense', true, 280], ['Green Circle TD 2020', false, 120], ['Footmen Frenzy 6.2', false, 250], ['Island Defense 4.1', false, 90], ['(8)Vanguard Point', false, 23]],
+    'Download/Tower Defense': [['Legion TD Mega 4.2', false, 290], ['Element TD 5.5', false, 160], ['Wintermaul Wars', false, 60]],
+    'FrozenThrone': [['(2)Echo Isles', false, 1], ['(4)Turtle Rock', false, 1]],
+  };
+  const entries = dir => (tree[dir] ?? []).map(([name, isFolder, d]) => ({name, isFolder, dir, modified: day(d), path: `${mapsRoot}/${dir ? dir + '/' : ''}${name}${isFolder ? '' : '.w3x'}`}));
   const s = {
     connected: true, version: '3.0.1.24371', verifiedBuild: true, enabled: false, diagnostic: false,
     manualTags: ['Arthas#1123', 'Jaina#2214', 'Thrall#1820', 'Uther#5521'], includeTeam: true,
@@ -512,7 +856,8 @@ function demoBridge() {
       {battleTag: 'Player#1234', isSelf: true, status: 'You'},
       {battleTag: 'Sylvanas#9031', isFriend: true, status: 'In Warcraft III'},
     ],
-    watched: [], friends: [], roster, lastJoin: null,
+    watched: [], friends: [], roster, lastJoin: null, mapsFolder: '',
+    host: {enabled: false, phase: 'off', settings: hostDemo, players: 0, slots: 0, missing: [], offTeam: []},
     log: [
       {time: at(12), message: 'Connected to Warcraft III. Form a team in the game, or add friends here.'},
       {time: at(9), message: 'Illidan#6602 opened a lobby: Legion TD x20.'},
@@ -531,6 +876,9 @@ function demoBridge() {
     });
   };
   const scenes = {
+    'host-waiting': {host: {enabled: true, phase: 'waiting', createAt: new Date(now + 8000).toISOString(), settings: hostDemo, players: 0, slots: 0, missing: [], offTeam: []}},
+    'host-lobby': {host: {enabled: true, phase: 'lobby', settings: {...hostDemo, startWhenFull: true, sameTeam: true}, players: 3, slots: 6, full: false, missing: ['Jaina#2214', 'Thrall#1820'], offTeam: ['Uther#5521']},
+      log: [{time: at(1), message: 'Your lobby “LTD with friends” is open. It starts once it’s full and everyone you follow is in.'}, {time: at(0), message: 'Moving Uther#5521 to your team.'}]},
     watching: {log: [{time: at(3), message: 'Connected to Warcraft III. Form a team in the game, or add friends here.'}, {time: at(1), message: 'Arthas#1123 opened a lobby: Footmen Frenzy 6.2.'}]},
     first: {manualTags: [], team: [{battleTag: 'Player#1234', isSelf: true, status: 'You'}], log: s.log.slice(0, 1)},
     live: {enabled: true},
@@ -550,12 +898,27 @@ function demoBridge() {
     LogFolder: async () => '/home/me/.config/WarcraftTeamFollow/logs',
     OpenLogFolder: async () => {},
     SubmitPassword: async () => { s.passwordRequest = null; return clone(); },
+    ConfigureHost: async cfg => {
+      if (cfg.settings) s.host.settings = cfg.settings;
+      if (cfg.enabled === false) s.host = {...s.host, enabled: false, phase: 'off'};
+      if (cfg.enabled === true) { s.enabled = false; s.host = {...s.host, enabled: true, phase: 'waiting', createAt: new Date(Date.now() + s.host.settings.delaySeconds * 1000).toISOString()}; }
+      return clone();
+    },
+    MapsFolders: async () => [{path: mapsRoot, source: 'Warcraft III’s maps folder'}],
+    SetMapsFolder: async () => clone(),
+    ChooseMapsFolder: async () => '',
+    BrowseMaps: async dir => ({root: mapsRoot, dir, entries: entries(dir)}),
+    SearchMaps: async query => {
+      const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+      const all = Object.keys(tree).flatMap(entries).filter(e => !e.isFolder && words.every(w => e.name.toLowerCase().includes(w)));
+      return {root: mapsRoot, query, entries: all};
+    },
     Configure: async cfg => {
       if (cfg.tags) { s.manualTags = cfg.tags; s.enabled = false; }
       if ('includeTeam' in cfg) { s.includeTeam = cfg.includeTeam; s.enabled = false; }
       if ('diagnostic' in cfg && cfg.diagnostic !== s.diagnostic) { s.diagnostic = cfg.diagnostic; s.enabled = false; }
       if (cfg.enabled === false) s.enabled = false;
-      if (cfg.enabled === true) { s.enabled = true; s.diagnostic = false; watch(); }
+      if (cfg.enabled === true) { s.enabled = true; s.diagnostic = false; s.host = {...s.host, enabled: false, phase: 'off'}; watch(); }
       return clone();
     },
   };

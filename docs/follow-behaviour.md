@@ -83,3 +83,19 @@ Losing the game connection, or `LoggedOut`, forgets the roster and switches Foll
 ## Diagnostics
 
 `Diagnostics()` reports version, screen, counts and event-type counts only. It never contains BattleTags, account ids, lobby names, passwords or the menu session.
+
+## Auto-host
+
+`domain/follow/host.go`. The host's setup (`dto.HostSettings`) is saved with the friend list. Turning Auto-host on turns Auto-join off, and the other way round.
+
+1. **Waiting:** once `delaySeconds` have passed and the player is in the menus (no lobby, match, queue or post-match wait), the engine sends `CreateLobby` with the map's path as the game sees it (`MapsLocator.GamePath`), the name, `privateGame`, and `mapSettings` with the chosen visibility and observers. Everything else is the game's Create Game default: speed 2 (fast), lock teams and teams together on, shared control, random races and random hero off.
+2. **Creating:** the lobby counts as open on `SetGlueScreen GAME_LOBBY` or `GameLobbySetup`. If neither arrives within 20 seconds, Auto-host turns off and says so.
+3. **Lobby:** each `GameLobbySetup` is read for playable slots (`slotStatus` 0 open, 2 occupied; observers ignored), which group members are in (matched by BattleTag or name), and their `team`.
+   - **Same team** sends `SetTeam {slot, team}` for each group member not on the host's team, at most twice per player and team. Players whose `teamChangeEnabled` is false are reported, not moved.
+   - **Auto-invite** sends `SendInviteToGame {target}` once per lobby to each group member who is a friend, online and in Warcraft III but not in the lobby, including friends who come online later.
+   - **Start when full** sends `LobbyStart` when the lobby is full, the whole group is in and, with Same team, on the host's team. If that stops being true while the countdown runs (`LobbyCountdown` `details.countdownActive`), it sends `LobbyCancel`, unless the countdown is locked (`countdownLocked`), which the game doesn't allow to be cancelled.
+   - Without Start when full, nothing starts the game: the host presses Start.
+   - The host leaving the lobby (`MultiplayerGameLeave`) turns Auto-host off.
+4. **Match → waiting:** loading and match screens mark the match; the score screen (or `ExitedGame`) starts the next delay, and the next lobby is created as in step 1.
+
+Commands, all taken from the game's own menu code: `CreateLobby` (Create Game's create button), `LobbyStart` and `LobbyCancel` (the host's lobby buttons), `SetTeam` (the host's team menu), `SendInviteToGame` (the friends list's Invite to game). None of them has been live-tested yet beyond what the game's own code shows.

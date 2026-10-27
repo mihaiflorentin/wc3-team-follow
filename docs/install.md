@@ -70,6 +70,16 @@ Notes for Wine and Proton:
 
 Friends are saved in `~/.config/WarcraftTeamFollow/settings/friends.json` (or under `$XDG_CONFIG_HOME`).
 
+## Maps folder (Auto-host)
+
+Team Follow finds Warcraft III's Maps folder by itself:
+
+- **Windows:** `Documents\Warcraft III\Maps` (following OneDrive or a moved Documents folder), then a `Maps` folder next to the game.
+- **macOS:** `~/Library/Application Support/Blizzard/Warcraft III/Maps`.
+- **Linux:** `drive_c/users/<user>/Documents/Warcraft III/Maps` inside the Wine or Proton prefix of the running game (from its environment or its own path, which covers Steam → Proton → Battle.net → Warcraft III), then in `~/.wine`, every Steam library's Proton prefixes, Lutris (`~/Games/*`) and Bottles. Maps are handed to the game as Windows paths (`C:\users\…`).
+
+`wc3-team-follow discover` prints the folders it found. If none is right, use **Change folder** in the map browser.
+
 ## Reporting a problem
 
 Open **Report a problem** in the Activity panel. Copy the report, press **Open log folder**, and send both the report and `team-follow.log` (plus `crash.log` if it isn't empty). The logs show what Team Follow saw and did, with timestamps. They include BattleTags and lobby names, but never passwords or the game's session.

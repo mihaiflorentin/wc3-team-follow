@@ -12,11 +12,12 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `container/` | `ServiceContainer`: lazy `(T, error)` accessors and `Close`. Used only by the wiring layer. |
 | `config/` | `config.toml` (embedded into the binary) and `NewConfig`. |
 | `logging/` | `Setup` (console + rotated log file + crash file), `New` (console only) and the log handlers. Cross-cutting: every layer may receive a `*slog.Logger`. |
-| `domain/follow/` | The follow state machine. Pure; port of 0.4's `team-follow.cjs`. |
+| `domain/follow/` | The follow state machine (port of 0.4's `team-follow.cjs`) and Auto-host (`host.go`). Pure. |
 | `domain/companion/` | `contract.Companion`: discovery loop, game session, saving friends, publishing state. |
 | `port/contract/` | Interfaces (ports) that domain and adapters meet at. Interfaces only, no structs. |
 | `port/dto/` | Plain data shapes, `package dto`, no subfolders. |
-| `infrastructure/discovery/` | Finds the game, menu port, session and version. `platform_<os>.go` per OS; portable parsing beside it. |
+| `infrastructure/discovery/` | Finds the game, menu port, session and version, and the Maps folders (`MapsLocator`, with Wine path translation). `platform_<os>.go` per OS; portable parsing beside it. |
+| `infrastructure/maps/` | Lists and searches maps in a Maps folder (`MapLibrary`). |
 | `infrastructure/gamesocket/` | Loopback websocket to the game with the command allowlist. |
 | `infrastructure/settings/` | `friends.json` in the per-user data folder. |
 | `mock/` | Hand-written test doubles, one package per contract group. |
@@ -35,7 +36,8 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 
 - Discovery is read-only and inspects only the Warcraft III process. Never write game memory, inject code or search for credentials.
 - The menu session, passwords and account ids are never logged, printed, saved or put in `FollowState` or `Diagnostics`.
-- The game socket sends only the allowlisted commands in `infrastructure/gamesocket`. `SendGameLobbySetup` and `GetGameInfo` crashed the game and must never be added.
+- The game socket sends only the allowlisted commands in `infrastructure/gamesocket`, each one the game's own menu sends for the same purpose: watching and Auto-join (`TeamGetInfo`, `FriendsGetFriends`, `RequestCancelTeamInvitations`, `TeamLeave`, `JoinFriendGameLobby`, `JoinGameByGameName`) and Auto-host (`CreateLobby`, `LobbyStart`, `LobbyCancel`, `SetTeam`, `SendInviteToGame`). `SendGameLobbySetup` and `GetGameInfo` crashed the game and must never be added.
+- Nothing starts a match unless the host switched on Start when full; Auto-host otherwise only creates the lobby.
 - Follow always starts off; nothing re-enables it automatically after a disconnect.
 
 ## Dependency rules

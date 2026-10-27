@@ -30,6 +30,12 @@
   <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4.5h11l-2.5 4 2.5 4H5"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></symbol>
   <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4.5l2 2.5H19a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/></symbol>
+  <symbol id="i-crown" viewBox="0 0 24 24"><path d="M4 18h16"/><path d="M4.5 15 3 7l5 4 4-6 4 6 5-4-1.5 8z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M3.5 6.5 9 4l6 2.5 5.5-2.5v13.5L15 20l-6-2.5-5.5 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1M18.7 18.7l-2.1-2.1M7.4 7.4 5.3 5.3"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m7 14 5-5 5 5"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.01"/></symbol>
 </svg>
 
@@ -93,6 +99,18 @@
         <input type="checkbox" id="autojoin" role="switch">
       </label>
       <p id="blocked" class="fine blocked"></p>
+
+      <div class="autojoin hostcard" id="host-card">
+        <label class="host-switch-row">
+          <span class="autojoin-text">
+            <span class="autojoin-title"><svg class="icon"><use href="#i-crown"/></svg>Auto-host</span>
+            <span id="host-help" class="autojoin-help">Create your lobby on a map, then wait for your group.</span>
+          </span>
+          <input type="checkbox" id="autohost" role="switch">
+        </label>
+        <button type="button" id="host-setup" class="ghost small host-setup"><svg class="icon"><use href="#i-gear"/></svg>Set up</button>
+      </div>
+      <p id="host-blocked" class="fine blocked"></p>
     </div>
   </section>
 
@@ -158,6 +176,117 @@
     <span data-status="offline"><i></i>Offline</span>
   </footer>
 </div>
+
+<dialog id="host-dialog" class="sheet" aria-labelledby="host-title">
+  <form id="host-form" method="dialog">
+    <h2 id="host-title"><svg class="icon"><use href="#i-crown"/></svg>Auto-host</h2>
+    <p class="fine">Team Follow creates this lobby for you, then waits. You press Start in Warcraft III, unless the lobby starts itself when full.</p>
+
+    <div class="field">
+      <span class="field-label">Map</span>
+      <div class="map-pick">
+        <span class="map-pick-name"><svg class="icon"><use href="#i-map"/></svg><span id="host-map-name">No map chosen</span></span>
+        <button type="button" id="host-choose-map" class="ghost small">Choose map</button>
+      </div>
+      <span id="host-map-path" class="fine path"></span>
+    </div>
+
+    <label class="field">
+      <span class="field-label">Lobby name <span id="host-name-count" class="count"></span></span>
+      <input id="host-name" maxlength="31" autocomplete="off" spellcheck="false" placeholder="Name your lobby, like LTD with friends">
+    </label>
+
+    <div class="field-row">
+      <div class="field">
+        <span class="field-label">Who can see it</span>
+        <div class="choice" role="radiogroup" aria-label="Who can see the lobby">
+          <label><input type="radio" name="host-private" value="public" checked><span>Public</span></label>
+          <label><input type="radio" name="host-private" value="private"><span>Private</span></label>
+        </div>
+      </div>
+      <label class="field">
+        <span class="field-label">Create the lobby after</span>
+        <select id="host-delay">
+          <option value="0">Right away</option>
+          <option value="5">5 seconds</option>
+          <option value="10">10 seconds</option>
+          <option value="30">30 seconds</option>
+          <option value="60">1 minute</option>
+          <option value="120">2 minutes</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="field-row">
+      <label class="field">
+        <span class="field-label">Map visibility</span>
+        <select id="host-visibility">
+          <option value="0">Default</option>
+          <option value="1">Hide terrain</option>
+          <option value="2">Map explored</option>
+          <option value="4">Always visible</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">Observers</span>
+        <select id="host-observers">
+          <option value="0">No observers</option>
+          <option value="32">Observers on defeat</option>
+          <option value="4194304">Referees</option>
+          <option value="16">Full observers</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="options">
+      <label class="option-row"><span><strong>Start when full</strong><small>Starts once every slot is taken and everyone you follow is in. Cancels if someone leaves before the countdown locks.</small></span><input type="checkbox" id="host-start-full" role="switch"></label>
+      <label class="option-row"><span><strong>Same team</strong><small>Moves everyone you follow onto your team.</small></span><input type="checkbox" id="host-same-team" role="switch"></label>
+      <label class="option-row"><span><strong>Auto-invite</strong><small>Invites people you follow who are in Warcraft III but not in your lobby, for friends without Team Follow.</small></span><input type="checkbox" id="host-invite" role="switch"></label>
+    </div>
+    <p class="fine">Other lobby options use the game's defaults: fast speed, teams locked and placed together.</p>
+    <p id="host-error" class="error" role="alert"></p>
+    <div class="row end">
+      <button type="button" id="host-cancel" class="ghost">Cancel</button>
+      <button type="submit" id="host-save" class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="maps-dialog" class="sheet wide" aria-labelledby="maps-title">
+  <div class="maps-head">
+    <h2 id="maps-title"><svg class="icon"><use href="#i-map"/></svg>Choose a map</h2>
+    <div class="folder-line">
+      <span class="fine">Maps folder</span>
+      <select id="maps-folder" aria-label="Maps folder"></select>
+      <button type="button" id="maps-change-folder" class="ghost small"><svg class="icon"><use href="#i-folder"/></svg>Change folder</button>
+    </div>
+  </div>
+  <div class="maps-tools">
+    <nav id="maps-crumbs" class="crumbs" aria-label="Folder"></nav>
+    <label class="search">
+      <svg class="icon"><use href="#i-search"/></svg>
+      <span class="visually-hidden">Search all maps</span>
+      <input id="maps-search" type="search" placeholder="Search all maps" autocomplete="off" spellcheck="false">
+    </label>
+  </div>
+  <div class="table-wrap" id="maps-table-wrap">
+    <table class="maps-table">
+      <thead>
+        <tr>
+          <th scope="col" aria-sort="ascending"><button type="button" data-sort="name">Map name<svg class="icon sort"><use href="#i-up"/></svg></button></th>
+          <th scope="col" class="date-col" aria-sort="none"><button type="button" data-sort="date">Date<svg class="icon sort"><use href="#i-up"/></svg></button></th>
+        </tr>
+      </thead>
+      <tbody id="maps-rows"></tbody>
+    </table>
+  </div>
+  <p id="maps-note" class="fine"></p>
+  <div class="row end">
+    <span id="maps-selected" class="fine maps-selected"></span>
+    <button type="button" id="maps-cancel" class="ghost">Cancel</button>
+    <button type="button" id="maps-choose" class="primary" disabled>Choose map</button>
+  </div>
+</dialog>
 
 <dialog id="report-dialog" aria-labelledby="report-title">
   <h2 id="report-title">Report a problem</h2>
