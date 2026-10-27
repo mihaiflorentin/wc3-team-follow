@@ -6,7 +6,9 @@ package companion
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"os"
 	"runtime"
 	"runtime/debug"
 	"slices"
@@ -43,10 +45,21 @@ type Options struct {
 }
 
 // Service implements contract.Companion.
+// Ports are the adapters the service drives.
+type Ports struct {
+	Discovery contract.GameDiscovery
+	Dialer    contract.GameDialer
+	Prefs     contract.PreferenceStore
+	Maps      contract.MapsLocator
+	Library   contract.MapLibrary
+}
+
 type Service struct {
 	discovery contract.GameDiscovery
 	dialer    contract.GameDialer
 	prefs     contract.PreferenceStore
+	maps      contract.MapsLocator
+	library   contract.MapLibrary
 	logger    *slog.Logger
 	opts      Options
 
@@ -58,6 +71,8 @@ type Service struct {
 	lastRefresh   time.Time
 	prefsError    string
 	hint          string
+	// mapsFolder is the folder the player chose, or "".
+	mapsFolder string
 	// lastStatus is the last status line written to the log.
 	lastStatus string
 
@@ -68,23 +83,31 @@ type Service struct {
 
 // New returns the service with the saved selection loaded. Follow starts
 // off and preview mode on.
-func New(discovery contract.GameDiscovery, dialer contract.GameDialer, prefs contract.PreferenceStore, logger *slog.Logger, opts Options) *Service {
+func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
 	s := &Service{
-		discovery:   discovery,
-		dialer:      dialer,
-		prefs:       prefs,
+		discovery:   ports.Discovery,
+		dialer:      ports.Dialer,
+		prefs:       ports.Prefs,
+		maps:        ports.Maps,
+		library:     ports.Library,
 		logger:      logger,
 		opts:        opts,
 		subscribers: map[int]func(dto.FollowState){},
 	}
 	s.engine = follow.NewEngine(s.send, opts.Now, opts.VerifiedBuilds)
 
-	saved, err := prefs.Load()
+	saved, err := s.prefs.Load()
 	if err == nil {
 		err = s.engine.Configure(dto.FollowConfig{Tags: &saved.Tags, IncludeTeam: &saved.IncludeTeam})
+	}
+	if err == nil && saved.Host != nil {
+		err = s.engine.ConfigureHost(dto.HostConfig{Settings: saved.Host})
+	}
+	if err == nil {
+		s.mapsFolder = saved.MapsFolder
 	}
 	if err != nil {
 		logger.Warn("companion.preferences_load", slog.Any("error", err))
@@ -287,6 +310,7 @@ func (s *Service) State() dto.FollowState {
 
 func (s *Service) snapshot() dto.FollowState {
 	state := s.engine.Snapshot()
+	state.MapsFolder = s.mapsFolder
 	state.PreferencesError = s.prefsError
 	if !state.Connected {
 		state.ConnectionHint = s.hint
@@ -300,7 +324,7 @@ func (s *Service) Configure(cfg dto.FollowConfig) (dto.FollowState, error) {
 	err := s.engine.Configure(cfg)
 	s.logger.Info("follow.configure", configAttrs(cfg, err)...)
 	if err == nil && (cfg.Tags != nil || cfg.IncludeTeam != nil) {
-		if saveErr := s.prefs.Save(dto.Preferences{Tags: s.engine.ManualTags(), IncludeTeam: s.engine.IncludeTeam()}); saveErr != nil {
+		if saveErr := s.save(); saveErr != nil {
 			s.logger.Error("companion.preferences_save", slog.Any("error", saveErr))
 			s.prefsError = saveFailed
 			err = errors.New(saveFailed)
@@ -387,4 +411,145 @@ func (s *Service) notify() {
 	for _, fn := range fns {
 		fn(state)
 	}
+}
+
+// save writes the friend selection, Maps folder and Auto-host setup. It
+// runs with s.mu held.
+func (s *Service) save() error {
+	host := s.engine.HostSettings()
+	return s.prefs.Save(dto.Preferences{
+		Tags: s.engine.ManualTags(), IncludeTeam: s.engine.IncludeTeam(),
+		MapsFolder: s.mapsFolder, Host: &host,
+	})
+}
+
+// ConfigureHost changes the Auto-host setup or turns it on or off. Turning
+// it on translates the map's path to the game's view (a Windows path under
+// Wine or Proton).
+func (s *Service) ConfigureHost(ctx context.Context, cfg dto.HostConfig) (dto.FollowState, error) {
+	if cfg.Enabled != nil && *cfg.Enabled {
+		s.mu.Lock()
+		mapPath := s.engine.HostSettings().MapPath
+		s.mu.Unlock()
+		if cfg.Settings != nil {
+			mapPath = cfg.Settings.MapPath
+		}
+		if mapPath != "" {
+			gamePath, err := s.maps.GamePath(ctx, mapPath)
+			if err != nil {
+				return s.State(), fmt.Errorf("The map's path couldn't be prepared for the game: %w", err)
+			}
+			cfg.GameMapPath = gamePath
+		}
+	}
+	s.mu.Lock()
+	err := s.engine.ConfigureHost(cfg)
+	s.logger.Info("host.configure", hostAttrs(cfg, err)...)
+	if err == nil && cfg.Settings != nil {
+		if saveErr := s.save(); saveErr != nil {
+			s.logger.Error("companion.preferences_save", slog.Any("error", saveErr))
+			s.prefsError = saveFailed
+			err = errors.New(saveFailed)
+		} else {
+			s.prefsError = ""
+		}
+	}
+	s.logStatus()
+	state := s.snapshot()
+	s.mu.Unlock()
+	s.notify()
+	return state, err
+}
+
+// hostAttrs describes an Auto-host change for the log.
+func hostAttrs(cfg dto.HostConfig, err error) []any {
+	var attrs []any
+	if st := cfg.Settings; st != nil {
+		attrs = append(attrs, slog.String("map", st.MapName), slog.String("map_path", st.MapPath), slog.String("game_name", st.GameName),
+			slog.Bool("private", st.Private), slog.Int("visibility", st.Visibility), slog.Int("observers", st.Observers),
+			slog.Int("delay_seconds", st.DelaySeconds), slog.Bool("start_when_full", st.StartWhenFull), slog.Bool("same_team", st.SameTeam))
+	}
+	if cfg.Enabled != nil {
+		attrs = append(attrs, slog.Bool("enabled", *cfg.Enabled), slog.Bool("from_menus", cfg.FromMenus), slog.String("game_map_path", cfg.GameMapPath))
+	}
+	if err != nil {
+		attrs = append(attrs, slog.String("refused", err.Error()))
+	}
+	return attrs
+}
+
+// MapsFolders returns the Maps folder the player chose, if any, then the
+// ones found on this computer.
+func (s *Service) MapsFolders(ctx context.Context) []dto.MapsFolder {
+	s.mu.Lock()
+	chosen := s.mapsFolder
+	s.mu.Unlock()
+	var out []dto.MapsFolder
+	if chosen != "" {
+		out = append(out, dto.MapsFolder{Path: chosen, Source: "Chosen by you"})
+	}
+	for _, f := range s.maps.MapsFolders(ctx) {
+		if f.Path != chosen {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// SetMapsFolder makes path the Maps folder; "" goes back to detecting it.
+func (s *Service) SetMapsFolder(path string) (dto.FollowState, error) {
+	if path != "" {
+		info, err := os.Stat(path)
+		if err != nil || !info.IsDir() {
+			return s.State(), errors.New("That folder doesn't exist on this computer.")
+		}
+	}
+	s.mu.Lock()
+	s.mapsFolder = path
+	err := s.save()
+	if err != nil {
+		s.logger.Error("companion.preferences_save", slog.Any("error", err))
+		err = errors.New(saveFailed)
+	}
+	s.logger.Info("maps.folder", slog.String("path", path))
+	state := s.snapshot()
+	s.mu.Unlock()
+	s.notify()
+	return state, err
+}
+
+// currentMapsFolder is the chosen folder or the most likely detected one.
+func (s *Service) currentMapsFolder(ctx context.Context) (string, error) {
+	if folders := s.MapsFolders(ctx); len(folders) > 0 {
+		return folders[0].Path, nil
+	}
+	return "", errors.New("No Warcraft III maps folder was found. Choose it yourself.")
+}
+
+// BrowseMaps lists one folder of the Maps folder.
+func (s *Service) BrowseMaps(ctx context.Context, dir string) (dto.MapListing, error) {
+	root, err := s.currentMapsFolder(ctx)
+	if err != nil {
+		return dto.MapListing{}, err
+	}
+	listing, err := s.library.Browse(ctx, root, dir)
+	if err != nil {
+		s.logger.WarnContext(ctx, "maps.browse", slog.String("root", root), slog.String("dir", dir), slog.Any("error", err))
+		return listing, errors.New("That folder couldn't be read.")
+	}
+	return listing, nil
+}
+
+// SearchMaps finds maps by name in the whole Maps folder.
+func (s *Service) SearchMaps(ctx context.Context, query string) (dto.MapListing, error) {
+	root, err := s.currentMapsFolder(ctx)
+	if err != nil {
+		return dto.MapListing{}, err
+	}
+	listing, err := s.library.Search(ctx, root, query)
+	if err != nil {
+		s.logger.WarnContext(ctx, "maps.search", slog.String("root", root), slog.Any("error", err))
+		return listing, errors.New("The search couldn't finish.")
+	}
+	return listing, nil
 }

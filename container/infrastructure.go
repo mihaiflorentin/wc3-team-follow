@@ -6,6 +6,7 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/config"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/discovery"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/gamesocket"
+	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/maps"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/settings"
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
 )
@@ -18,6 +19,22 @@ type InfrastructureContainer struct {
 	gameDiscovery   lazy[contract.GameDiscovery]
 	gameDialer      lazy[contract.GameDialer]
 	preferenceStore lazy[contract.PreferenceStore]
+	mapsLocator     lazy[contract.MapsLocator]
+	mapLibrary      lazy[contract.MapLibrary]
+}
+
+// MapsLocator returns the Maps folder locator for this operating system.
+func (s *ServiceContainer) MapsLocator() (contract.MapsLocator, error) {
+	return s.infrastructure.mapsLocator.get(func() (contract.MapsLocator, error) {
+		return discovery.NewMapsLocator(s.logger), nil
+	})
+}
+
+// MapLibrary returns the map listing and search adapter.
+func (s *ServiceContainer) MapLibrary() (contract.MapLibrary, error) {
+	return s.infrastructure.mapLibrary.get(func() (contract.MapLibrary, error) {
+		return maps.New(), nil
+	})
 }
 
 // GameDiscovery returns the discovery for this operating system.

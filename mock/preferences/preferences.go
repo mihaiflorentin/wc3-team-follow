@@ -26,7 +26,13 @@ func New(prefs dto.Preferences) *Store { return &Store{Saved: prefs} }
 func (s *Store) Load() (dto.Preferences, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return dto.Preferences{Tags: slices.Clone(s.Saved.Tags), IncludeTeam: s.Saved.IncludeTeam}, s.LoadErr
+	out := s.Saved
+	out.Tags = slices.Clone(s.Saved.Tags)
+	if s.Saved.Host != nil {
+		host := *s.Saved.Host
+		out.Host = &host
+	}
+	return out, s.LoadErr
 }
 
 func (s *Store) Save(prefs dto.Preferences) error {
@@ -36,6 +42,11 @@ func (s *Store) Save(prefs dto.Preferences) error {
 		return s.SaveErr
 	}
 	s.Saves++
-	s.Saved = dto.Preferences{Tags: slices.Clone(prefs.Tags), IncludeTeam: prefs.IncludeTeam}
+	s.Saved = prefs
+	s.Saved.Tags = slices.Clone(prefs.Tags)
+	if prefs.Host != nil {
+		host := *prefs.Host
+		s.Saved.Host = &host
+	}
 	return nil
 }

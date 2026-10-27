@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
 const session = "123456789012345"
@@ -250,6 +252,10 @@ func (f fakePlatform) findGame(context.Context) (game, error)         { return g
 func (f fakePlatform) listeners(context.Context, game) ([]int, error) { return f.ports, nil }
 func (f fakePlatform) session(context.Context, game) (string, error)  { return f.sessionID, nil }
 func (f fakePlatform) version(context.Context, game) string           { return "3.0.1.24371" }
+func (f fakePlatform) mapsFolders(context.Context, *game) []dto.MapsFolder {
+	return nil
+}
+func (f fakePlatform) gamePath(_ context.Context, _ *game, p string) string { return p }
 
 func TestDiscoverProbesForTheMenuPage(t *testing.T) {
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "hello") }))

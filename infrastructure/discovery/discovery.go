@@ -13,6 +13,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -61,6 +62,11 @@ type platform interface {
 	listeners(ctx context.Context, g game) ([]int, error)
 	session(ctx context.Context, g game) (string, error)
 	version(ctx context.Context, g game) string
+	// mapsFolders lists places the game's Maps folder may be, most likely
+	// first; g is nil when no game is running. They need not exist.
+	mapsFolders(ctx context.Context, g *game) []dto.MapsFolder
+	// gamePath converts a path on this computer to the game's view of it.
+	gamePath(ctx context.Context, g *game, path string) string
 }
 
 // Discovery implements contract.GameDiscovery.
@@ -73,6 +79,44 @@ type Discovery struct {
 // New returns the discovery for this operating system.
 func New(logger *slog.Logger) contract.GameDiscovery {
 	return newDiscovery(newPlatform(), logger)
+}
+
+// NewMapsLocator returns the Maps folder locator for this operating system.
+func NewMapsLocator(logger *slog.Logger) contract.MapsLocator {
+	return newDiscovery(newPlatform(), logger)
+}
+
+// MapsFolders returns the existing Maps folders, most likely first.
+func (d *Discovery) MapsFolders(ctx context.Context) []dto.MapsFolder {
+	var running *game
+	if g, err := d.platform.findGame(ctx); err == nil {
+		running = &g
+	}
+	var out []dto.MapsFolder
+	seen := map[string]bool{}
+	for _, f := range d.platform.mapsFolders(ctx, running) {
+		if f.Path == "" || seen[f.Path] {
+			continue
+		}
+		if info, err := os.Stat(f.Path); err != nil || !info.IsDir() {
+			continue
+		}
+		seen[f.Path] = true
+		out = append(out, f)
+	}
+	d.logger.DebugContext(ctx, "discovery.maps_folders", slog.Any("folders", out), slog.Bool("game_running", running != nil))
+	return out
+}
+
+// GamePath returns path as the running game sees it.
+func (d *Discovery) GamePath(ctx context.Context, path string) (string, error) {
+	var running *game
+	if g, err := d.platform.findGame(ctx); err == nil {
+		running = &g
+	}
+	out := d.platform.gamePath(ctx, running, path)
+	d.logger.DebugContext(ctx, "discovery.game_path", slog.String("path", path), slog.String("game_path", out))
+	return out, nil
 }
 
 func newDiscovery(p platform, logger *slog.Logger) *Discovery {

@@ -18,6 +18,16 @@ type Companion interface {
 	// password is never stored.
 	SubmitPassword(password string) (dto.FollowState, error)
 	Diagnostics() dto.Diagnostics
+	// ConfigureHost changes the Auto-host setup, or turns it on or off.
+	ConfigureHost(ctx context.Context, cfg dto.HostConfig) (dto.FollowState, error)
+	// MapsFolders lists the chosen Maps folder, then the detected ones.
+	MapsFolders(ctx context.Context) []dto.MapsFolder
+	// SetMapsFolder chooses the Maps folder; "" goes back to detecting it.
+	SetMapsFolder(path string) (dto.FollowState, error)
+	// BrowseMaps lists one folder of the Maps folder.
+	BrowseMaps(ctx context.Context, dir string) (dto.MapListing, error)
+	// SearchMaps finds maps by name anywhere in the Maps folder.
+	SearchMaps(ctx context.Context, query string) (dto.MapListing, error)
 	// Subscribe calls fn with every new state until the returned function
 	// is called.
 	Subscribe(fn func(dto.FollowState)) (unsubscribe func())

@@ -18,3 +18,10 @@ type GameEvent struct {
 	// Malformed marks a message that could not be read as an event.
 	Malformed bool
 }
+
+// MapsFolder is a folder of Warcraft III maps found on this computer.
+type MapsFolder struct {
+	Path string `json:"path"`
+	// Source says how it was found, for the player.
+	Source string `json:"source"`
+}

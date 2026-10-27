@@ -41,7 +41,15 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve preference store: %w", err)
 		}
-		return companion.New(discovery, dialer, prefs, s.logger, companion.Options{
+		locator, err := s.MapsLocator()
+		if err != nil {
+			return nil, fmt.Errorf("resolve maps locator: %w", err)
+		}
+		library, err := s.MapLibrary()
+		if err != nil {
+			return nil, fmt.Errorf("resolve map library: %w", err)
+		}
+		return companion.New(companion.Ports{Discovery: discovery, Dialer: dialer, Prefs: prefs, Maps: locator, Library: library}, s.logger, companion.Options{
 			VerifiedBuilds:    cfg.VerifiedBuilds,
 			RefreshInterval:   refresh,
 			DiscoveryInterval: discoveryEvery,

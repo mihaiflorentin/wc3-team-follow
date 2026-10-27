@@ -53,3 +53,27 @@ func TestOpenLogFolderNeedsFileLogging(t *testing.T) {
 		t.Fatal("opened a log folder with file logging off")
 	}
 }
+
+func TestBridgePassesHostAndMapCalls(t *testing.T) {
+	c := &mockcompanion.Companion{Listing: dto.MapListing{Entries: []dto.MapEntry{{Name: "Legion TD"}}}}
+	b := gui.NewBridge(c, "", "", "")
+	on := true
+	if _, err := b.ConfigureHost(dto.HostConfig{Enabled: &on}); err != nil || c.LastHost.Enabled == nil {
+		t.Fatalf("host config not passed on: %v", err)
+	}
+	if got := b.MapsFolders(); got == nil {
+		t.Fatal("MapsFolders returned nil instead of an empty list")
+	}
+	if _, err := b.SetMapsFolder("/maps"); err != nil || c.LastFolder != "/maps" {
+		t.Fatal("folder not passed on")
+	}
+	if l, err := b.BrowseMaps("Download"); err != nil || l.Dir != "Download" || len(l.Entries) != 1 {
+		t.Fatalf("browse = %+v, %v", l, err)
+	}
+	if _, err := b.SearchMaps("legion"); err != nil || c.LastQuery != "legion" {
+		t.Fatal("search not passed on")
+	}
+	if _, err := b.ChooseMapsFolder(""); err == nil {
+		t.Fatal("folder picker ran outside the app")
+	}
+}

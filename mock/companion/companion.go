@@ -17,6 +17,11 @@ type Companion struct {
 	Err          error
 	LastConfig   dto.FollowConfig
 	LastPassword string
+	LastHost     dto.HostConfig
+	Folders      []dto.MapsFolder
+	Listing      dto.MapListing
+	LastFolder   string
+	LastQuery    string
 }
 
 func (c *Companion) Run(ctx context.Context) error {
@@ -39,3 +44,25 @@ func (c *Companion) SubmitPassword(password string) (dto.FollowState, error) {
 func (c *Companion) Diagnostics() dto.Diagnostics { return c.Report }
 
 func (c *Companion) Subscribe(func(dto.FollowState)) func() { return func() {} }
+
+func (c *Companion) ConfigureHost(_ context.Context, cfg dto.HostConfig) (dto.FollowState, error) {
+	c.LastHost = cfg
+	return c.Current, c.Err
+}
+
+func (c *Companion) MapsFolders(context.Context) []dto.MapsFolder { return c.Folders }
+
+func (c *Companion) SetMapsFolder(path string) (dto.FollowState, error) {
+	c.LastFolder = path
+	return c.Current, c.Err
+}
+
+func (c *Companion) BrowseMaps(_ context.Context, dir string) (dto.MapListing, error) {
+	c.Listing.Dir = dir
+	return c.Listing, c.Err
+}
+
+func (c *Companion) SearchMaps(_ context.Context, query string) (dto.MapListing, error) {
+	c.LastQuery = query
+	return c.Listing, c.Err
+}

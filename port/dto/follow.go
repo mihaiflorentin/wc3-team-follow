@@ -50,6 +50,10 @@ type FollowState struct {
 	// ConnectionHint explains why the game is not connected yet, when
 	// discovery knows.
 	ConnectionHint string `json:"connectionHint"`
+	// Host is Auto-host's state.
+	Host HostState `json:"host"`
+	// MapsFolder is the folder the map browser opens.
+	MapsFolder string `json:"mapsFolder"`
 }
 
 // TeamMember is one player of the game's current team.
@@ -129,4 +133,90 @@ type Diagnostics struct {
 type Preferences struct {
 	Tags        []string `json:"tags"`
 	IncludeTeam bool     `json:"includeTeam"`
+	// MapsFolder is the Maps folder the player chose; "" detects it.
+	MapsFolder string `json:"mapsFolder,omitempty"`
+	// Host is the saved Auto-host setup.
+	Host *HostSettings `json:"host,omitempty"`
+}
+
+// HostSettings is how Auto-host creates lobbies. Everything else uses the
+// game's own defaults.
+type HostSettings struct {
+	// MapPath is the map file on this computer.
+	MapPath string `json:"mapPath"`
+	// MapName is shown in the window and status lines.
+	MapName  string `json:"mapName"`
+	GameName string `json:"gameName"`
+	// Private hides the lobby from the Custom Games list (the game's
+	// [PUBLIC]/[PRIVATE] toggle).
+	Private bool `json:"private"`
+	// Visibility is the map visibility: 0 default, 1 hide terrain, 2 map
+	// explored, 4 always visible (the game's VisibilityEnum).
+	Visibility int `json:"visibility"`
+	// Observers is who may watch: 0 none, 32 observers on defeat, 4194304
+	// referees, 16 full observers (the game's ObserverEnum).
+	Observers int `json:"observers"`
+	// DelaySeconds is how long to wait before creating a lobby: after
+	// Auto-host is turned on, and after each match.
+	DelaySeconds int `json:"delaySeconds"`
+	// StartWhenFull starts the game once every playable slot is taken and
+	// everyone in the follow group is in the lobby.
+	StartWhenFull bool `json:"startWhenFull"`
+	// SameTeam moves everyone in the follow group onto the host's team.
+	SameTeam bool `json:"sameTeam"`
+	// InviteGroup invites everyone in the follow group who is in
+	// Warcraft III but not in the lobby, for friends without Team Follow.
+	InviteGroup bool `json:"inviteGroup"`
+}
+
+// HostConfig changes Auto-host. Nil fields are left unchanged.
+type HostConfig struct {
+	Settings *HostSettings `json:"settings,omitempty"`
+	Enabled  *bool         `json:"enabled,omitempty"`
+	// FromMenus confirms the player is in the game's menus.
+	FromMenus bool `json:"fromMenus,omitempty"`
+	// GameMapPath is MapPath as the game sees it (a Windows path under
+	// Wine). The companion fills it in.
+	GameMapPath string `json:"-"`
+}
+
+// HostState is Auto-host's part of the snapshot.
+type HostState struct {
+	Enabled  bool         `json:"enabled"`
+	Settings HostSettings `json:"settings"`
+	// Phase is off, waiting, creating, lobby or match.
+	Phase string `json:"phase"`
+	// CreateAt is when the next lobby will be created, while waiting.
+	CreateAt *time.Time `json:"createAt,omitempty"`
+	// Players and Slots describe the open lobby.
+	Players int  `json:"players"`
+	Slots   int  `json:"slots"`
+	Full    bool `json:"full"`
+	// Missing lists group members not in the lobby yet.
+	Missing []string `json:"missing"`
+	// OffTeam lists group members not on the host's team, with SameTeam.
+	OffTeam []string `json:"offTeam"`
+}
+
+// MapEntry is a map file or a folder in the map browser.
+type MapEntry struct {
+	Name     string `json:"name"`
+	IsFolder bool   `json:"isFolder"`
+	// Path is the full path on this computer.
+	Path string `json:"path"`
+	// Dir is the containing folder relative to the Maps folder ("" for the
+	// top), for search results and breadcrumbs.
+	Dir      string    `json:"dir"`
+	Modified time.Time `json:"modified"`
+	Size     int64     `json:"size"`
+}
+
+// MapListing is one folder's contents, or search results.
+type MapListing struct {
+	Root    string     `json:"root"`
+	Dir     string     `json:"dir"`
+	Query   string     `json:"query,omitempty"`
+	Entries []MapEntry `json:"entries"`
+	// Truncated reports that a search stopped at its result limit.
+	Truncated bool `json:"truncated"`
 }

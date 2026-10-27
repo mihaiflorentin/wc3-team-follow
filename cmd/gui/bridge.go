@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"runtime"
 
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
@@ -90,4 +92,59 @@ func revealFolder(dir string) error {
 		cmd = exec.Command("xdg-open", dir)
 	}
 	return cmd.Start()
+}
+
+func (b *Bridge) context() context.Context {
+	if b.ctx != nil {
+		return b.ctx
+	}
+	return context.Background()
+}
+
+// ConfigureHost changes the Auto-host setup, or turns it on or off.
+func (b *Bridge) ConfigureHost(cfg dto.HostConfig) (dto.FollowState, error) {
+	return b.companion.ConfigureHost(b.context(), cfg)
+}
+
+// MapsFolders lists the chosen Maps folder, then the detected ones.
+func (b *Bridge) MapsFolders() []dto.MapsFolder {
+	folders := b.companion.MapsFolders(b.context())
+	if folders == nil {
+		folders = []dto.MapsFolder{}
+	}
+	return folders
+}
+
+// SetMapsFolder chooses the Maps folder; "" goes back to detecting it.
+func (b *Bridge) SetMapsFolder(path string) (dto.FollowState, error) {
+	return b.companion.SetMapsFolder(path)
+}
+
+// ChooseMapsFolder asks for a folder with the system's folder picker and
+// makes it the Maps folder. It returns "" when the player cancels.
+func (b *Bridge) ChooseMapsFolder(start string) (string, error) {
+	if b.ctx == nil {
+		return "", errors.New("The folder picker is only available in the app.")
+	}
+	dir, err := wailsruntime.OpenDirectoryDialog(b.ctx, wailsruntime.OpenDialogOptions{
+		Title:            "Choose your Warcraft III Maps folder",
+		DefaultDirectory: start,
+	})
+	if err != nil || dir == "" {
+		return "", err
+	}
+	if _, err := b.companion.SetMapsFolder(dir); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// BrowseMaps lists one folder of the Maps folder.
+func (b *Bridge) BrowseMaps(dir string) (dto.MapListing, error) {
+	return b.companion.BrowseMaps(b.context(), dir)
+}
+
+// SearchMaps finds maps by name anywhere in the Maps folder.
+func (b *Bridge) SearchMaps(query string) (dto.MapListing, error) {
+	return b.companion.SearchMaps(b.context(), query)
 }

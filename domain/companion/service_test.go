@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/domain/companion"
 	"github.com/mihaiflorentin/wc3-team-follow/domain/follow"
 	mockgame "github.com/mihaiflorentin/wc3-team-follow/mock/game"
+	mockmaps "github.com/mihaiflorentin/wc3-team-follow/mock/maps"
 	mockprefs "github.com/mihaiflorentin/wc3-team-follow/mock/preferences"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
@@ -26,6 +28,8 @@ type harness struct {
 	discovery *mockgame.Discovery
 	session   *mockgame.Session
 	prefs     *mockprefs.Store
+	locator   *mockmaps.Locator
+	library   *mockmaps.Library
 }
 
 func newHarness(t *testing.T, prefs *mockprefs.Store) *harness {
@@ -35,7 +39,9 @@ func newHarness(t *testing.T, prefs *mockprefs.Store) *harness {
 		session:   mockgame.NewSession(),
 		prefs:     prefs,
 	}
-	h.svc = companion.New(h.discovery, &mockgame.Dialer{Session: h.session}, prefs, slog.New(slog.DiscardHandler), companion.Options{
+	h.locator = &mockmaps.Locator{Folders: []dto.MapsFolder{{Path: "/detected/Maps", Source: "test"}}, GamePrefix: "GAME:"}
+	h.library = &mockmaps.Library{Entries: []dto.MapEntry{{Name: "Legion TD", Path: "/detected/Maps/Legion TD.w3x"}, {Name: "Footmen Frenzy", Path: "/detected/Maps/ff.w3x"}}}
+	h.svc = companion.New(companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library}, slog.New(slog.DiscardHandler), companion.Options{
 		VerifiedBuilds:    []string{build},
 		RefreshInterval:   5 * time.Second,
 		DiscoveryInterval: 10 * time.Second,
@@ -205,7 +211,7 @@ func TestLogsNeverContainTheSessionOrPasswords(t *testing.T) {
 		session:   mockgame.NewSession(),
 		prefs:     mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}),
 	}
-	h.svc = companion.New(h.discovery, &mockgame.Dialer{Session: h.session}, h.prefs,
+	h.svc = companion.New(companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: h.prefs, Maps: &mockmaps.Locator{}, Library: &mockmaps.Library{}},
 		slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		companion.Options{VerifiedBuilds: []string{build}, RefreshInterval: 5 * time.Second, DiscoveryInterval: 10 * time.Second})
 	h.run(t)
@@ -242,4 +248,59 @@ func (b *safeBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+func TestAutoHostTranslatesTheMapPathAndSavesTheSetup(t *testing.T) {
+	prefs := mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true})
+	h := newHarness(t, prefs)
+	h.run(t)
+	waitFor(t, "connection", func() bool { return h.svc.State().Connected })
+	settings := dto.HostSettings{MapPath: "/detected/Maps/Legion TD.w3x", MapName: "Legion TD", GameName: "LTD", DelaySeconds: 0}
+	on := true
+	state, err := h.svc.ConfigureHost(context.Background(), dto.HostConfig{Settings: &settings, Enabled: &on, FromMenus: true})
+	if err != nil || !state.Host.Enabled {
+		t.Fatalf("err=%v host=%+v", err, state.Host)
+	}
+	waitFor(t, "CreateLobby", func() bool {
+		for _, c := range h.session.Sent() {
+			if c.Message == "CreateLobby" && c.Payload["filename"] == "GAME:/detected/Maps/Legion TD.w3x" {
+				return true
+			}
+		}
+		return false
+	})
+	saved, _ := prefs.Load()
+	if saved.Host == nil || saved.Host.GameName != "LTD" {
+		t.Fatalf("saved = %+v", saved)
+	}
+}
+
+func TestMapsFolderChoiceComesFirstAndIsSaved(t *testing.T) {
+	prefs := mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true})
+	h := newHarness(t, prefs)
+	dir := t.TempDir()
+	if _, err := h.svc.SetMapsFolder(dir); err != nil {
+		t.Fatal(err)
+	}
+	folders := h.svc.MapsFolders(context.Background())
+	if len(folders) != 2 || folders[0].Path != dir || folders[0].Source != "Chosen by you" {
+		t.Fatalf("folders = %+v", folders)
+	}
+	if saved, _ := prefs.Load(); saved.MapsFolder != dir {
+		t.Fatalf("saved = %+v", saved)
+	}
+	if _, err := h.svc.BrowseMaps(context.Background(), ""); err != nil || h.library.LastRoot != dir {
+		t.Fatalf("browsed %q, %v", h.library.LastRoot, err)
+	}
+	if _, err := h.svc.SetMapsFolder(filepath.Join(dir, "missing")); err == nil {
+		t.Fatal("accepted a folder that doesn't exist")
+	}
+}
+
+func TestSearchUsesTheDetectedFolder(t *testing.T) {
+	h := newHarness(t, mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}))
+	got, err := h.svc.SearchMaps(context.Background(), "legion")
+	if err != nil || len(got.Entries) != 1 || h.library.LastRoot != "/detected/Maps" {
+		t.Fatalf("got %+v, %v (root %q)", got, err, h.library.LastRoot)
+	}
 }

@@ -21,16 +21,24 @@ const (
 	readLimit   = 8 << 20
 )
 
-// allowed lists every command the companion may send. Two state queries
-// (SendGameLobbySetup, GetGameInfo) closed the game during development and
-// must never be added.
+// allowed lists every command the companion may send, each one the game's
+// own menu sends for the same purpose. Two state queries (SendGameLobbySetup,
+// GetGameInfo) closed the game during development and must never be added.
 var allowed = map[string]bool{
+	// Watching and Auto-join.
 	"TeamGetInfo":                  true,
 	"FriendsGetFriends":            true,
 	"RequestCancelTeamInvitations": true,
 	"TeamLeave":                    true,
 	"JoinFriendGameLobby":          true,
 	"JoinGameByGameName":           true,
+	// Auto-host: Create Game's create button, and the host's lobby controls.
+	"CreateLobby": true,
+	"LobbyStart":  true,
+	"LobbyCancel": true,
+	"SetTeam":     true,
+	// Auto-invite: the friends list's Invite to game.
+	"SendInviteToGame": true,
 }
 
 // ErrNotAllowed reports a command outside the allowlist.

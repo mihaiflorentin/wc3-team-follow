@@ -145,6 +145,9 @@ type Engine struct {
 	menusKnown bool
 	resumeAt   time.Time
 
+	// host is Auto-host.
+	host hostState
+
 	attempted      []string
 	presenceEpochs map[string]presenceEpoch
 	// seenOpen remembers which group lobbies were already announced while
@@ -205,6 +208,7 @@ func (e *Engine) Connection(connected bool, version string) {
 	e.busy, e.queued, e.screen = false, false, ""
 	e.inMatch, e.awaitingMenu, e.menuReady, e.resumeAt = false, false, false, time.Time{}
 	e.menusKnown = false
+	e.host = hostState{settings: e.host.settings, phase: HostOff}
 	e.attempted = nil
 	clear(e.presenceEpochs)
 	clear(e.seenOpen)
@@ -309,6 +313,9 @@ func (e *Engine) arm(fromMenus bool) error {
 		return errors.New("Invite a friend to your team or add a friend's BattleTag first.")
 	}
 
+	if e.host.enabled {
+		e.stopHost("Auto-host is off while Auto-join is on.")
+	}
 	e.watched = members
 	e.enabled, e.pending, e.password = true, nil, nil
 	clear(e.announced)
@@ -479,7 +486,9 @@ func (e *Engine) Receive(event dto.GameEvent) {
 		e.pending, e.password = nil, nil
 		e.Note("The game could not join that lobby. Follow stays on and waits for a new lobby.")
 	}
+	e.hostReceive(kind, p)
 	e.resumeIfReady()
+	e.hostStep()
 	e.announceOpenLobbies()
 	e.evaluate()
 }
@@ -736,6 +745,7 @@ func (e *Engine) Tick() {
 		e.pending = nil
 		e.Note("The game didn't confirm the join. Check Warcraft III before trying again.")
 	}
+	e.hostStep()
 	e.evaluate()
 }
 
@@ -805,6 +815,7 @@ func (e *Engine) Snapshot() dto.FollowState {
 		s.Friends = append(s.Friends, dto.WatchedMember{BattleTag: tag, Label: p.label, Open: p.open, Lobby: p.lobby})
 	}
 	s.Roster = e.rosterSnapshot()
+	s.Host = e.hostSnapshot()
 	return s
 }
 
