@@ -1,46 +1,79 @@
 name: release
 
-# Pushing a Release Tag (X.Y.Z, optionally with a leading v and a pre-release
-# part) vets and tests the project, cross-compiles every `make build-all`
-# target with the tag, commit and build date injected,
-# and publishes a GitHub Release with the binaries and a SHA-256 checksums
-# file. scripts/release-tag.sh classifies the tag; tags it rejects run nothing.
-# Branch pushes and pull requests never run this workflow. Any failing job stops
-# the release. See docs/ci.md.
+# Builds Warcraft Team Follow for Windows (amd64), Linux (amd64) and macOS
+# (arm64) and publishes the files as a GitHub Release.
+#
+# - A pushed Release Tag (X.Y.Z, optional leading v and pre-release part)
+#   publishes a release named after the tag. scripts/release-tag.sh
+#   classifies the tag; tags it rejects run nothing.
+# - A push to master replaces the rolling "edge" pre-release, so the latest
+#   master build is always downloadable.
+#
+# The window needs cgo on macOS and Linux, so each of those builds runs on
+# its own OS; Windows cross-compiles from Linux. Tests run on all three.
+# Any failing job stops the release. See docs/ci.md.
 on:
   push:
+    branches:
+      - master
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+*"
       - "[0-9]+.[0-9]+.[0-9]+*"
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   classify:
     runs-on: ubuntu-latest
     outputs:
-      release: ${{ steps.tag.outputs.release }}
-      prerelease: ${{ steps.tag.outputs.prerelease }}
-      environment: ${{ steps.tag.outputs.environment }}
+      release: ${{ steps.kind.outputs.release }}
+      prerelease: ${{ steps.kind.outputs.prerelease }}
+      tag: ${{ steps.kind.outputs.tag }}
+      version: ${{ steps.kind.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - name: Classify the tag
-        id: tag
+      - name: Classify the push
+        id: kind
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
         run: |
-          sh scripts/release-tag.sh "${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          if [ "$REF_TYPE" = "tag" ]; then
+            sh scripts/release-tag.sh "$REF_NAME" | grep -E '^(release|prerelease)=' >> "$GITHUB_OUTPUT"
+            echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "version=$REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "tag=edge" >> "$GITHUB_OUTPUT"
+            echo "version=0.0.0-edge.${SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
           cat "$GITHUB_OUTPUT"
 
   test:
     needs: classify
     if: needs.classify.outputs.release == 'true'
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        runner: [ubuntu-22.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install WebKitGTK
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: Vet
         run: go vet ./...
       - name: Test
@@ -48,7 +81,24 @@ jobs:
 
   build:
     needs: [classify, test]
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: windows-amd64
+            runner: ubuntu-latest
+            target: package-windows-amd64
+            file: dist/wc3-team-follow-windows-amd64.zip
+          - name: linux-amd64
+            # The oldest supported Ubuntu keeps the glibc requirement low.
+            runner: ubuntu-22.04
+            target: package-linux-amd64
+            file: dist/wc3-team-follow-linux-amd64.tar.gz
+          - name: macos-arm64
+            runner: macos-latest
+            target: package-darwin-arm64
+            file: dist/wc3-team-follow-macos-arm64.zip
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,17 +107,18 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Cross-compile
-        run: make build-all VERSION="${{ github.ref_name }}" COMMIT="${{ github.sha }}" DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-      - name: Checksums
-        working-directory: dist
-        run: sha256sum wc3-team-follow-* > checksums.txt
+      - name: Install WebKitGTK
+        if: matrix.name == 'linux-amd64'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Build
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          COMMIT: ${{ github.sha }}
+        run: make ${{ matrix.target }} VERSION="$VERSION" COMMIT="${COMMIT::7}" DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       - uses: actions/upload-artifact@v4
         with:
-          name: release-artifacts
-          path: |
-            dist/wc3-team-follow-*
-            dist/checksums.txt
+          name: release-${{ matrix.name }}
+          path: ${{ matrix.file }}
           if-no-files-found: error
 
   release:
@@ -78,16 +129,28 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: release-artifacts
+          pattern: release-*
+          merge-multiple: true
           path: dist
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum wc3-team-follow-* > checksums.txt && cat checksums.txt
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.classify.outputs.tag }}
           PRERELEASE: ${{ needs.classify.outputs.prerelease }}
+          SHA: ${{ github.sha }}
         run: |
-          prerelease=""
-          if [ "$PRERELEASE" = "true" ]; then prerelease="--prerelease"; fi
-          gh release create "$TAG" dist/wc3-team-follow-* dist/checksums.txt \
-            --title "$TAG" --generate-notes --verify-tag $prerelease
+          if [ "$TAG" = "edge" ]; then
+            gh release delete edge --cleanup-tag --yes || true
+            gh release create edge dist/wc3-team-follow-* dist/checksums.txt \
+              --target "$SHA" --prerelease --title "Edge build (master ${SHA::7})" \
+              --notes "Built automatically from the latest commit on master. Not a tested release; see docs/install.md for setup."
+          else
+            prerelease=""
+            if [ "$PRERELEASE" = "true" ]; then prerelease="--prerelease"; fi
+            gh release create "$TAG" dist/wc3-team-follow-* dist/checksums.txt \
+              --title "$TAG" --generate-notes --verify-tag $prerelease
+          fi

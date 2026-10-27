@@ -91,30 +91,3 @@ func TestNew_NilConfigDefaultsToSimpleInfo(t *testing.T) {
 		t.Errorf("unexpected simple output: %q", out)
 	}
 }
-
-func TestNewAccessLogger_UsesServerDefaultFormatAndLevel(t *testing.T) {
-	var buf bytes.Buffer
-	cfg := &config.LoggingConfig{Default: string(logging.LoggerTypeSimple), ServerDefault: string(logging.LoggerTypeJSON), Level: "warn"}
-	logger := logging.NewAccessLogger(cfg, &buf)
-
-	logger.Info("dropped")
-	logger.Warn("http.access")
-
-	var got map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
-		t.Fatalf("access logger did not write one JSON record: %v\n%s", err, buf.String())
-	}
-	if got["msg"] != "http.access" {
-		t.Errorf("msg = %v, want http.access", got["msg"])
-	}
-}
-
-func TestNewAccessLogger_EmptyServerDefaultFallsBackToDefault(t *testing.T) {
-	var buf bytes.Buffer
-	cfg := &config.LoggingConfig{Default: string(logging.LoggerTypeJSON), Level: "info"}
-	logging.NewAccessLogger(cfg, &buf).Info("http.access")
-
-	if !json.Valid(buf.Bytes()) {
-		t.Errorf("access logger did not fall back to the json default: %q", buf.String())
-	}
-}

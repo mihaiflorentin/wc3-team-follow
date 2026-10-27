@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	_ "time/tzdata" // embed the timezone database: TZ resolves in images without zoneinfo
 
 	"github.com/mihaiflorentin/wc3-team-follow/cmd/cli"
 	"github.com/mihaiflorentin/wc3-team-follow/config"
@@ -15,9 +14,8 @@ import (
 
 // main is the composition root: it builds config, logger and container once
 // and hands the container to the CLI, the only layer that resolves from it.
-// @title             wc3-team-follow
-// @version           1.0.0
 func main() {
+	attachConsole()
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

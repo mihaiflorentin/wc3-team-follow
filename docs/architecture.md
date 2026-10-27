@@ -1,84 +1,64 @@
 # Architecture
 
-**wc3-team-follow** follows a hexagonal (ports and adapters) architecture. The application core (`domain/`) talks to the outside world only through interfaces in `port/contract`. Adapters on the driving side (`cmd/`) call into the core; adapters on the driven side (`infrastructure/`) implement interfaces the core needs. All of them meet in one composition root.
+Warcraft Team Follow is a hexagonal (ports and adapters) desktop app. The core (`domain/`) talks to the outside world only through interfaces in `port/contract`. The window drives the core; adapters in `infrastructure/` implement what the core needs. One composition root wires them together (`docs/container.md`, `docs/adr/0001-composition-root-and-constructor-injection.md`).
 
 ## Ports and adapters
 
-- **Ports** are the interfaces in `port/contract`. An inbound port such as `contract.ExampleService` is what the transports call; an outbound port is what the domain needs from the outside world. Each port has a production adapter and a test double in `mock/`.
-- **Driving adapters** start work: the HTTP server in `cmd/http/` and the Cobra commands in `cmd/cli/`.
-- **Driven adapters** fulfil outbound ports: the packages under `infrastructure/`. Infrastructure constructors return the contract, not their concrete type.
-- **Dependency inversion**: high-level code depends on the interfaces; the concrete adapters are chosen in one place, `container/`, and passed in through constructors.
+```
+            driving side                core                       driven side
+  ┌──────────────────────────┐   ┌─────────────────────┐   ┌──────────────────────────────┐
+  │ cmd/gui  (Wails window)  │──▶│ contract.Companion   │──▶│ contract.GameDiscovery        │
+  │   frontend/ (HTML/JS)    │   │  domain/companion    │   │   infrastructure/discovery    │
+  │ cmd/cli  (commands)      │   │   └ domain/follow    │   │ contract.GameDialer/Session   │
+  └──────────────────────────┘   └─────────────────────┘   │   infrastructure/gamesocket   │
+                                                           │ contract.PreferenceStore      │
+                                                           │   infrastructure/settings     │
+                                                           └──────────────────────────────┘
+```
 
-## Layers
-
-| Package | Role | May import |
+| Layer | Package | Role |
 | --- | --- | --- |
-| `main.go` | Composition root | `config`, `logging`, `container`, `cmd/cli` |
-| `cmd/cli/` | Command tree; resolves dependencies from the container | `container`, `cmd/http`, `config`, `port` |
-| `cmd/http/` | HTTP handler, middleware pipeline, server | `port`, `config`, `logging` |
-| `container/` | Builds adapters and services lazily, closes them | everything it wires |
-| `domain/` | Business logic | `port`, standard library |
-| `port/contract/` | Interfaces only | `port/dto` |
-| `port/dto/` | DTOs: in-app shapes in `package dto`, HTTP shapes in `port/dto/request/` and `port/dto/response/` | standard library |
-| `infrastructure/` | Adapters to external systems | `port`, `config` |
-| `logging/` | Builds the `*slog.Logger` | `config` |
-| `config/` | Loads `config.toml` | standard library, Viper |
-| `mock/` | Test doubles for every contract | `port` |
+| Composition root | `main.go`, `container/` | Builds config, logger and container; lazy accessors |
+| Driving adapters | `cmd/cli/`, `cmd/gui/` | Commands; the window and its `Bridge` |
+| Core | `domain/companion` | Discovery loop, the one game session, saving friends, publishing state |
+| | `domain/follow` | The follow state machine (`docs/follow-behaviour.md`) |
+| Ports | `port/contract`, `port/dto` | Interfaces and plain data |
+| Driven adapters | `infrastructure/discovery` | Finds the game, its menu port and session, per OS |
+| | `infrastructure/gamesocket` | Loopback websocket with the command allowlist |
+| | `infrastructure/settings` | `friends.json` in the per-user data folder |
 
-Only `main.go`, `cmd/cli/` and `container/` import `container`. `docs/container.md` explains why and how.
+## Startup
 
-## Startup wiring
+1. `main.go` loads `config/config.toml` (embedded), builds the logger and the container, and runs the CLI.
+2. With no command, `cmd/cli` resolves `contract.Companion` from the container and calls `gui.Run`.
+3. `gui.Run` opens the Wails window. On startup it subscribes to state changes (pushed to the page as the `state` event) and starts `Companion.Run`. Closing the window cancels it, which switches Follow off and closes the game session.
 
-```text
-main.go
-  config.NewConfig()                  embedded config/config.toml + environment overrides
-  logging.New(cfg.Logging, os.Stdout) the *slog.Logger, also slog.SetDefault
-  container.New(cfg, logger)          lazy (T, error) accessors
-  cli.Execute(c)                      Cobra command tree built with the container
-    server command
-      httpDeps(c, cmd)                resolves ExampleService, ... from the container
-      httpserver.NewHandler(deps)     routes + middleware pipeline
-      httpserver.StartServer(ctx, handler, opts)
-    worker command
-      resolveWorkerDeps(c)            resolves ExampleService
-      runPingLoop(ctx, ...)           runs Ping every --interval until SIGTERM
-    example-job command
-      resolveJobDeps(c)               resolves ExampleService
-      ExampleService.RunJob(ctx, job) one run, then exit
-  c.Close()                           closes every adapter in reverse creation order
-```
+The page calls the Go side as `window.go.gui.Bridge.*`: `State`, `Configure`, `SubmitPassword`, `Diagnostics`, `ExecutablePath`. Errors come back as rejected promises whose text is written for players.
 
-## Request flow
+## The companion loop
 
-```text
-client
-  → middleware pipeline (cmd/http/middleware, order in docs/logging-and-middleware.md)
-  → http.ServeMux route ("GET /example")
-  → handler (cmd/http/app/example/handler) holding contract.ExampleService
-  → domain/example.Service
-```
+`domain/companion.Service` runs a one-second tick:
 
-Routes registered by `NewHandler`:
+- `engine.Tick()` for timeouts and resume;
+- every `[follow] refresh_interval`, while connected, `TeamGetInfo` and `FriendsGetFriends`;
+- while disconnected, every `[follow] discovery_interval`, discovery and dial in the background.
 
-| Route | Served by |
-| --- | --- |
-| `GET /health` | `cmd/http/app/root/handler` (`response.Health`), liveness |
-| `GET /health/ready` | `cmd/http/app/root/handler` (`response.Readiness`), readiness: runs `Deps.Readiness` checks (see `docs/container.md`) |
-| `GET /example` | `cmd/http/app/example/handler` (`response.Example`) |
-| `GET /docs/`, `GET /docs/swagger.json` | Swagger UI and `cmd/http/resource/swagger/swagger.json` |
+A reader goroutine feeds each game event to the engine. One mutex serialises the engine; state is published to subscribers after every change. A discovery error becomes `FollowState.ConnectionHint` when it is a sentence for players (discovery's errors start with a capital letter), or a generic hint otherwise.
 
-Any other path returns 404.
+## Game discovery
 
-## Configuration
+Discovery finds exactly one game process, its loopback listener that serves `/webui/index.html` containing `GlueManager`, the menu session (11–20 digits after `/webui/index.html?guid=` or `/webui-socket/`) and the game version. Only the game process is inspected, read-only, with a 12 s and 2 GiB scan budget.
 
-`config/config.toml` is embedded into the binary at build time, so a changed file takes effect after the next build. At runtime any key can be overridden with an environment variable named after the key, upper-cased, with dots replaced by underscores:
+| | Windows | macOS | Linux (Wine/Proton) |
+| --- | --- | --- | --- |
+| Process | Toolhelp snapshot, `Warcraft III.exe` | `proc_listallpids` + `proc_pidpath`, `…/Warcraft III.app/Contents/MacOS/Warcraft III` | `/proc/*/cmdline` whose argv[0] (or argv[1] after a `wine*` loader) is `…\Warcraft III.exe` |
+| Listeners | `GetExtendedTcpTable`, owned by the game | `lsof` for the user's loopback listeners, game first | `/proc/<pid>/net/tcp`: the game's sockets first, then the same user's (wineserver may own them) |
+| Session | `VirtualQueryEx` + `ReadProcessMemory` over committed private memory | `task_for_pid` + `mach_vm_read` over private read-write regions (the game has `get-task-allow`) | `/proc/<pid>/maps` + `/proc/<pid>/mem` over anonymous private read-write mappings |
+| Version | PE version resource of the image | `CFBundleVersion` in `Info.plist` | PE version of `Warcraft III.exe` via the Wine mapping or the prefix's `dosdevices`, read through `/proc/<pid>/root` for Proton |
+| Permission | Same Windows user | Developer tools allowed (`DevToolsSecurity`); app signed with `com.apple.security.cs.debugger` | `CAP_SYS_PTRACE` (`setcap`) or `ptrace_scope=0` |
 
-```bash
-HTTP_PORT=9090 LOGGING_LEVEL=debug ./bin/wc3-team-follow server
-```
+The OS-specific parts are `platform_<os>.go`. Parsing that doesn't need the OS (`procfs.go`, `lsof.go`, `scan.go`, `peversion.go`) builds everywhere, so its tests run on every CI runner. `procfs` takes its `/proc` root as a field for that reason. See `docs/adr/0003-game-discovery-per-os.md`.
 
-`server` flags (`--port`, `--host`, timeouts) override `[http]` when set explicitly. Keep secrets out of the TOML file; provide them through the environment.
+## Window
 
-## Decisions
-
-Architectural decisions are recorded as ADRs in `docs/adr/`. `docs/adr/0001-composition-root-and-constructor-injection.md` records the layering, injection and logging rules above. Add a new ADR when a decision changes.
+`cmd/gui/frontend/` is plain HTML, CSS and JavaScript, embedded into the binary. There is no build step or Node.js. Opened outside the app (for example `python3 -m http.server -d cmd/gui/frontend`), the page uses a demo bridge; pick a state with `?scene=off|live|paused|password|waiting|linux|unverified`. See `docs/adr/0002-desktop-window-with-wails.md`.

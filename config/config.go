@@ -15,8 +15,9 @@ var configFS embed.FS
 type Config struct {
 	App     AppConfig      `mapstructure:"app"`
 	Logging *LoggingConfig `mapstructure:"logging"`
-	HTTP    HTTPConfig     `mapstructure:"http"`
-	Auth    *AuthConfig    `mapstructure:"auth"`
+	Follow  *FollowConfig  `mapstructure:"follow"`
+	Storage *StorageConfig `mapstructure:"storage"`
+	Window  *WindowConfig  `mapstructure:"window"`
 }
 
 type AppConfig struct {
@@ -25,25 +26,30 @@ type AppConfig struct {
 }
 
 type LoggingConfig struct {
-	Default       string `mapstructure:"default"`
-	ServerDefault string `mapstructure:"server_default"`
-	Level         string `mapstructure:"level"`
+	Default string `mapstructure:"default"`
+	Level   string `mapstructure:"level"`
 }
 
-type HTTPConfig struct {
-	Host         string `mapstructure:"host"`
-	Port         int    `mapstructure:"port"`
-	ReadTimeout  string `mapstructure:"read_timeout"`
-	WriteTimeout string `mapstructure:"write_timeout"`
-	IdleTimeout  string `mapstructure:"idle_timeout"`
-	// ReadinessTimeout bounds GET /health/ready (default 2s).
-	ReadinessTimeout string `mapstructure:"readiness_timeout"`
+// FollowConfig tunes the companion that watches the game and joins friends.
+type FollowConfig struct {
+	// VerifiedBuilds lists the game versions live joining is allowed on.
+	VerifiedBuilds    []string `mapstructure:"verified_builds"`
+	RefreshInterval   string   `mapstructure:"refresh_interval"`
+	DiscoveryInterval string   `mapstructure:"discovery_interval"`
 }
 
-type AuthConfig struct {
-	Enabled bool     `mapstructure:"enabled"`
-	Token   string   `mapstructure:"token"`
-	Routes  []string `mapstructure:"routes"`
+// StorageConfig locates the per-user settings folder.
+type StorageConfig struct {
+	DirName string `mapstructure:"dir_name"`
+}
+
+// WindowConfig sizes the desktop window.
+type WindowConfig struct {
+	Title     string `mapstructure:"title"`
+	Width     int    `mapstructure:"width"`
+	Height    int    `mapstructure:"height"`
+	MinWidth  int    `mapstructure:"min_width"`
+	MinHeight int    `mapstructure:"min_height"`
 }
 
 func NewConfig() (*Config, error) {

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Lets Team Follow read Warcraft III's menu session. The game is
+	     built with get-task-allow; nothing else is inspected. -->
+	<key>com.apple.security.cs.debugger</key>
+	<true/>
+</dict>
+</plist>

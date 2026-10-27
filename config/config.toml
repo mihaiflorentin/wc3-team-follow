@@ -3,23 +3,27 @@ name = "wc3-team-follow"
 env  = "development"
 
 [logging]
-default        = "color"
-server_default = "color"
-level          = "debug"
+default = "color"
+level   = "debug"
 
-[auth]
-# When enabled, requests whose path starts with one of `routes` must send
-# the token in the X-Auth-Token header; every other path (e.g. /health,
-# /docs) stays open.
-enabled = false
-token   = "change-me"
-routes  = ["/example"]
+[follow]
+# Live joining is allowed only on game builds whose behaviour has been checked
+# by hand. Other builds connect and can be monitored, but never join.
+verified_builds = ["3.0.1.24371"]
+# How often the companion re-reads the team and friend lists from the game.
+refresh_interval = "5s"
+# How long to wait between attempts to find a running game client.
+discovery_interval = "10s"
 
-[http]
-host          = "0.0.0.0"
-port          = 8080
-read_timeout  = "20s"
-write_timeout = "60s"
-idle_timeout  = "120s"
-# Bounds GET /health/ready: checks still running when it expires count as failed.
-readiness_timeout = "2s"
+[storage]
+# Folder under the per-user data directory (%LOCALAPPDATA% on Windows,
+# ~/Library/Application Support on macOS, $XDG_CONFIG_HOME on Linux).
+# WF_DATA_DIR overrides the whole path, e.g. for isolated tests.
+dir_name = "WarcraftTeamFollow"
+
+[window]
+title      = "Warcraft Team Follow"
+width      = 1040
+height     = 760
+min_width  = 720
+min_height = 560

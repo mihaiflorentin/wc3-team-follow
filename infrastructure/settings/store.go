@@ -1,0 +1,125 @@
+// Package settings saves the friend selection in the per-user data folder.
+package settings
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"runtime"
+
+	"github.com/mihaiflorentin/wc3-team-follow/config"
+	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
+	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
+)
+
+const maxFileSize = 16 * 1024
+
+// DataDirEnv overrides the data folder, e.g. for isolated tests.
+const DataDirEnv = "WF_DATA_DIR"
+
+// ErrUnreadable reports a saved file that exists but cannot be used. The
+// file is left untouched.
+var ErrUnreadable = errors.New("saved friends could not be loaded")
+
+// DataDir returns the per-user folder the app keeps its files in:
+// %LOCALAPPDATA%\<dir_name> on Windows, ~/Library/Application
+// Support/<dir_name> on macOS and $XDG_CONFIG_HOME/<dir_name> on Linux.
+func DataDir(cfg *config.StorageConfig) (string, error) {
+	if dir := os.Getenv(DataDirEnv); dir != "" {
+		return filepath.Abs(dir)
+	}
+	if cfg == nil || cfg.DirName == "" {
+		return "", errors.New("missing [storage] dir_name")
+	}
+	base, err := os.UserConfigDir()
+	if runtime.GOOS == "windows" {
+		// UserCacheDir is %LOCALAPPDATA%: settings stay on this PC instead
+		// of roaming, as in earlier releases.
+		base, err = os.UserCacheDir()
+	}
+	if err != nil {
+		return "", fmt.Errorf("locate user data folder: %w", err)
+	}
+	return filepath.Join(base, cfg.DirName), nil
+}
+
+// Store keeps the selection in <dir>/settings/friends.json.
+type Store struct {
+	file string
+}
+
+// New returns a store that keeps its file under dir.
+func New(dir string) contract.PreferenceStore {
+	return &Store{file: filepath.Join(dir, "settings", "friends.json")}
+}
+
+type fileShape struct {
+	Tags        []string `json:"tags"`
+	IncludeTeam *bool    `json:"includeTeam"`
+}
+
+// Load returns the saved selection, or every tag empty and the team
+// included when nothing has been saved.
+func (s *Store) Load() (dto.Preferences, error) {
+	info, err := os.Stat(s.file)
+	if errors.Is(err, fs.ErrNotExist) {
+		return dto.Preferences{Tags: []string{}, IncludeTeam: true}, nil
+	}
+	if err != nil {
+		return dto.Preferences{}, fmt.Errorf("%w: %v", ErrUnreadable, err)
+	}
+	if info.Size() > maxFileSize {
+		return dto.Preferences{}, fmt.Errorf("%w: file is too large", ErrUnreadable)
+	}
+	content, err := os.ReadFile(s.file)
+	if err != nil {
+		return dto.Preferences{}, fmt.Errorf("%w: %v", ErrUnreadable, err)
+	}
+	var saved fileShape
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	if err := decoder.Decode(&saved); err != nil || saved.Tags == nil || saved.IncludeTeam == nil {
+		return dto.Preferences{}, fmt.Errorf("%w: unrecognized content", ErrUnreadable)
+	}
+	return dto.Preferences{Tags: saved.Tags, IncludeTeam: *saved.IncludeTeam}, nil
+}
+
+// Save replaces the file atomically. Only the tags and the team choice are
+// written.
+func (s *Store) Save(prefs dto.Preferences) error {
+	tags := prefs.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	content, err := json.MarshalIndent(fileShape{Tags: tags, IncludeTeam: &prefs.IncludeTeam}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode friends: %w", err)
+	}
+	dir := filepath.Dir(s.file)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create settings folder: %w", err)
+	}
+	tmp, err := os.CreateTemp(dir, "friends-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temporary file: %w", err)
+	}
+	// After a successful rename the temporary name no longer exists.
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if _, err := tmp.Write(append(content, '\n')); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write friends: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("write friends: %w", err)
+	}
+	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
+		return fmt.Errorf("protect friends file: %w", err)
+	}
+	if err := os.Rename(tmp.Name(), s.file); err != nil {
+		return fmt.Errorf("replace friends file: %w", err)
+	}
+	return nil
+}

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Team Follow</title>
+<link rel="stylesheet" href="style.css">
+<script defer src="app.js"></script>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <span class="app-name">Team Follow</span>
+    <span id="connection" class="connection" role="status">Starting…</span>
+  </header>
+
+  <section id="beacon" class="beacon" data-tone="off" aria-labelledby="status">
+    <div class="torch" aria-hidden="true"></div>
+    <div class="beacon-body">
+      <h1 id="status" class="status" aria-live="polite">Starting Team Follow…</h1>
+      <p id="next" class="next"></p>
+      <div id="hint-command" class="command" hidden>
+        <code id="hint-command-text"></code>
+        <button type="button" id="copy-command" class="quiet">Copy</button>
+      </div>
+
+      <form id="password-form" class="password" hidden>
+        <label for="lobby-password" id="password-label">Lobby password</label>
+        <div class="row">
+          <input id="lobby-password" type="password" autocomplete="off" maxlength="128">
+          <button type="submit" class="primary">Join lobby</button>
+          <button type="button" id="cancel-password" class="quiet">Cancel</button>
+        </div>
+        <p class="fine">Sent to the game once. Never saved.</p>
+      </form>
+
+      <div id="confirm" class="confirm" hidden>
+        <p>Is Warcraft III on the Custom Games screen, outside any lobby or queue?</p>
+        <div class="row">
+          <button type="button" id="confirm-yes" class="primary">Yes, start</button>
+          <button type="button" id="confirm-no" class="quiet">Not yet</button>
+        </div>
+      </div>
+    </div>
+    <div class="beacon-actions">
+      <button type="button" id="start" class="primary">Start preview</button>
+      <button type="button" id="refresh" class="quiet" hidden>Refresh who I follow</button>
+      <p id="blocked" class="fine blocked"></p>
+    </div>
+  </section>
+
+  <section class="mode" aria-labelledby="mode-title">
+    <h2 id="mode-title" class="visually-hidden">Mode</h2>
+    <div class="segmented" role="radiogroup" aria-label="Mode">
+      <button type="button" role="radio" id="mode-preview" data-mode="preview">Preview</button>
+      <button type="button" role="radio" id="mode-live" data-mode="live">Auto-join</button>
+    </div>
+    <p id="mode-help" class="mode-help"></p>
+  </section>
+
+  <main class="columns">
+    <section class="follow" aria-labelledby="follow-title">
+      <h2 id="follow-title">Who you follow</h2>
+
+      <div class="group">
+        <div class="group-head">
+          <h3>Your team</h3>
+          <label class="switch">
+            <input type="checkbox" id="include-team">
+            <span>Follow my team</span>
+          </label>
+        </div>
+        <ul id="team" class="people"></ul>
+      </div>
+
+      <div class="group">
+        <div class="group-head">
+          <h3>Friends</h3>
+          <span id="friend-count" class="fine"></span>
+        </div>
+        <ul id="friends" class="people"></ul>
+        <form id="friend-form" class="add">
+          <label for="friend-tag" class="visually-hidden">Friend's BattleTag</label>
+          <input id="friend-tag" placeholder="BattleTag, like Thrall#1234" maxlength="46" autocomplete="off" spellcheck="false">
+          <button type="submit" class="quiet">Add</button>
+        </form>
+        <p id="friend-note" class="fine">They need to be on your Battle.net friends list. Saved on this computer.</p>
+      </div>
+      <p id="error" class="error" role="alert"></p>
+    </section>
+
+    <section class="activity" aria-labelledby="activity-title">
+      <h2 id="activity-title">Activity</h2>
+      <ol id="log" class="log"></ol>
+      <button type="button" id="report" class="link">Diagnostic report</button>
+    </section>
+  </main>
+</div>
+
+<dialog id="report-dialog" aria-labelledby="report-title">
+  <h2 id="report-title">Diagnostic report</h2>
+  <p class="fine">No names, BattleTags, lobby names or session details are included.</p>
+  <pre id="report-text"></pre>
+  <div class="row end">
+    <button type="button" id="report-copy" class="primary">Copy report</button>
+    <button type="button" id="report-close" class="quiet">Close</button>
+  </div>
+</dialog>
+</body>
+</html>

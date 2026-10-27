@@ -4,7 +4,7 @@ Status: accepted (2026-10-27T16:36:16+02:00, generated with the project)
 
 ## Context
 
-wc3-team-follow is organised as a hexagonal application: domain code depends on interfaces in `port/contract`, and adapters implement them. That only holds if nothing in the domain or the transports reaches out for its dependencies. A global service locator, a package-level logger or config read at request time would each let a layer depend on concrete wiring again and make it hard to test in isolation.
+wc3-team-follow is organised as a hexagonal application: domain code depends on interfaces in `port/contract`, and adapters implement them. That only holds if nothing in the domain or the transports reaches out for its dependencies. A global service locator, a package-level logger or config read at run time would each let a layer depend on concrete wiring again and make it hard to test in isolation.
 
 ## Decision
 
@@ -17,6 +17,6 @@ wc3-team-follow is organised as a hexagonal application: domain code depends on 
 
 ## Consequences
 
-- Each layer can be tested with the mocks in `mock/`, and the HTTP layer with `httptest` against `httpserver.NewHandler`, without the container.
+- Each layer can be tested with the mocks in `mock/`, and the window's bridge with `mock/companion`, without the container.
 - Adding a dependency means adding a contract, an implementation, a mock, a container accessor and a constructor parameter. That is more steps than a global lookup, and it is the intended price.
 - Commands fail before doing work when a dependency cannot be built, instead of failing on first use.

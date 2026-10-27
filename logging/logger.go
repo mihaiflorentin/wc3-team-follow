@@ -11,8 +11,7 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/config"
 )
 
-// LoggerType names a log format accepted by [logging] default and
-// server_default.
+// LoggerType names a log format accepted by [logging] default.
 type LoggerType string
 
 const (
@@ -30,15 +29,6 @@ func New(cfg *config.LoggingConfig, w io.Writer) *slog.Logger {
 		return newLogger(LoggerTypeSimple, "info", w)
 	}
 	return newLogger(LoggerType(cfg.Default), cfg.Level, w)
-}
-
-// NewAccessLogger returns the HTTP access logger: like New, but in the
-// cfg.ServerDefault format, falling back to cfg.Default when it is empty.
-func NewAccessLogger(cfg *config.LoggingConfig, w io.Writer) *slog.Logger {
-	if cfg == nil || cfg.ServerDefault == "" {
-		return New(cfg, w)
-	}
-	return newLogger(LoggerType(cfg.ServerDefault), cfg.Level, w)
 }
 
 func newLogger(format LoggerType, level string, w io.Writer) *slog.Logger {

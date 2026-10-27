@@ -1,7 +1,7 @@
 // Package container is the composition root. main builds one ServiceContainer
 // and hands it to the CLI command tree, which resolves dependencies from it and
 // passes them on through constructors. Only main and cmd/cli import container
-// (docs/adr/0002).
+// (docs/adr/0001).
 package container
 
 import (
@@ -9,12 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sync"
 	"time"
 
 	"github.com/mihaiflorentin/wc3-team-follow/config"
-	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
 )
 
 // closeTimeout bounds how long Close waits for resources that shut down with a context.
@@ -29,9 +27,6 @@ type ServiceContainer struct {
 
 	closeMu sync.Mutex
 	closers []closer
-
-	readyMu sync.Mutex
-	checks  []contract.ReadinessCheck
 }
 
 type closer struct {
@@ -84,33 +79,6 @@ func (s *ServiceContainer) onClose(name string, fn func(ctx context.Context) err
 	s.closeMu.Lock()
 	defer s.closeMu.Unlock()
 	s.closers = append(s.closers, closer{name: name, close: fn})
-}
-
-// readinessCheck adapts a named probe function to contract.ReadinessCheck.
-type readinessCheck struct {
-	name  string
-	check func(ctx context.Context) error
-}
-
-func (c readinessCheck) Name() string                    { return c.name }
-func (c readinessCheck) Check(ctx context.Context) error { return c.check(ctx) }
-
-// onReady registers a readiness check for a resource the container created.
-// Adapters register it next to their onClose hook, typically with the
-// adapter's Ping method, so GET /health/ready covers every dependency.
-func (s *ServiceContainer) onReady(name string, fn func(ctx context.Context) error) {
-	s.readyMu.Lock()
-	defer s.readyMu.Unlock()
-	s.checks = append(s.checks, readinessCheck{name: name, check: fn})
-}
-
-// ReadinessChecks returns the readiness checks registered so far, in
-// registration order. It implements contract.ReadinessChecks, so the HTTP
-// layer sees adapters created after the server started too.
-func (s *ServiceContainer) ReadinessChecks() []contract.ReadinessCheck {
-	s.readyMu.Lock()
-	defer s.readyMu.Unlock()
-	return slices.Clone(s.checks)
 }
 
 // lazy holds a singleton that is built on first successful use. Concurrent

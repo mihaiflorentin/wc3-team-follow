@@ -1,18 +1,50 @@
 package container
 
 import (
-	"github.com/mihaiflorentin/wc3-team-follow/domain/example"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/mihaiflorentin/wc3-team-follow/domain/companion"
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
 )
 
 type DomainContainer struct {
-	exampleService lazy[contract.ExampleService]
+	companion lazy[contract.Companion]
 }
 
-// ExampleService returns the example domain service, built once with its
-// collaborators injected.
-func (s *ServiceContainer) ExampleService() (contract.ExampleService, error) {
-	return s.domain.exampleService.get(func() (contract.ExampleService, error) {
-		return example.NewService(s.logger), nil
+// Companion returns the Team Follow service, built once with its adapters
+// injected and tuned by [follow].
+func (s *ServiceContainer) Companion() (contract.Companion, error) {
+	return s.domain.companion.get(func() (contract.Companion, error) {
+		cfg := s.config.Follow
+		if cfg == nil {
+			return nil, errors.New("missing [follow] config section")
+		}
+		refresh, err := time.ParseDuration(cfg.RefreshInterval)
+		if err != nil {
+			return nil, fmt.Errorf("invalid follow.refresh_interval %q: %w", cfg.RefreshInterval, err)
+		}
+		discoveryEvery, err := time.ParseDuration(cfg.DiscoveryInterval)
+		if err != nil {
+			return nil, fmt.Errorf("invalid follow.discovery_interval %q: %w", cfg.DiscoveryInterval, err)
+		}
+		discovery, err := s.GameDiscovery()
+		if err != nil {
+			return nil, fmt.Errorf("resolve game discovery: %w", err)
+		}
+		dialer, err := s.GameDialer()
+		if err != nil {
+			return nil, fmt.Errorf("resolve game dialer: %w", err)
+		}
+		prefs, err := s.PreferenceStore()
+		if err != nil {
+			return nil, fmt.Errorf("resolve preference store: %w", err)
+		}
+		return companion.New(discovery, dialer, prefs, s.logger, companion.Options{
+			VerifiedBuilds:    cfg.VerifiedBuilds,
+			RefreshInterval:   refresh,
+			DiscoveryInterval: discoveryEvery,
+		}), nil
 	})
 }

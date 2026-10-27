@@ -17,19 +17,16 @@ var (
 )
 
 // NewRootCmd builds the command tree. Every command receives the container
-// here, at construction, and passes resolved dependencies on.
+// here, at construction, and passes resolved dependencies on. Running the
+// program without a command opens the window.
 func NewRootCmd(c *container.ServiceContainer) *cobra.Command {
-	root := &cobra.Command{
-		Use:           "wc3-team-follow",
-		Short:         "wc3-team-follow command line interface",
-		Long:          "wc3-team-follow exposes operational commands for the service.",
-		Version:       fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
-		SilenceUsage:  true,
-		SilenceErrors: true,
-	}
-	root.AddCommand(newServerCmd(c))
-	root.AddCommand(newWorkerCmd(c))
-	root.AddCommand(newExampleJobCmd(c))
+	root := newWindowCmd(c)
+	root.Use = "wc3-team-follow"
+	root.Short = "Follow your Warcraft III friends into their lobbies"
+	root.Version = fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date)
+	root.SilenceUsage = true
+	root.SilenceErrors = true
+	root.AddCommand(newDiscoverCmd(c))
 	return root
 }
 

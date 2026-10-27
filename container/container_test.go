@@ -7,6 +7,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/mihaiflorentin/wc3-team-follow/config"
+	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/settings"
 )
 
 func TestLazy_ConcurrentFirstUseBuildsOnce(t *testing.T) {
@@ -83,24 +86,29 @@ func TestClose_RunsHooksInReverseOrderOnce(t *testing.T) {
 	}
 }
 
-func TestReadinessChecks_ListsRegisteredChecksInOrder(t *testing.T) {
-	c := New(nil, slog.New(slog.DiscardHandler))
-	if got := c.ReadinessChecks(); len(got) != 0 {
-		t.Fatalf("new container has %d readiness checks, want 0", len(got))
+func TestCompanion_ReportsAMissingFollowSection(t *testing.T) {
+	c := New(&config.Config{}, slog.New(slog.DiscardHandler))
+	if _, err := c.Companion(); err == nil {
+		t.Fatal("built the companion without [follow]")
 	}
+}
 
-	down := errors.New("connection refused")
-	c.onReady("mysql", func(context.Context) error { return nil })
-	c.onReady("redis", func(context.Context) error { return down })
-
-	checks := c.ReadinessChecks()
-	if len(checks) != 2 {
-		t.Fatalf("got %d readiness checks, want 2", len(checks))
+func TestCompanion_BuildsFromTheEmbeddedConfig(t *testing.T) {
+	t.Setenv(settings.DataDirEnv, t.TempDir())
+	cfg, err := config.NewConfig()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if checks[0].Name() != "mysql" || checks[0].Check(context.Background()) != nil {
-		t.Errorf("first check = %s, want a passing mysql check", checks[0].Name())
+	c := New(cfg, slog.New(slog.DiscardHandler))
+	first, err := c.Companion()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if checks[1].Name() != "redis" || !errors.Is(checks[1].Check(context.Background()), down) {
-		t.Errorf("second check = %s, want a failing redis check", checks[1].Name())
+	second, _ := c.Companion()
+	if first != second {
+		t.Fatal("Companion built twice")
+	}
+	if state := first.State(); state.Enabled || !state.Diagnostic {
+		t.Fatalf("companion did not start off in preview: %+v", state)
 	}
 }
