@@ -38,7 +38,8 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 - Discovery is read-only and inspects only the Warcraft III process. Never write game memory, inject code or search for credentials.
 - The only action that changes a process is closing the game: `contract.GameProcesses` (`infrastructure/discovery/processes.go`) runs only when the player clicks Close all Warcraft III and confirms in the window. It closes only processes discovery identifies as the game executable (never Battle.net or anything else), only the current user's (the process uid on Linux and macOS, the token's user SID on Windows; a process whose owner can't be read is left alone), re-checks each pid is still the game before signalling it, and asks first (SIGTERM, then SIGKILL after 3 s; `TerminateProcess` on Windows). Nothing closes the game automatically.
 - The menu session, passwords and account ids are never logged, printed, saved or put in `FollowState` or `Diagnostics`.
-- The game socket sends only the allowlisted commands in `infrastructure/gamesocket`, each one the game's own menu sends for the same purpose: watching and Auto-join (`TeamGetInfo`, `FriendsGetFriends`, `RequestCancelTeamInvitations`, `TeamLeave`, `JoinFriendGameLobby`, `JoinGameByGameName`, `SendGameListing`, `GetGameList`) and Auto-host (`CreateLobby`, `LobbyStart`, `LobbyCancel`, `SetTeam`, `SendInviteToGame`). `SendGameLobbySetup` and `GetGameInfo` crashed the game and must never be added.
+- The game socket sends only the allowlisted commands in `infrastructure/gamesocket`, each one the game's own menu sends for the same purpose: watching and Auto-join (`TeamGetInfo`, `FriendsGetFriends`, `RequestCancelTeamInvitations`, `TeamLeave`, `JoinFriendGameLobby`, `JoinGameByGameName`, `SendGameListing`, `GetGameList`) and Auto-host (`CreateLobby`, `LobbyStart`, `LobbyCancel`, `SetTeam`, `SendInviteToGame`) and Auto-host's chat line (`SendGameChatMessage`). `SendGameLobbySetup` and `GetGameInfo` crashed the game and must never be added.
+- Typing in the game chat (`SendGameChatMessage`, ADR 0006) goes only through `Engine.sendChat`, only for Auto-host's own lobby or match as host, and only one trimmed, non-empty line of at most 100 characters; anything else is rejected. Auto-join, watching and Auto-host's existing steps type nothing.
 - Nothing starts a match unless the host switched on Start when full; Auto-host otherwise only creates the lobby.
 - Follow always starts off; nothing re-enables it automatically after a disconnect.
 
@@ -131,6 +132,7 @@ Architectural decisions are recorded as ADRs in `docs/adr/`, one numbered file p
 - `0003`: game discovery per operating system.
 - `0005`: closing the game's processes on request.
 - `0004`: crash dialog and window supervisor.
+- `0006`: typing in the game chat.
 
 ## Agent skills
 

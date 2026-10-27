@@ -77,6 +77,38 @@ func TestSessionSendsAllowedCommandsAndRejectsOthers(t *testing.T) {
 	}
 }
 
+func TestSessionSendsTheLobbyChatMessage(t *testing.T) {
+	received := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ws, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = ws.CloseNow() }()
+		_, body, err := ws.Read(r.Context())
+		if err != nil {
+			return
+		}
+		received <- string(body)
+	}))
+	defer server.Close()
+	port, _ := strconv.Atoi(server.URL[strings.LastIndex(server.URL, ":")+1:])
+
+	ctx := context.Background()
+	session, err := gamesocket.NewDialer().Dial(ctx, dto.GameConnection{Port: port, Session: "12345678901"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = session.Close() }()
+
+	if err := session.Send(ctx, "SendGameChatMessage", map[string]any{"content": "!swap 1 2"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-received; got != `{"type":"webui","message":"SendGameChatMessage","payload":{"content":"!swap 1 2"}}` {
+		t.Fatalf("sent %s", got)
+	}
+}
+
 func TestDialRejectsPrivilegedPorts(t *testing.T) {
 	if _, err := gamesocket.NewDialer().Dial(context.Background(), dto.GameConnection{Port: 80}); err == nil {
 		t.Fatal("dialled port 80")
