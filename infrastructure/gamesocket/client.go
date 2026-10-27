@@ -43,6 +43,9 @@ var allowed = map[string]bool{
 	"SetTeam":     true,
 	// Auto-invite: the friends list's Invite to game.
 	"SendInviteToGame": true,
+	// The lobby and match chat box (docs/adr/0006). Only Auto-host's own
+	// commands may be typed, one short line at a time (domain/follow).
+	"SendGameChatMessage": true,
 }
 
 // ErrNotAllowed reports a command outside the allowlist.

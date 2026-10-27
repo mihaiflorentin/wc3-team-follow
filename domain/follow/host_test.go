@@ -111,6 +111,27 @@ func TestAutoHostCreatesTheLobbyAfterTheDelay(t *testing.T) {
 	}
 }
 
+func TestAutoHostNeverTypesInTheGameChat(t *testing.T) {
+	f := newFixture(t)
+	s := hostSettings()
+	s.StartWhenFull, s.SameTeam = true, true
+	f.mustHost(s)
+	f.advance(10 * time.Second)
+	f.engine.Tick()
+	f.openOwnLobby()
+	f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0, canMove: true}, seat{name: "Friend#1234", team: 1}, seat{team: 1}))
+	f.receive("SetGlueScreen", map[string]any{"screen": "LOADING_SCREEN"})
+	f.receive("SetGlueScreen", map[string]any{"screen": "SCORE_SCREEN"})
+	f.advance(time.Minute)
+	f.engine.Tick()
+	if f.count(follow.CmdCreateLobby) < 2 {
+		t.Fatal("the flow did not run through a full cycle")
+	}
+	if n := f.count(follow.CmdSendGameChatMessage); n != 0 {
+		t.Fatalf("%d chat messages sent", n)
+	}
+}
+
 func TestAutoHostNeedsMapNameConnectionAndMenus(t *testing.T) {
 	f := newFixture(t)
 	noMap := hostSettings()

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
@@ -19,7 +20,34 @@ const (
 	CmdLobbyCancel = "LobbyCancel"
 	CmdSetTeam     = "SetTeam"
 	CmdInvite      = "SendInviteToGame"
+	// CmdSendGameChatMessage is the lobby chat box's send, payload
+	// {content}. Only sendChat uses it (docs/adr/0006).
+	CmdSendGameChatMessage = "SendGameChatMessage"
 )
+
+// MaxChatLine is the game chat's own limit for one line, in characters.
+const MaxChatLine = 100
+
+// ErrChatLine reports text sendChat refuses to type.
+var ErrChatLine = errors.New("chat line must be one non-empty line of at most 100 characters")
+
+// sendChat types one line in the game's lobby or match chat, as the host.
+// It trims the text and rejects it, sending nothing, unless it is a single
+// non-empty line of at most MaxChatLine characters without control
+// characters. Only Auto-host's own commands may be typed (docs/adr/0006):
+// callers must first check that Auto-host is on and the player is the host
+// of its lobby or match. The error is ErrChatLine for bad text, or says the
+// game connection is closed.
+func (e *Engine) sendChat(text string) error {
+	line := strings.TrimSpace(text)
+	if line == "" || utf8.RuneCountInString(line) > MaxChatLine || strings.ContainsFunc(line, unicode.IsControl) {
+		return ErrChatLine
+	}
+	if !e.send(CmdSendGameChatMessage, map[string]any{"content": line}) {
+		return errors.New("send chat line: the game connection is not open")
+	}
+	return nil
+}
 
 const (
 	// MaxGameName is the game's own limit for lobby names.

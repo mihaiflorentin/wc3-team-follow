@@ -1033,3 +1033,17 @@ func TestInMenusIsKnownFromTheGameListOrAMenuScreen(t *testing.T) {
 		t.Fatal("in menus while queued")
 	}
 }
+
+func TestAutoJoinNeverTypesInTheGameChat(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(false)
+	f.receive("SetGlueScreen", map[string]any{"screen": "GAME_LOBBY"})
+	f.advance(time.Minute)
+	f.engine.Tick()
+	f.receive("MultiplayerGameLeave", nil)
+	f.advance(time.Minute)
+	f.engine.Tick()
+	if n := f.count(follow.CmdSendGameChatMessage); n != 0 {
+		t.Fatalf("%d chat messages sent", n)
+	}
+}
