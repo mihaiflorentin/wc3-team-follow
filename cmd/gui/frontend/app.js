@@ -552,6 +552,7 @@ function renderHost(s) {
   toggle.checked = h.enabled;
   toggle.disabled = !h.enabled && Boolean(reason);
   $('host-help').textContent = hostSummary(h.settings);
+  $('host-setup').classList.toggle('needs-setup', !h.settings.mapPath || !h.settings.gameName);
   $('host-blocked').textContent = s.connected || !h.settings.mapPath ? reason : '';
 }
 

@@ -856,3 +856,10 @@ select {
   .field-row { grid-template-columns: 1fr; gap: 0; }
   .maps-table .date-col, .maps-table td.date { display: none; }
 }
+
+/* The host card stays readable when its switch can't be used yet: only the
+   switch dims, and Set up becomes the obvious next step. */
+.hostcard:has(input:disabled) { opacity: 1; cursor: default; }
+.hostcard input:disabled { opacity: .45; cursor: not-allowed; }
+.hostcard .host-setup.needs-setup { background: var(--bone); color: var(--spruce-deep); font-weight: 650; }
+.hostcard .host-setup.needs-setup:hover { filter: brightness(1.08); background: var(--bone); }
