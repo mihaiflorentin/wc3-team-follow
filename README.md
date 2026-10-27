@@ -34,7 +34,7 @@ Start Warcraft III through Battle.net and Team Follow connects by itself. Until 
 
 ### Choose your friends and watch them
 
-The **Friends** list is your Battle.net friends list, with live status. Search it, show offline friends if you need them, and tick up to 12 people you play with; **Follow my team** adds your in-game team too. Your choice is saved on this computer.
+The **Friends** list is your Battle.net friends list, with live status. Search it, show offline friends if you need them, and tick up to 12 people you play with. Your choice is saved on this computer.
 
 Team Follow watches them straight away: their portraits show who is online, away or in Warcraft III, and Activity notes when one of them opens a lobby. Watching never joins anything.
 
@@ -42,7 +42,7 @@ Team Follow watches them straight away: their portraits show who is online, away
 
 ### Auto-join
 
-Turn on **Auto-join** from any of the game's menus. Team Follow then leaves your team and joins the first friend in your group who opens a lobby, exactly as the game's own Join Friend does. It pauses while you're in a lobby, a match, a score screen or a queue, and resumes as soon as you're back on a menu, including straight from the score screen after a match. Change your group while it's on and it carries on with the new group.
+Turn on **Auto-join** from any of the game's menus. Team Follow then leaves your team and joins the first friend in your group who opens a lobby, exactly as the game's own Join Friend does. Under it, **Ask for lobby passwords** decides whether Team Follow asks you for a password when a lobby has one, or skips that lobby. It pauses while you're in a lobby, a match, a score screen or a queue, and resumes as soon as you're back on a menu, including straight from the score screen after a match. Change your group while it's on and it carries on with the new group.
 
 ### Lobby passwords
 
