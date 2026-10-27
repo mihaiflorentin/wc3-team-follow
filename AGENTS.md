@@ -131,3 +131,17 @@ Architectural decisions are recorded as ADRs in `docs/adr/`, one numbered file p
 - `0003`: game discovery per operating system.
 - `0005`: closing the game's processes on request.
 - `0004`: crash dialog and window supervisor.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues in `mihaiflorentin/wc3-team-follow`, through the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` at the root (created when needed) and `docs/adr/`. See `docs/agents/domain.md`.
