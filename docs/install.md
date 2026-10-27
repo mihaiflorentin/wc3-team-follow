@@ -89,6 +89,8 @@ Open **Report a problem** in the Activity panel. Copy the report, press **Open l
 | Message | What to do |
 | --- | --- |
 | Warcraft III isn't running | Start the game through Battle.net and wait for the main menu. |
+| The Team Follow window didn't open | On Windows, repair the Microsoft Edge WebView2 Runtime (Settings → Apps → Installed apps → Microsoft Edge WebView2 Runtime → Modify → Repair), restart Windows and try again. On Linux, install `libwebkit2gtk-4.1`. Send `team-follow.log` if it still doesn't open. |
+| Team Follow stopped because of an error | Send the message and the files in the log folder it names. |
 | More than one Warcraft III is running | Close the extra copies; Team Follow won't guess which to follow. A copy that was signed out when you started the game again can keep running in the background (common under Proton); close it in your task manager or with `kill`. |
 | Waiting for its menus to open / finish loading | Wait on the main menu; Team Follow retries every 10 seconds. |
 | This computer blocked reading Warcraft III's menu session | Do the setup step for your system above. |

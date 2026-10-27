@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -47,9 +48,10 @@ func guiOptions(cfg *config.Config) (gui.Options, error) {
 		return gui.Options{}, errors.New("missing [window] config section")
 	}
 	exe, _ := os.Executable()
-	logDir := ""
-	if cfg.Logging != nil && cfg.Logging.File {
-		if dataDir, err := config.DataDir(cfg.Storage); err == nil {
+	logDir, webviewDir := "", ""
+	if dataDir, err := config.DataDir(cfg.Storage); err == nil {
+		webviewDir = filepath.Join(dataDir, "webview")
+		if cfg.Logging != nil && cfg.Logging.File {
 			logDir = logging.Dir(dataDir)
 		}
 	}
@@ -62,5 +64,7 @@ func guiOptions(cfg *config.Config) (gui.Options, error) {
 		AppVersion: version,
 		Executable: exe,
 		LogDir:     logDir,
+		// Only Windows uses it.
+		WebviewDataDir: webviewDir,
 	}, nil
 }

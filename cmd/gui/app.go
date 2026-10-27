@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
@@ -45,6 +46,9 @@ type Options struct {
 	Executable string
 	// LogDir is the log folder, or "" when file logging is off.
 	LogDir string
+	// WebviewDataDir holds the web view's profile on Windows, or "" for
+	// WebView2's default (a folder in the roaming AppData).
+	WebviewDataDir string
 }
 
 // Run opens the window and blocks until it is closed. The companion runs
@@ -63,6 +67,8 @@ func Run(deps Deps, opts Options) error {
 	)
 	startup := func(ctx context.Context) {
 		bridge.ctx = ctx
+		// The crash reporter reads this to tell a crash from a second launch.
+		deps.Logger.Info("gui.startup")
 		stop = deps.Companion.Subscribe(func(state dtoState) { wailsruntime.EventsEmit(ctx, StateEvent, state) })
 		var runCtx context.Context
 		runCtx, cancel = context.WithCancel(ctx)
@@ -89,10 +95,15 @@ func Run(deps Deps, opts Options) error {
 		MinWidth:         opts.MinWidth,
 		MinHeight:        opts.MinHeight,
 		BackgroundColour: &options.RGBA{R: 0x1d, G: 0x2b, B: 0x2a, A: 0xff},
-		AssetServer:      &assetserver.Options{Assets: assets},
-		OnStartup:        startup,
-		OnShutdown:       shutdown,
-		Bind:             []any{bridge},
+		// Wails' own messages go to the log file at debug level, release
+		// builds included, so a window that never opens can be diagnosed.
+		Logger:             wailsLog{deps.Logger},
+		LogLevel:           logger.DEBUG,
+		LogLevelProduction: logger.DEBUG,
+		AssetServer:        &assetserver.Options{Assets: assets},
+		OnStartup:          startup,
+		OnShutdown:         shutdown,
+		Bind:               []any{bridge},
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "a6c1d2a4-wc3-team-follow",
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
@@ -106,7 +117,10 @@ func Run(deps Deps, opts Options) error {
 			Appearance: mac.NSAppearanceNameDarkAqua,
 			About:      &mac.AboutInfo{Title: opts.Title, Message: "Version " + opts.AppVersion},
 		},
-		Windows: &windows.Options{Theme: windows.Dark},
+		// The WebView2 profile lives in the app's local data folder: the
+		// default, roaming AppData, is often redirected to OneDrive or a
+		// network share, where WebView2 can fail to start.
+		Windows: &windows.Options{Theme: windows.Dark, WebviewUserDataPath: opts.WebviewDataDir},
 	})
 	if err != nil {
 		return fmt.Errorf("run window: %w", err)

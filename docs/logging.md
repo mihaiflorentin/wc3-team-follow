@@ -8,11 +8,15 @@
 | --- | --- | --- |
 | Console (`os.Stdout`) | `[logging] default`: `simple`, `color`, `json` or `pretty-json` | `[logging] level` |
 | `<data folder>/logs/team-follow.log` | JSON lines, each with `time`, `level`, `source` (function, file, line) and `msg` | `[logging] file_level` (`debug`) |
-| `<data folder>/logs/crash.log` | Go runtime crash reports: fatal errors and unrecovered panics with every goroutine's stack (`debug.SetCrashOutput`) | always |
+| `<data folder>/logs/crash.log` | Go runtime crash reports: fatal errors and unrecovered panics with every goroutine's stack (`debug.SetCrashOutput`), and one line for every crash dialog the supervisor showed | always |
 
 The data folder is `config.DataDir`: `%LOCALAPPDATA%\WarcraftTeamFollow`, `~/Library/Application Support/WarcraftTeamFollow` or `~/.config/WarcraftTeamFollow`. The log file rotates at `file_max_mb` (5 MB), keeping `file_keep` (3) old files as `team-follow.log.1` … `.3`; each run appends. `[logging] file = false` turns the files off. When the file can't be opened, the app still runs and logs to the console.
 
 The Windows release is a GUI program with no console, so for it the file is the log. A command started from a terminal (for example `discover`) attaches to that terminal and prints there too.
+
+## Crash dialog
+
+When the window stops because of an error, the player sees a dialog with the reason and the log folder (`crashreport`, see `docs/adr/0004-crash-dialog-and-supervisor.md`). On Windows and Linux a supervisor process runs the window as a child and reads the reason from its output: a `panic:`, `fatal error:` or `SIG…:` line, `[WebView2 Error]`, the app's `error:` line, or a `log.Fatal` line. It stays quiet for a stop the player asked for and for a second launch turned away before `gui.startup`. If the window hasn't started within a minute, it tells the player the usual cause (WebView2 on Windows, WebKitGTK on Linux) and closes the stuck window process. On macOS the window process shows the dialog itself for an error returned by `run` or a panic on the main goroutine.
 
 ## Getting logs from a player
 
@@ -23,6 +27,8 @@ The window's **Report a problem** dialog shows the diagnostic report, the log fo
 | Event | Level | Where |
 | --- | --- | --- |
 | `app.start`, `app.exit`, `app.panic` (with stack) | info / error | `main.go` |
+| `gui.startup`: the window has started (the crash reporter's marker) | info | `cmd/gui` |
+| `gui.wails` (`message`): Wails' own messages, such as web view start-up and process failures | debug to error | `cmd/gui` |
 | `discovery.process`, `.listeners`, `.probe` (per port), `.session` (digit count and time taken), `.found` | debug | `infrastructure/discovery` |
 | `companion.run`, `.connected` (version, pid, port, verified), `.waiting` (each new reason once), `.disconnected` (error, or `reason` logged out), `.stop` | info | `domain/companion` |
 | `companion.send` (command name), `companion.event` (event type) | debug | `domain/companion` |

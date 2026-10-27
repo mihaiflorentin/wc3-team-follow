@@ -6,7 +6,8 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 
 | Path | Holds |
 | --- | --- |
-| `main.go` | Composition root: builds config, logger and container once, runs the CLI, closes the container. `console_windows.go` attaches the terminal for commands. |
+| `main.go` | Composition root: builds config, logger and container once, runs the CLI, closes the container. Opening the window on Windows and Linux first starts the crash supervisor. `console_windows.go` attaches the terminal for commands. |
+| `crashreport/` | Error dialog when the window stops because of an error: a supervisor process on Windows and Linux, in-process on macOS. Used only by `main.go`. |
 | `cmd/cli/` | Cobra commands. Wiring layer: resolves dependencies from the container and passes them on. Running with no command opens the window; `discover` checks game discovery. |
 | `cmd/gui/` | Driving desktop adapter: `Run(Deps, Options)` opens the Wails window; `Bridge` is the page's API. `frontend/` is plain HTML/CSS/JS, embedded. |
 | `container/` | `ServiceContainer`: lazy `(T, error)` accessors and `Close`. Used only by the wiring layer. |
@@ -29,7 +30,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 - Release targets: `windows/amd64` (cross-compiled, no cgo, `-H windowsgui`), `darwin/arm64` (cgo, `.app` bundle, ad-hoc signed with `com.apple.security.cs.debugger`, macOS 13+), `linux/amd64` (cgo, WebKitGTK 4.1, tag `webkit2_41`). Builds need `-tags desktop,production`; use the `Makefile`.
 - `[follow] verified_builds` gates live joining (`3.0.1.24371`). Never add a build without a live test.
 - `[logging] default` is `color`, `level` is `debug`; the log file (`file = true`) is JSON at `debug`, 5 MB × 3 rotations.
-- Per-user data: `%LOCALAPPDATA%\WarcraftTeamFollow` (Windows), `~/Library/Application Support/WarcraftTeamFollow` (macOS), `$XDG_CONFIG_HOME/WarcraftTeamFollow` (Linux). `WF_DATA_DIR` overrides it.
+- Per-user data: `%LOCALAPPDATA%\WarcraftTeamFollow` (Windows), `~/Library/Application Support/WarcraftTeamFollow` (macOS), `$XDG_CONFIG_HOME/WarcraftTeamFollow` (Linux). `WF_DATA_DIR` overrides it. On Windows the WebView2 profile is its `webview` subfolder.
 - `LICENSE`: MIT, copyright 2026 Mihai Mihaila.
 
 ## Safety rules for game access
@@ -69,6 +70,7 @@ To add a dependency (an outbound adapter or a domain service):
 
 - The process logger is the `*slog.Logger` built by `logging.Setup` in `main.go` (also installed with `slog.SetDefault`): the console plus a rotated JSON-lines debug file and a crash file in `<data folder>/logs`. Components receive it through their constructor and keep it in a field.
 - Never log the menu session, passwords, account ids or event payloads; log command names and event types. New background goroutines start with a panic guard that logs the stack.
+- A failure that ends the window must reach the player as a dialog (`crashreport`): keep the `error:` line in `main.go` and the `gui.startup` log line in `cmd/gui`, which the supervisor reads.
 - Log a dotted event name as the message and the details as typed attributes: `logger.InfoContext(ctx, "companion.connected", slog.String("version", v))`.
 - Return errors upward; log them once, at the edge that handles them. Errors meant for players are full sentences starting with a capital letter. See `docs/logging.md`.
 
@@ -126,3 +128,4 @@ Architectural decisions are recorded as ADRs in `docs/adr/`, one numbered file p
 - `0001`: composition root and constructor injection.
 - `0002`: desktop window with Wails.
 - `0003`: game discovery per operating system.
+- `0004`: crash dialog and window supervisor.
