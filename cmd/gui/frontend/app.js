@@ -146,7 +146,7 @@ function blockedReason(s) {
   if (!s.verifiedBuild) return `Auto-join isn’t available on game build ${s.version} until it’s been tested. Watching still works.`;
   if (!hasTargets(s)) return 'Choose friends or form a team first.';
   if (s.joinPending) return 'A join is still in progress.';
-  if (s.busy || s.queued || s.inMatch) return 'Go back to Custom Games first.';
+  if (s.busy || s.queued || s.inMatch) return 'Go back to the game’s menus first. Auto-join can’t start in a lobby, match or queue.';
   return '';
 }
 
@@ -520,7 +520,7 @@ function demoBridge() {
       {time: at(4), message: 'Illidan#6602 opened a lobby: Legion TD x20.'},
       {time: at(4), message: 'Asked to join Illidan#6602’s lobby. Follow stays on.'},
       {time: at(4), message: 'Joined Illidan#6602’s lobby. Follow stays on and is paused here.'},
-      {time: at(1), message: 'Custom Games is open again. Follow has resumed.'},
+      {time: at(1), message: 'Back in the game’s menus. Follow has resumed.'},
     ],
   };
   const watch = () => {

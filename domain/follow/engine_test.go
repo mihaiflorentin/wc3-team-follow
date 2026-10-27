@@ -835,3 +835,48 @@ func TestChangingTheGroupCanReArmRightAway(t *testing.T) {
 		t.Fatalf("joins = %+v", j)
 	}
 }
+
+func TestJoinsFromAnyMenuScreen(t *testing.T) {
+	for _, screen := range []string{"MAIN_MENU", "CAMPAIGNS", "PROFILE", "LEADERBOARD", "REPLAYS_SCREEN", "VERSUS_SETUP", "CUSTOM_LOBBIES"} {
+		f := newFixture(t)
+		f.receive("SetGlueScreen", map[string]any{"screen": screen})
+		if !f.state().InMenus {
+			t.Errorf("%s: not reported as a menu", screen)
+			continue
+		}
+		f.mustArm(false)
+		f.presence(nil)
+		if len(f.joins()) != 1 {
+			t.Errorf("%s: joins = %d", screen, len(f.joins()))
+		}
+	}
+}
+
+func TestCreatingAGamePausesJoining(t *testing.T) {
+	for _, screen := range []string{"CREATE_GAME_LOBBY", "SINGLE_PLAYER_CUSTOM_LOBBY", "LOGIN_DOORS"} {
+		f := newFixture(t)
+		f.mustArm(false)
+		f.receive("SetGlueScreen", map[string]any{"screen": screen})
+		f.presence(nil)
+		if s := f.state(); len(f.joins()) != 0 || s.InMenus || !s.Paused {
+			t.Errorf("%s: joins=%d inMenus=%v paused=%v", screen, len(f.joins()), s.InMenus, s.Paused)
+		}
+	}
+}
+
+func TestRankedScoreScreenThenAnyMenuResumes(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(false)
+	f.receive("GameFound", nil)
+	f.receive("SetGlueScreen", map[string]any{"screen": "RANKED_SCORE_SCREEN"})
+	f.receive("SetGlueScreen", map[string]any{"screen": "PROFILE"})
+	f.advance(3 * time.Second)
+	f.engine.Tick()
+	if s := f.state(); s.Busy || s.InMatch || !s.Enabled {
+		t.Fatalf("did not resume: %+v", s)
+	}
+	f.presence(nil)
+	if len(f.joins()) != 1 {
+		t.Fatalf("joins = %d", len(f.joins()))
+	}
+}

@@ -26,6 +26,7 @@ The window's **Report a problem** dialog shows the diagnostic report, the log fo
 | `discovery.process`, `.listeners`, `.probe` (per port), `.session` (digit count and time taken), `.found` | debug | `infrastructure/discovery` |
 | `companion.run`, `.connected` (version, pid, port, verified), `.waiting` (each new reason once), `.disconnected`, `.stop` | info | `domain/companion` |
 | `companion.send` (command name), `companion.event` (event type) | debug | `domain/companion` |
+| `companion.screen`: the game screen the menu switched to (`SetGlueScreen`) | info | `domain/companion` |
 | `follow.status`: every status line the engine sets | info | `domain/companion` |
 | `follow.configure` (what changed, or why it was refused), `follow.password` (sent or refused) | info | `domain/companion` |
 | `companion.panic` (with stack) in background work | error | `domain/companion` |

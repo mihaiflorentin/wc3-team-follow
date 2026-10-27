@@ -265,7 +265,9 @@ func (s *Service) read(ctx context.Context, session contract.GameSession) {
 		} else {
 			// The type only: payloads hold friends' details. The custom game
 			// list streams several updates a second; diagnostics count them.
-			if !quietEvents[ev.MessageType] {
+			if screen, ok := ev.Payload["screen"].(string); ok && ev.MessageType == "SetGlueScreen" {
+				s.logger.InfoContext(ctx, "companion.screen", slog.String("screen", screen))
+			} else if !quietEvents[ev.MessageType] {
 				s.logger.DebugContext(ctx, "companion.event", slog.String("type", ev.MessageType))
 			}
 			s.engine.Receive(ev)

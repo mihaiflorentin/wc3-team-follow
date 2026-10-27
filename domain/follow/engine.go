@@ -40,9 +40,26 @@ const (
 type Sender func(message string, payload map[string]any) bool
 
 var (
-	busyScreens  = []string{"GAME_LOBBY", "CUSTOM_GAME_LOBBY", "LOADING_SCREEN", "DISABLED_SCREEN", "OUT_OF_MENUS", "SCORE_SCREEN"}
-	matchScreens = []string{"LOADING_SCREEN", "DISABLED_SCREEN", "OUT_OF_MENUS"}
-	menuScreens  = []string{"MAIN_MENU", "MULTIPLAYER", "CUSTOM_LOBBIES", "CHAT", "VERSUS"}
+	// Screen names are the game menu's ScreenEnum keys (its GlueManager.js),
+	// as SetGlueScreen sends them. The game's own Join Friend has no screen
+	// condition, so joining is allowed from every menu screen; it pauses in
+	// lobbies (including the one a host is creating), matches, score
+	// screens, and before login.
+	busyScreens = []string{
+		"GAME_LOBBY", "CUSTOM_GAME_LOBBY", "CREATE_GAME_LOBBY", "SINGLE_PLAYER_CUSTOM_LOBBY", "JOIN_LOBBY",
+		"LOADING_SCREEN", "DISABLED_SCREEN", "OUT_OF_MENUS", "BLACK_SCREEN",
+		"SCORE_SCREEN", "RANKED_SCORE_SCREEN", "CAMPAIGN_SCORE", "RANK_UP_ANIMATION", "RATING_SPLASH_SCREEN",
+		"LOGIN_DOORS", "LOGIN_OPTIONS", "DEMO_SPLASH_SCREEN",
+	}
+	matchScreens = []string{"LOADING_SCREEN", "DISABLED_SCREEN", "OUT_OF_MENUS", "BLACK_SCREEN"}
+	// scoreScreens follow a match; leaving them is a return to the menus.
+	scoreScreens = []string{"SCORE_SCREEN", "RANKED_SCORE_SCREEN", "CAMPAIGN_SCORE", "RANK_UP_ANIMATION", "RATING_SPLASH_SCREEN"}
+	menuScreens  = []string{
+		"MAIN_MENU", "MULTIPLAYER", "CHAT", "SYSTEM_MENU",
+		"VERSUS", "VERSUS_SETUP", "CUSTOM_LOBBIES", "MULTIPLAYER_CUSTOM_GAMES_SETUP", "LEADERBOARD", "TOURNAMENTS", "TOURNAMENTS_RESULTS_SCREEN",
+		"CAMPAIGNS", "CAMPAIGN_SELECTION", "CAMPAIGN_EXPANSIONS", "CAMPAIGN_MISSIONS", "MISSION_SELECTION", "CUSTOM_CAMPAIGNS", "LOAD_SAVED_CAMPAIGN",
+		"SINGLE_PLAYER_MENU", "LOAD_GAME", "REPLAYS_SCREEN", "PROFILE", "ARMORY", "COLLECTION", "CREDITS_SCREEN",
+	}
 )
 
 type member struct {
@@ -251,9 +268,9 @@ func (e *Engine) arm(fromMenus bool) error {
 	case e.includeTeam && slices.ContainsFunc(e.team, func(m member) bool { return !m.isSelf }) && now.Sub(e.teamAt) > freshFor:
 		return errors.New("Waiting for a fresh team list from the game. Try again in a few seconds.")
 	case e.busy || e.queued || e.inMatch || e.awaitingMenu:
-		return errors.New("Return to Custom Games before starting.")
+		return errors.New("Go back to the game's menus before turning on Auto-join.")
 	case !fromMenus:
-		return errors.New("Start Follow while you are in the game menus.")
+		return errors.New("Turn on Auto-join while you are in the game's menus.")
 	}
 
 	var members []member
@@ -397,13 +414,14 @@ func (e *Engine) Receive(event dto.GameEvent) {
 		e.pending, e.password = nil, nil
 		clear(e.friends)
 		if e.enabled {
-			e.Note("Follow is still on. Return to Custom Games to resume automatically.")
+			e.Note("Follow is still on. It resumes when you're back in the game's menus.")
 		} else {
 			e.Note("Returned from a game or lobby. Follow is off.")
 		}
 	case "GameList":
 		// Only the game's own interface requests listings; this companion
-		// never does. A listing after leaving shows Custom Games is open.
+		// never does. A listing after leaving shows Custom Games is open,
+		// which is one of the menu screens.
 		if _, ok := list(p["games"]); ok && e.awaitingMenu && !e.inMatch && !e.queued {
 			e.menuReady = true
 		}
@@ -415,7 +433,7 @@ func (e *Engine) Receive(event dto.GameEvent) {
 			if slices.Contains(matchScreens, e.screen) {
 				e.inMatch = true
 			}
-			if e.screen == "SCORE_SCREEN" {
+			if slices.Contains(scoreScreens, e.screen) {
 				e.inMatch, e.awaitingMenu = false, true
 				e.resumeAt = e.now().Add(resumeDelay)
 			}
@@ -531,7 +549,7 @@ func (e *Engine) resumeIfReady() {
 	clear(e.friends)
 	e.send(CmdFriendsGetFriends, map[string]any{})
 	if e.enabled {
-		e.Note("Custom Games is open again. Follow has resumed.")
+		e.Note("Back in the game's menus. Follow has resumed.")
 	}
 }
 

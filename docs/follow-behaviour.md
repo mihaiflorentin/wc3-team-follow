@@ -24,6 +24,16 @@ Every `FriendsFriendData` snapshot replaces the roster: the whole Battle.net fri
 
 Whenever the game is connected, the engine watches the group: the team's other members when *Follow my team* is on, plus the chosen friends. When one of them is seen with a joinable lobby (see Joining), it notes "Thrall#1820 opened a lobby: Legion TD." once per lobby (keyed like attempts), from the roster, without starting anything and without sending any command. This is what the window shows while Auto-join is off.
 
+## Menu screens
+
+Joining happens only from the game's menus. The screen names are the keys of the game menu's own `ScreenEnum` (in the `GlueManager.js` the game serves on its local menu port), as `SetGlueScreen` sends them. The game's own "Join game" action in the friends list has no screen condition (it checks only that the friend has an open lobby, that you aren't queued, have no team invitations pending and aren't already in that lobby), and Team Follow sends the same commands, so every menu screen allows joining:
+
+| Joining allowed | Joining paused |
+| --- | --- |
+| `MAIN_MENU`, `MULTIPLAYER`, `CHAT`, `SYSTEM_MENU`, `VERSUS`, `VERSUS_SETUP`, `CUSTOM_LOBBIES`, `MULTIPLAYER_CUSTOM_GAMES_SETUP`, `LEADERBOARD`, `TOURNAMENTS`, `TOURNAMENTS_RESULTS_SCREEN`, `CAMPAIGNS`, `CAMPAIGN_SELECTION`, `CAMPAIGN_EXPANSIONS`, `CAMPAIGN_MISSIONS`, `MISSION_SELECTION`, `CUSTOM_CAMPAIGNS`, `LOAD_SAVED_CAMPAIGN`, `SINGLE_PLAYER_MENU`, `LOAD_GAME`, `REPLAYS_SCREEN`, `PROFILE`, `ARMORY`, `COLLECTION`, `CREDITS_SCREEN` | Lobbies: `GAME_LOBBY`, `CUSTOM_GAME_LOBBY`, `CREATE_GAME_LOBBY` (the player is hosting), `SINGLE_PLAYER_CUSTOM_LOBBY`, `JOIN_LOBBY`. Matches: `LOADING_SCREEN`, `DISABLED_SCREEN`, `OUT_OF_MENUS`, `BLACK_SCREEN`. After a match: `SCORE_SCREEN`, `RANKED_SCORE_SCREEN`, `CAMPAIGN_SCORE`, `RANK_UP_ANIMATION`, `RATING_SPLASH_SCREEN`. Before login: `LOGIN_DOORS`, `LOGIN_OPTIONS`, `DEMO_SPLASH_SCREEN` |
+
+A screen in neither list (a future game build) changes nothing. Joining from menus other than Custom Games follows the game's own rules but has not been live-tested yet.
+
 ## Starting (Auto-join)
 
 Start (Configure with `enabled: true`) remembers the selection: non-self team members when *Follow my team* is on, plus each manually added friend, without duplicates. It refuses when:
@@ -51,11 +61,11 @@ A remembered player is joinable when their fresh (under 20 s) presence is online
 
 ## Lobby confirmations and passwords
 
-The first matching `RequestForPassword` for the pending join is answered with an empty password. A second one shows a password field. The password is sent once, never stored, and the request expires after 2 minutes. Confirmations that are unsolicited, late, for another lobby, or arrive after Stop, Preview or a queue are ignored.
+The first matching `RequestForPassword` for the pending join is answered with an empty password. A second one shows a password field. The password is sent once, never stored, and the request expires after 2 minutes. Confirmations that are unsolicited, late, for another lobby, or arrive after Stop or a queue are ignored.
 
 ## Pausing and resuming
 
-Follow stays on across joins, pausing while the player is in a lobby, loading, in a match, at the score screen or queued. After leaving, it resumes only with menu evidence (a menu `SetGlueScreen` or a `GameList` after leaving a match), at least 2 seconds later, then asks for fresh friend activity. A leave or loading signal alone never resumes. Stop always wins over automatic resume.
+Follow stays on across joins, pausing while the player is in a lobby, loading, in a match, at the score screen or queued. After leaving, it resumes only with menu evidence (any menu screen's `SetGlueScreen`, or a `GameList` after leaving a match), at least 2 seconds later, then asks for fresh friend activity. A leave or loading signal alone never resumes. Stop always wins over automatic resume.
 
 ## Disconnects
 
