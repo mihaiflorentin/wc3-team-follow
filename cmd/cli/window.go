@@ -10,6 +10,7 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/cmd/gui"
 	"github.com/mihaiflorentin/wc3-team-follow/config"
 	"github.com/mihaiflorentin/wc3-team-follow/container"
+	"github.com/mihaiflorentin/wc3-team-follow/logging"
 )
 
 func newWindowCmd(c *container.ServiceContainer) *cobra.Command {
@@ -46,6 +47,12 @@ func guiOptions(cfg *config.Config) (gui.Options, error) {
 		return gui.Options{}, errors.New("missing [window] config section")
 	}
 	exe, _ := os.Executable()
+	logDir := ""
+	if cfg.Logging != nil && cfg.Logging.File {
+		if dataDir, err := config.DataDir(cfg.Storage); err == nil {
+			logDir = logging.Dir(dataDir)
+		}
+	}
 	return gui.Options{
 		Title:      w.Title,
 		Width:      w.Width,
@@ -54,5 +61,6 @@ func guiOptions(cfg *config.Config) (gui.Options, error) {
 		MinHeight:  w.MinHeight,
 		AppVersion: version,
 		Executable: exe,
+		LogDir:     logDir,
 	}, nil
 }

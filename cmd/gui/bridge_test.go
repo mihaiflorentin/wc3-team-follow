@@ -12,7 +12,7 @@ import (
 
 func TestBridgePassesCallsToTheCompanion(t *testing.T) {
 	c := &mockcompanion.Companion{Current: dto.FollowState{Connected: true}}
-	b := gui.NewBridge(c, "1.2.3", "/opt/wc3-team-follow")
+	b := gui.NewBridge(c, "1.2.3", "/opt/wc3-team-follow", "")
 
 	on := true
 	if s, err := b.Configure(dto.FollowConfig{Enabled: &on, FromMenus: true}); err != nil || !s.Connected {
@@ -31,19 +31,25 @@ func TestBridgePassesCallsToTheCompanion(t *testing.T) {
 
 func TestBridgeReturnsCompanionErrors(t *testing.T) {
 	c := &mockcompanion.Companion{Err: errors.New("Return to Custom Games before starting.")}
-	if _, err := gui.NewBridge(c, "", "").Configure(dto.FollowConfig{}); err == nil || err.Error() != c.Err.Error() {
+	if _, err := gui.NewBridge(c, "", "", "").Configure(dto.FollowConfig{}); err == nil || err.Error() != c.Err.Error() {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestDiagnosticsAddTheAppVersion(t *testing.T) {
 	c := &mockcompanion.Companion{Report: dto.Diagnostics{Version: "3.0.1.24371", Platform: "linux/amd64"}}
-	text, err := gui.NewBridge(c, "1.2.3", "").Diagnostics()
+	text, err := gui.NewBridge(c, "1.2.3", "", "/logs").Diagnostics()
 	if err != nil {
 		t.Fatal(err)
 	}
 	var report dto.Diagnostics
-	if err := json.Unmarshal([]byte(text), &report); err != nil || report.AppVersion != "1.2.3" || report.Platform != "linux/amd64" {
+	if err := json.Unmarshal([]byte(text), &report); err != nil || report.AppVersion != "1.2.3" || report.Platform != "linux/amd64" || report.LogFolder != "/logs" {
 		t.Fatalf("report = %s, %v", text, err)
+	}
+}
+
+func TestOpenLogFolderNeedsFileLogging(t *testing.T) {
+	if err := gui.NewBridge(&mockcompanion.Companion{}, "", "", "").OpenLogFolder(); err == nil {
+		t.Fatal("opened a log folder with file logging off")
 	}
 }

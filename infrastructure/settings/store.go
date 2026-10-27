@@ -1,4 +1,5 @@
-// Package settings saves the friend selection in the per-user data folder.
+// Package settings saves the friend selection in the per-user data folder
+// (config.DataDir).
 package settings
 
 import (
@@ -9,43 +10,16 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 
-	"github.com/mihaiflorentin/wc3-team-follow/config"
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
 const maxFileSize = 16 * 1024
 
-// DataDirEnv overrides the data folder, e.g. for isolated tests.
-const DataDirEnv = "WF_DATA_DIR"
-
 // ErrUnreadable reports a saved file that exists but cannot be used. The
 // file is left untouched.
 var ErrUnreadable = errors.New("saved friends could not be loaded")
-
-// DataDir returns the per-user folder the app keeps its files in:
-// %LOCALAPPDATA%\<dir_name> on Windows, ~/Library/Application
-// Support/<dir_name> on macOS and $XDG_CONFIG_HOME/<dir_name> on Linux.
-func DataDir(cfg *config.StorageConfig) (string, error) {
-	if dir := os.Getenv(DataDirEnv); dir != "" {
-		return filepath.Abs(dir)
-	}
-	if cfg == nil || cfg.DirName == "" {
-		return "", errors.New("missing [storage] dir_name")
-	}
-	base, err := os.UserConfigDir()
-	if runtime.GOOS == "windows" {
-		// UserCacheDir is %LOCALAPPDATA%: settings stay on this PC instead
-		// of roaming, as in earlier releases.
-		base, err = os.UserCacheDir()
-	}
-	if err != nil {
-		return "", fmt.Errorf("locate user data folder: %w", err)
-	}
-	return filepath.Join(base, cfg.DirName), nil
-}
 
 // Store keeps the selection in <dir>/settings/friends.json.
 type Store struct {

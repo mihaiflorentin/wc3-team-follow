@@ -3,6 +3,7 @@ package container
 import (
 	"fmt"
 
+	"github.com/mihaiflorentin/wc3-team-follow/config"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/discovery"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/gamesocket"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/settings"
@@ -34,10 +35,10 @@ func (s *ServiceContainer) GameDialer() (contract.GameDialer, error) {
 }
 
 // PreferenceStore returns the friend-selection store in the per-user data
-// folder named by [storage].
+// folder named by [storage] (config.DataDir).
 func (s *ServiceContainer) PreferenceStore() (contract.PreferenceStore, error) {
 	return s.infrastructure.preferenceStore.get(func() (contract.PreferenceStore, error) {
-		dir, err := settings.DataDir(s.config.Storage)
+		dir, err := config.DataDir(s.config.Storage)
 		if err != nil {
 			return nil, fmt.Errorf("resolve data folder: %w", err)
 		}

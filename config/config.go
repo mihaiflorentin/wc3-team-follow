@@ -28,6 +28,12 @@ type AppConfig struct {
 type LoggingConfig struct {
 	Default string `mapstructure:"default"`
 	Level   string `mapstructure:"level"`
+	// File writes a JSON-lines log into <data folder>/logs for bug reports.
+	File      bool   `mapstructure:"file"`
+	FileLevel string `mapstructure:"file_level"`
+	// FileMaxMB rotates the file at this size; FileKeep old files are kept.
+	FileMaxMB int `mapstructure:"file_max_mb"`
+	FileKeep  int `mapstructure:"file_keep"`
 }
 
 // FollowConfig tunes the companion that watches the game and joins friends.

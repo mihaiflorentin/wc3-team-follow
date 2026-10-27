@@ -33,7 +33,7 @@ A plain `go build` without `-tags desktop,production` compiles, but the window t
 
 | Section | Keys |
 | --- | --- |
-| `[logging]` | `default` (`simple`, `color`, `json`, `pretty-json`), `level` |
+| `[logging]` | Console: `default` (`simple`, `color`, `json`, `pretty-json`), `level`. Log file: `file`, `file_level`, `file_max_mb`, `file_keep` (see `docs/logging.md`) |
 | `[follow]` | `verified_builds` (game versions live joining is allowed on), `refresh_interval`, `discovery_interval` |
 | `[storage]` | `dir_name`, the per-user data folder name. `WF_DATA_DIR` overrides the whole path, which is useful for isolated runs. |
 | `[window]` | `title`, `width`, `height`, `min_width`, `min_height` |
@@ -44,9 +44,13 @@ Serve `cmd/gui/frontend` with any static server and open it in a browser. Outsid
 
 ```bash
 python3 -m http.server 8000 --directory cmd/gui/frontend
-# http://localhost:8000/?scene=live   (off, paused, password, waiting, linux, unverified)
+# http://localhost:8000/?scene=watching   (first, live, paused, password, waiting, linux, unverified)
 ```
 
 ## Trying discovery without the game
 
 `infrastructure/discovery` tests run against a fake `/proc` and fake memory. To exercise the Linux path end to end, run any process with `exec -a 'C:\Games\Warcraft III.exe' <program>` that listens on `127.0.0.1`, answers `/webui/index.html` with `GlueManager` and holds `/webui-socket/<digits>` in memory, then run `wc3-team-follow discover`.
+
+## Screenshots
+
+`docs/screenshots/` holds the README images, taken from the demo scenes `live` (saved as `following.png`), `watching` and `first` (`first-run.png`) at 1100×960, rendered at 2× and scaled to 1600 px wide. On macOS they were rendered with an offscreen `WKWebView`, the same engine the macOS app uses. Retake them after visible interface changes.

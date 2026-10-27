@@ -6,5 +6,5 @@ linters:
       # Errors from these packages are shown to players as written, so they
       # are full sentences: capitalized and ending with a period
       # (docs/coding-style.md, "Errors and context").
-      - path: (domain/follow|domain/companion|infrastructure/discovery)/
+      - path: (domain/follow|domain/companion|infrastructure/discovery|cmd/gui)/
         text: "ST1005:"

@@ -99,7 +99,12 @@ type Engine struct {
 	team    []member
 	teamAt  time.Time
 	watched []member
+	// friends is the presence the engine may act on; it is emptied whenever
+	// a fresh snapshot is required.
 	friends map[string]friendRecord
+	// roster is the whole Battle.net friends list for display. It is
+	// replaced by each full snapshot and kept across arming.
+	roster map[string]friendRecord
 
 	status      string
 	busy        bool
@@ -121,7 +126,10 @@ type Engine struct {
 
 	attempted      []string
 	presenceEpochs map[string]presenceEpoch
-	nextAttemptAt  time.Time
+	// seenOpen remembers which group lobbies were already announced while
+	// watching, keyed like attempts.
+	seenOpen      map[string]bool
+	nextAttemptAt time.Time
 }
 
 // NewEngine returns an engine that sends commands through send, reads the
@@ -136,9 +144,11 @@ func NewEngine(send Sender, now func() time.Time, verified []string) *Engine {
 		includeTeam:    true,
 		status:         "Waiting for Warcraft III.",
 		friends:        map[string]friendRecord{},
+		roster:         map[string]friendRecord{},
 		announced:      map[string]bool{},
 		counts:         map[string]int{},
 		presenceEpochs: map[string]presenceEpoch{},
+		seenOpen:       map[string]bool{},
 	}
 }
 
@@ -156,6 +166,9 @@ func (e *Engine) Note(message string) {
 	}
 }
 
+// Status returns the latest status line.
+func (e *Engine) Status() string { return e.status }
+
 // Connected reports whether the game connection is open.
 func (e *Engine) Connected() bool { return e.connected }
 
@@ -166,11 +179,13 @@ func (e *Engine) Connection(connected bool, version string) {
 	e.enabled, e.pending, e.password = false, nil, nil
 	e.team, e.teamAt = nil, time.Time{}
 	clear(e.friends)
+	clear(e.roster)
 	e.watched = nil
 	e.busy, e.queued, e.screen = false, false, ""
 	e.inMatch, e.awaitingMenu, e.menuReady, e.resumeAt = false, false, false, time.Time{}
 	e.attempted = nil
 	clear(e.presenceEpochs)
+	clear(e.seenOpen)
 	e.nextAttemptAt = time.Time{}
 	if connected {
 		e.Note("Connected to Warcraft III. Form a team in the game, or add friends here.")
@@ -181,6 +196,15 @@ func (e *Engine) Connection(connected bool, version string) {
 
 func (e *Engine) disarm() { e.enabled, e.pending, e.password = false, nil, nil }
 
+// selectionChanged stops Follow, which only ever follows the group chosen
+// when it was started.
+func (e *Engine) selectionChanged() {
+	if e.enabled {
+		e.Note("Who you follow changed, so Follow stopped. Start again to follow the new group.")
+	}
+	e.disarm()
+}
+
 // Configure applies a selection or mode change, or switches Follow on or
 // off. Any selection or mode change switches Follow off.
 func (e *Engine) Configure(cfg dto.FollowConfig) error {
@@ -190,11 +214,11 @@ func (e *Engine) Configure(cfg dto.FollowConfig) error {
 			return err
 		}
 		e.manualTags = tags
-		e.disarm()
+		e.selectionChanged()
 	}
 	if cfg.IncludeTeam != nil {
 		e.includeTeam = *cfg.IncludeTeam
-		e.disarm()
+		e.selectionChanged()
 	}
 	if cfg.Diagnostic != nil && *cfg.Diagnostic != e.diagnostic {
 		e.disarm()
@@ -244,7 +268,10 @@ func (e *Engine) arm(fromMenus bool) error {
 		if slices.ContainsFunc(e.team, func(m member) bool { return m.isSelf && tagKey(m.battleTag) == tagKey(tag) }) {
 			return errors.New("Choose a friend's BattleTag, not your own.")
 		}
-		record, ok := e.friends[tagKey(tag)]
+		// The roster, not the presence the engine acts on, says whether the
+		// friend exists: arming empties that, so re-arming moments after a
+		// group change must still find them. Joining waits for fresh data.
+		record, ok := e.roster[tagKey(tag)]
 		if !ok || now.Sub(record.seen) > freshFor {
 			return errors.New("No activity yet for " + tag + ". Check the spelling and that they're on your Battle.net friends list.")
 		}
@@ -312,6 +339,7 @@ func (e *Engine) Receive(event dto.GameEvent) {
 	case "FriendsFriendData":
 		if friends, ok := list(field(p, "data", "friends")); ok {
 			clear(e.friends)
+			clear(e.roster)
 			for _, f := range friends {
 				e.friend(object(f))
 			}
@@ -408,7 +436,63 @@ func (e *Engine) Receive(event dto.GameEvent) {
 		e.Note("The game could not join that lobby. Follow stays on and waits for a new lobby.")
 	}
 	e.resumeIfReady()
+	e.announceOpenLobbies()
 	e.evaluate()
+}
+
+// group returns the BattleTags the player has chosen to follow: the team's
+// other members when the team is included, then the chosen friends.
+func (e *Engine) group() []string {
+	var tags []string
+	seen := map[string]bool{}
+	add := func(tag string) {
+		if tag != "" && !seen[tagKey(tag)] {
+			seen[tagKey(tag)] = true
+			tags = append(tags, tag)
+		}
+	}
+	if e.includeTeam {
+		for _, m := range e.team {
+			if !m.isSelf {
+				add(m.battleTag)
+			}
+		}
+	}
+	for _, tag := range e.manualTags {
+		add(tag)
+	}
+	return tags
+}
+
+// announceOpenLobbies notes, once per lobby, when someone in the chosen
+// group opens a joinable lobby. Watching needs no start: it runs whenever
+// the game is connected, whether or not auto-join is on.
+func (e *Engine) announceOpenLobbies() {
+	if !e.connected {
+		return
+	}
+	for _, tag := range e.group() {
+		record, ok := e.roster[tagKey(tag)]
+		if !ok {
+			continue
+		}
+		p := e.presenceOf(record)
+		marker := attemptKey(tag, p)
+		if !p.open || e.seenOpen[marker] {
+			continue
+		}
+		e.seenOpen[marker] = true
+		if len(e.seenOpen) > maxAttempts {
+			clear(e.seenOpen)
+			e.seenOpen[marker] = true
+		}
+		name, _ := record.data["battleTag"].(string)
+		if p.lobby != "" {
+			e.Note(name + " opened a lobby: " + p.lobby + ".")
+		} else {
+			e.Note(name + " opened a lobby.")
+		}
+	}
 }
 
 func (e *Engine) friend(f map[string]any) {
@@ -427,7 +511,9 @@ func (e *Engine) friend(f map[string]any) {
 		}
 	}
 	e.presenceEpochs[key] = presenceEpoch{open: open, signature: signature, epoch: epoch}
-	e.friends[key] = friendRecord{data: f, seen: e.now(), epoch: epoch}
+	record := friendRecord{data: f, seen: e.now(), epoch: epoch}
+	e.friends[key] = record
+	e.roster[key] = record
 }
 
 func (e *Engine) pause(message string) {
@@ -510,6 +596,10 @@ func (e *Engine) presence(m member) presence {
 		}
 		return presence{label: "Not on your friends list"}
 	}
+	return e.presenceOf(record)
+}
+
+func (e *Engine) presenceOf(record friendRecord) presence {
 	f := record.data
 	fresh := e.now().Sub(record.seen) < freshFor
 	online := isTrue(f["isOnline"])
@@ -525,6 +615,8 @@ func (e *Engine) presence(m member) presence {
 		label = "Lobby open"
 	case inGame:
 		label = "In Warcraft III"
+	case isTrue(f["isAway"]):
+		label = "Away"
 	}
 	return presence{label: label, open: open, auroraID: f["accountId"], lobby: attribute(f, "currentGameName"), epoch: record.epoch}
 }
@@ -630,6 +722,7 @@ func (e *Engine) Snapshot() dto.FollowState {
 		Team:          []dto.TeamMember{},
 		Watched:       []dto.WatchedMember{},
 		Friends:       []dto.WatchedMember{},
+		Roster:        []dto.Friend{},
 		Log:           slices.Clone(e.log),
 	}
 	if s.ManualTags == nil {
@@ -658,8 +751,15 @@ func (e *Engine) Snapshot() dto.FollowState {
 	}
 	for _, tag := range e.manualTags {
 		p := e.presence(member{battleTag: tag, isFriend: true})
+		if !hasRecord(e.friends, tag) {
+			// Between snapshots, show what the roster last said.
+			if record, found := e.roster[tagKey(tag)]; found {
+				p = e.presenceOf(record)
+			}
+		}
 		s.Friends = append(s.Friends, dto.WatchedMember{BattleTag: tag, Label: p.label, Open: p.open, Lobby: p.lobby})
 	}
+	s.Roster = e.rosterSnapshot()
 	return s
 }
 
@@ -681,4 +781,39 @@ func (e *Engine) Diagnostics() dto.Diagnostics {
 		Busy:         e.busy,
 		Queued:       e.queued,
 	}
+}
+
+func hasRecord(m map[string]friendRecord, tag string) bool {
+	_, found := m[tagKey(tag)]
+	return found
+}
+
+// rosterSnapshot lists every Battle.net friend from the latest snapshot,
+// sorted by BattleTag, marking the ones in the follow group.
+func (e *Engine) rosterSnapshot() []dto.Friend {
+	selected := map[string]bool{}
+	for _, tag := range e.manualTags {
+		selected[tagKey(tag)] = true
+	}
+	out := make([]dto.Friend, 0, len(e.roster))
+	for key, record := range e.roster {
+		f := record.data
+		if !isTrue(f["isFriend"]) {
+			continue
+		}
+		tag, _ := f["battleTag"].(string)
+		p := e.presenceOf(record)
+		out = append(out, dto.Friend{
+			BattleTag: tag,
+			Label:     p.label,
+			Lobby:     p.lobby,
+			Online:    isTrue(f["isOnline"]),
+			Away:      isTrue(f["isAway"]),
+			InGame:    f["currentProgram"] == "W3",
+			Open:      p.open,
+			Selected:  selected[key],
+		})
+	}
+	slices.SortFunc(out, func(a, b dto.Friend) int { return strings.Compare(tagKey(a.BattleTag), tagKey(b.BattleTag)) })
+	return out
 }

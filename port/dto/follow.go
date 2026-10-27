@@ -40,11 +40,13 @@ type FollowState struct {
 	PasswordRequest *PasswordRequest `json:"passwordRequest"`
 	Team            []TeamMember     `json:"team"`
 	Watched         []WatchedMember  `json:"watched"`
-	// Friends is the live presence of each manually added friend.
-	Friends          []WatchedMember `json:"friends"`
-	LastJoin         *JoinRecord     `json:"lastJoin"`
-	Log              []LogEntry      `json:"log"`
-	PreferencesError string          `json:"preferencesError"`
+	// Friends is the live presence of each friend in the follow group.
+	Friends []WatchedMember `json:"friends"`
+	// Roster is the player's whole Battle.net friends list, to choose from.
+	Roster           []Friend    `json:"roster"`
+	LastJoin         *JoinRecord `json:"lastJoin"`
+	Log              []LogEntry  `json:"log"`
+	PreferencesError string      `json:"preferencesError"`
 	// ConnectionHint explains why the game is not connected yet, when
 	// discovery knows.
 	ConnectionHint string `json:"connectionHint"`
@@ -65,6 +67,21 @@ type WatchedMember struct {
 	Label     string `json:"label"`
 	Open      bool   `json:"open"`
 	Lobby     string `json:"lobby"`
+}
+
+// Friend is one Battle.net friend, for choosing who to follow.
+type Friend struct {
+	BattleTag string `json:"battleTag"`
+	Label     string `json:"label"`
+	Lobby     string `json:"lobby"`
+	Online    bool   `json:"online"`
+	Away      bool   `json:"away"`
+	// InGame is true while the friend is in Warcraft III.
+	InGame bool `json:"inGame"`
+	// Open is true while the friend's lobby can be joined.
+	Open bool `json:"open"`
+	// Selected is true when the friend is in the follow group.
+	Selected bool `json:"selected"`
 }
 
 // PasswordRequest names the lobby the game asked a password for.
@@ -102,7 +119,9 @@ type Diagnostics struct {
 	Busy         bool           `json:"busy"`
 	Queued       bool           `json:"queued"`
 	Platform     string         `json:"platform"`
-	AppVersion   string         `json:"appVersion"`
+	// LogFolder is where the log files are, for attaching to bug reports.
+	LogFolder  string `json:"logFolder,omitempty"`
+	AppVersion string `json:"appVersion"`
 }
 
 // Preferences is what is saved on disk between runs: only the friend

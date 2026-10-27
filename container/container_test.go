@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/mihaiflorentin/wc3-team-follow/config"
-	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/settings"
 )
 
 func TestLazy_ConcurrentFirstUseBuildsOnce(t *testing.T) {
@@ -94,7 +93,7 @@ func TestCompanion_ReportsAMissingFollowSection(t *testing.T) {
 }
 
 func TestCompanion_BuildsFromTheEmbeddedConfig(t *testing.T) {
-	t.Setenv(settings.DataDirEnv, t.TempDir())
+	t.Setenv(config.DataDirEnv, t.TempDir())
 	cfg, err := config.NewConfig()
 	if err != nil {
 		t.Fatal(err)

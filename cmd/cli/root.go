@@ -30,6 +30,10 @@ func NewRootCmd(c *container.ServiceContainer) *cobra.Command {
 	return root
 }
 
+// BuildInfo returns the version, commit and build date injected at build
+// time, for the start-up log line.
+func BuildInfo() (string, string, string) { return version, commit, date }
+
 // Execute runs the command tree built from c.
 func Execute(c *container.ServiceContainer) error {
 	return NewRootCmd(c).Execute()

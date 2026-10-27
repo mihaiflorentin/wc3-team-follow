@@ -1,12 +1,14 @@
 package companion_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -194,4 +196,50 @@ func TestDiagnosticsNameThePlatform(t *testing.T) {
 	if d.Platform == "" {
 		t.Fatalf("diagnostics = %+v", d)
 	}
+}
+
+func TestLogsNeverContainTheSessionOrPasswords(t *testing.T) {
+	var buf safeBuffer
+	h := &harness{
+		discovery: &mockgame.Discovery{Conn: dto.GameConnection{Port: 5000, Session: "98765432109876", Version: build}},
+		session:   mockgame.NewSession(),
+		prefs:     mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}),
+	}
+	h.svc = companion.New(h.discovery, &mockgame.Dialer{Session: h.session}, h.prefs,
+		slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		companion.Options{VerifiedBuilds: []string{build}, RefreshInterval: 5 * time.Second, DiscoveryInterval: 10 * time.Second})
+	h.run(t)
+	waitFor(t, "connection", func() bool { return h.svc.State().Connected })
+	_, _ = h.svc.SubmitPassword("hunter2-lobby-secret")
+	_, _ = h.svc.Configure(dto.FollowConfig{Tags: &[]string{"One#1234"}})
+
+	out := buf.String()
+	for _, want := range []string{"companion.connected", "follow.configure", "follow.password", "companion.send"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log lacks %s", want)
+		}
+	}
+	for _, secret := range []string{"98765432109876", "hunter2-lobby-secret"} {
+		if strings.Contains(out, secret) {
+			t.Errorf("log contains %q", secret)
+		}
+	}
+}
+
+// safeBuffer is a bytes.Buffer safe for the companion's goroutines.
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *safeBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *safeBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

@@ -676,3 +676,162 @@ func TestMenuScreenReportsInMenus(t *testing.T) {
 		t.Fatal("lobby reported as menus")
 	}
 }
+
+func (f *fixture) friendsSnapshot(friends ...map[string]any) {
+	list := make([]any, len(friends))
+	for i, fr := range friends {
+		list[i] = fr
+	}
+	f.receive("FriendsFriendData", map[string]any{"data": map[string]any{"friends": list}})
+}
+
+func closed(tag string, id int, extra map[string]any) map[string]any {
+	fr := friend(map[string]any{"battleTag": tag, "accountId": id, "localRichPresenceAttributes": []any{}, "currentProgram": ""})
+	for k, v := range extra {
+		fr[k] = v
+	}
+	return fr
+}
+
+func TestRosterListsBattleNetFriendsSortedAndMarksTheGroup(t *testing.T) {
+	f := newFixture(t)
+	_ = f.engine.Configure(dto.FollowConfig{Tags: &[]string{"jaina#2214"}})
+	f.friendsSnapshot(
+		closed("Thrall#1820", 3, map[string]any{"isOnline": false}),
+		closed("Jaina#2214", 2, map[string]any{"isAway": true}),
+		friend(map[string]any{"battleTag": "Arthas#1123", "accountId": 1}),
+		closed("Stranger#9999", 4, map[string]any{"isFriend": false}),
+	)
+	r := f.state().Roster
+	if len(r) != 3 || r[0].BattleTag != "Arthas#1123" || r[1].BattleTag != "Jaina#2214" || r[2].BattleTag != "Thrall#1820" {
+		t.Fatalf("roster = %+v", r)
+	}
+	if !r[0].Open || !r[0].InGame || r[0].Label != "Lobby open" {
+		t.Errorf("Arthas = %+v", r[0])
+	}
+	if !r[1].Selected || !r[1].Away || r[1].Label != "Away" {
+		t.Errorf("Jaina = %+v", r[1])
+	}
+	if r[2].Online || r[2].Label != "Offline" || r[2].Selected {
+		t.Errorf("Thrall = %+v", r[2])
+	}
+}
+
+func TestRosterSurvivesStartingAndClearsOnDisconnect(t *testing.T) {
+	f := newFixture(t)
+	f.friendsSnapshot(closed("Jaina#2214", 2, nil))
+	_ = f.engine.Configure(dto.FollowConfig{Tags: &[]string{"Jaina#2214"}, IncludeTeam: ptr(false)})
+	f.mustArm(true)
+	if len(f.state().Roster) != 1 {
+		t.Fatal("starting Follow emptied the roster")
+	}
+	f.engine.Connection(false, "")
+	if len(f.state().Roster) != 0 {
+		t.Fatal("roster kept after disconnect")
+	}
+}
+
+func TestAGroupFollowsWhoeverOpensALobbyFirst(t *testing.T) {
+	f := newFixture(t)
+	group := []string{"Arthas#1123", "Jaina#2214", "Thrall#1820"}
+	f.friendsSnapshot(closed("Arthas#1123", 1, nil), closed("Jaina#2214", 2, nil), closed("Thrall#1820", 3, nil))
+	if err := f.engine.Configure(dto.FollowConfig{Tags: &group, IncludeTeam: ptr(false)}); err != nil {
+		t.Fatal(err)
+	}
+	f.mustArm(false)
+	f.friendsSnapshot(closed("Arthas#1123", 1, nil), closed("Jaina#2214", 2, nil), closed("Thrall#1820", 3, nil))
+	if len(f.state().Watched) != 3 || len(f.joins()) != 0 {
+		t.Fatalf("watched=%d joins=%d", len(f.state().Watched), len(f.joins()))
+	}
+	// Thrall, last in the list, opens a lobby first.
+	f.receive("FriendsFriendUpdated", map[string]any{"data": map[string]any{"friend": friend(map[string]any{"battleTag": "Thrall#1820", "accountId": 3})}})
+	j := f.joins()
+	if len(j) != 1 || j[0].payload["auroraId"] != 3 {
+		t.Fatalf("joins = %+v", j)
+	}
+}
+
+func TestChangingTheGroupWhileFollowingSaysFollowStopped(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(true)
+	_ = f.engine.Configure(dto.FollowConfig{IncludeTeam: ptr(false)})
+	if s := f.state(); s.Enabled || !strings.Contains(s.Status, "Follow stopped") {
+		t.Fatalf("state = %+v", s)
+	}
+}
+
+func notes(f *fixture, fragment string) int {
+	n := 0
+	for _, e := range f.state().Log {
+		if strings.Contains(e.Message, fragment) {
+			n++
+		}
+	}
+	return n
+}
+
+func TestWatchingAnnouncesGroupLobbiesWithoutStarting(t *testing.T) {
+	f := newFixture(t)
+	_ = f.engine.Configure(dto.FollowConfig{Tags: &[]string{"Thrall#1820"}, IncludeTeam: ptr(false)})
+	f.friendsSnapshot(
+		friend(map[string]any{"battleTag": "Thrall#1820", "accountId": 3, "localRichPresenceAttributes": attrs("currentGameState", "open", "currentGameName", "Legion TD")}),
+		friend(map[string]any{"battleTag": "Stranger#4040", "accountId": 9}),
+	)
+	f.friendsSnapshot(friend(map[string]any{"battleTag": "Thrall#1820", "accountId": 3, "localRichPresenceAttributes": attrs("currentGameState", "open", "currentGameName", "Legion TD")}))
+	if n := notes(f, "Thrall#1820 opened a lobby: Legion TD."); n != 1 {
+		t.Fatalf("announcements = %d, log = %+v", n, f.state().Log)
+	}
+	if notes(f, "Stranger#4040") != 0 {
+		t.Error("announced a friend outside the group")
+	}
+	if len(f.joins()) != 0 || f.state().Enabled {
+		t.Fatal("watching joined or switched Follow on")
+	}
+	// A new lobby is announced again.
+	f.friendsSnapshot(friend(map[string]any{"battleTag": "Thrall#1820", "accountId": 3, "localRichPresenceAttributes": attrs("currentGameState", "open", "currentGameName", "Footmen")}))
+	if notes(f, "opened a lobby: Footmen.") != 1 {
+		t.Error("a new lobby was not announced")
+	}
+}
+
+func TestWatchingIncludesTheTeam(t *testing.T) {
+	f := newFixture(t)
+	f.presence(nil)
+	if notes(f, "Friend#1234 opened a lobby.") != 1 {
+		t.Fatalf("log = %+v", f.state().Log)
+	}
+	_ = f.engine.Configure(dto.FollowConfig{IncludeTeam: ptr(false)})
+	f.presence(lobby("Elsewhere"))
+	if notes(f, "Elsewhere") != 0 {
+		t.Error("announced the team after it was left out")
+	}
+}
+
+func TestAutoJoinAnnouncesThenJoins(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(false)
+	f.presence(lobby("Open"))
+	log := f.state().Log
+	if len(f.joins()) != 1 || len(log) < 2 ||
+		!strings.Contains(log[len(log)-2].Message, "opened a lobby: Open.") || !strings.HasPrefix(log[len(log)-1].Message, "Asked to join") {
+		t.Fatalf("log = %+v", log)
+	}
+}
+
+func TestChangingTheGroupCanReArmRightAway(t *testing.T) {
+	f := newFixture(t)
+	f.friendsSnapshot(closed("Jaina#2214", 2, nil), closed("Thrall#1820", 3, nil))
+	_ = f.engine.Configure(dto.FollowConfig{Tags: &[]string{"Jaina#2214"}, IncludeTeam: ptr(false)})
+	f.mustArm(false)
+	// No fresh snapshot yet: the friend list from before arming still counts.
+	_ = f.engine.Configure(dto.FollowConfig{Tags: &[]string{"Jaina#2214", "Thrall#1820"}})
+	f.mustArm(false)
+	if len(f.state().Watched) != 2 {
+		t.Fatalf("watched = %+v", f.state().Watched)
+	}
+	// Joining still waits for fresh activity after arming.
+	f.receive("FriendsFriendUpdated", map[string]any{"data": map[string]any{"friend": friend(map[string]any{"battleTag": "Thrall#1820", "accountId": 3})}})
+	if j := f.joins(); len(j) != 1 || j[0].payload["auroraId"] != 3 {
+		t.Fatalf("joins = %+v", j)
+	}
+}

@@ -66,9 +66,13 @@ Notes for Wine and Proton:
 
 - Run Team Follow outside Wine; it is a Linux program.
 - Flatpak installs of Steam, Lutris or Bottles work too, but Team Follow must run outside the Flatpak sandbox as the same user.
-- The game's version is read from `Warcraft III.exe` inside the Wine prefix (`WINEPREFIX`, Proton's `STEAM_COMPAT_DATA_PATH/pfx`, or `~/.wine`). If it cannot be read, Team Follow connects in Preview only.
+- The game's version is read from `Warcraft III.exe` inside the Wine prefix (`WINEPREFIX`, Proton's `STEAM_COMPAT_DATA_PATH/pfx`, or `~/.wine`). If it cannot be read, Team Follow still watches, but Auto-join stays off.
 
 Friends are saved in `~/.config/WarcraftTeamFollow/settings/friends.json` (or under `$XDG_CONFIG_HOME`).
+
+## Reporting a problem
+
+Open **Report a problem** in the Activity panel. Copy the report, press **Open log folder**, and send both the report and `team-follow.log` (plus `crash.log` if it isn't empty). The logs show what Team Follow saw and did, with timestamps. They include BattleTags and lobby names, but never passwords or the game's session.
 
 ## Troubleshooting
 
@@ -78,4 +82,4 @@ Friends are saved in `~/.config/WarcraftTeamFollow/settings/friends.json` (or un
 | More than one Warcraft III is running | Close the extra copies; Team Follow won't guess which to follow. |
 | Waiting for its menus to open / finish loading | Wait on the main menu; Team Follow retries every 10 seconds. |
 | This computer blocked reading Warcraft III's menu session | Do the setup step for your system above. |
-| Auto-join is off for game build … | The game updated. Preview still works; joining waits for that build to be checked. |
+| Auto-join isn't available on game build … | The game updated. Watching still works; joining waits for that build to be checked. |

@@ -89,12 +89,15 @@ func newDiscovery(p platform, logger *slog.Logger) *Discovery {
 func (d *Discovery) Discover(ctx context.Context) (dto.GameConnection, error) {
 	g, err := d.platform.findGame(ctx)
 	if err != nil {
+		d.logger.DebugContext(ctx, "discovery.process", slog.Any("error", err))
 		return dto.GameConnection{}, err
 	}
+	d.logger.DebugContext(ctx, "discovery.process", slog.Int("pid", g.pid), slog.String("exe", g.exe), slog.Int("uid", g.uid))
 	ports, err := d.platform.listeners(ctx, g)
 	if err != nil {
 		return dto.GameConnection{}, fmt.Errorf("list game listeners: %w", err)
 	}
+	d.logger.DebugContext(ctx, "discovery.listeners", slog.Any("ports", ports))
 	port := 0
 	for _, p := range ports {
 		if d.isMenu(ctx, p) {
@@ -105,10 +108,14 @@ func (d *Discovery) Discover(ctx context.Context) (dto.GameConnection, error) {
 	if port == 0 {
 		return dto.GameConnection{}, ErrNoMenu
 	}
+	started := time.Now()
 	session, err := d.platform.session(ctx, g)
 	if err != nil {
+		d.logger.DebugContext(ctx, "discovery.session", slog.Any("error", err), slog.String("took", time.Since(started).Round(time.Millisecond).String()))
 		return dto.GameConnection{}, err
 	}
+	// The session itself is never logged, only that one was found.
+	d.logger.DebugContext(ctx, "discovery.session", slog.Int("digits", len(session)), slog.String("took", time.Since(started).Round(time.Millisecond).String()))
 	if !sessionPattern.MatchString(session) {
 		return dto.GameConnection{}, ErrNoSession
 	}
@@ -128,11 +135,14 @@ func (d *Discovery) isMenu(ctx context.Context, port int) bool {
 	}
 	resp, err := d.client.Do(req)
 	if err != nil {
+		d.logger.DebugContext(ctx, "discovery.probe", slog.Int("port", port), slog.Any("error", err))
 		return false
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, probeLimit))
-	return err == nil && strings.Contains(strings.ToLower(string(body)), "gluemanager")
+	menu := err == nil && strings.Contains(strings.ToLower(string(body)), "gluemanager")
+	d.logger.DebugContext(ctx, "discovery.probe", slog.Int("port", port), slog.Int("status", resp.StatusCode), slog.Bool("menu", menu))
+	return menu
 }
 
 // isGameExe reports whether path names the game executable, whichever

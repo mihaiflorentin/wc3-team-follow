@@ -3,8 +3,16 @@ name = "wc3-team-follow"
 env  = "development"
 
 [logging]
+# Console log: format and minimum level.
 default = "color"
 level   = "debug"
+# Log file in <data folder>/logs/team-follow.log, for bug reports: JSON lines
+# with source locations, rotated at file_max_mb with file_keep old files.
+# Crashes are written to logs/crash.log with full stack traces.
+file        = true
+file_level  = "debug"
+file_max_mb = 5
+file_keep   = 3
 
 [follow]
 # Live joining is allowed only on game builds whose behaviour has been checked

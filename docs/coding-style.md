@@ -30,7 +30,7 @@ These conventions match the generated code; keep new code consistent with them. 
 ## Window
 
 - `cmd/gui/frontend/` is plain HTML, CSS and JavaScript with no build step. Colours, type and spacing are CSS custom properties at the top of `style.css`; reuse them.
-- Interface text is sentence case and names actions by what they do ("Start preview", "Stop"). Errors say what to do next.
+- Interface text is sentence case and names actions by what they do ("Auto-join", "Report a problem"). Errors say what to do next.
 - The page derives everything it shows from `FollowState`; behaviour rules belong in `domain/follow`, not in `app.js`.
 
 ## Formatting and style

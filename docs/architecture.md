@@ -61,4 +61,4 @@ The OS-specific parts are `platform_<os>.go`. Parsing that doesn't need the OS (
 
 ## Window
 
-`cmd/gui/frontend/` is plain HTML, CSS and JavaScript, embedded into the binary. There is no build step or Node.js. Opened outside the app (for example `python3 -m http.server -d cmd/gui/frontend`), the page uses a demo bridge; pick a state with `?scene=off|live|paused|password|waiting|linux|unverified`. See `docs/adr/0002-desktop-window-with-wails.md`.
+`cmd/gui/frontend/` is plain HTML, CSS and JavaScript, embedded into the binary. There is no build step or Node.js. Opened outside the app (for example `python3 -m http.server -d cmd/gui/frontend`), the page uses a demo bridge; pick a state with `?scene=first|watching|live|paused|password|waiting|linux|unverified`. See `docs/adr/0002-desktop-window-with-wails.md`.

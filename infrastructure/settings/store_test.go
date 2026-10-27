@@ -70,12 +70,3 @@ func TestMalformedFileFailsWithoutBeingOverwritten(t *testing.T) {
 		}
 	}
 }
-
-func TestDataDirHonoursTheOverride(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv(settings.DataDirEnv, dir)
-	got, err := settings.DataDir(nil)
-	if err != nil || got != dir {
-		t.Fatalf("DataDir = %q, %v", got, err)
-	}
-}

@@ -43,6 +43,8 @@ type Options struct {
 	AppVersion string
 	// Executable is this program's path, shown in setup instructions.
 	Executable string
+	// LogDir is the log folder, or "" when file logging is off.
+	LogDir string
 }
 
 // Run opens the window and blocks until it is closed. The companion runs
@@ -52,7 +54,7 @@ func Run(deps Deps, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("load interface: %w", err)
 	}
-	bridge := NewBridge(deps.Companion, opts.AppVersion, opts.Executable)
+	bridge := NewBridge(deps.Companion, opts.AppVersion, opts.Executable, opts.LogDir)
 
 	var (
 		wg     sync.WaitGroup

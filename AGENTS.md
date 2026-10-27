@@ -11,7 +11,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `cmd/gui/` | Driving desktop adapter: `Run(Deps, Options)` opens the Wails window; `Bridge` is the page's API. `frontend/` is plain HTML/CSS/JS, embedded. |
 | `container/` | `ServiceContainer`: lazy `(T, error)` accessors and `Close`. Used only by the wiring layer. |
 | `config/` | `config.toml` (embedded into the binary) and `NewConfig`. |
-| `logging/` | `New(cfg, w) *slog.Logger` and the log handlers. Cross-cutting: every layer may receive a `*slog.Logger`. |
+| `logging/` | `Setup` (console + rotated log file + crash file), `New` (console only) and the log handlers. Cross-cutting: every layer may receive a `*slog.Logger`. |
 | `domain/follow/` | The follow state machine. Pure; port of 0.4's `team-follow.cjs`. |
 | `domain/companion/` | `contract.Companion`: discovery loop, game session, saving friends, publishing state. |
 | `port/contract/` | Interfaces (ports) that domain and adapters meet at. Interfaces only, no structs. |
@@ -27,7 +27,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 
 - Release targets: `windows/amd64` (cross-compiled, no cgo, `-H windowsgui`), `darwin/arm64` (cgo, `.app` bundle, ad-hoc signed with `com.apple.security.cs.debugger`, macOS 13+), `linux/amd64` (cgo, WebKitGTK 4.1, tag `webkit2_41`). Builds need `-tags desktop,production`; use the `Makefile`.
 - `[follow] verified_builds` gates live joining (`3.0.1.24371`). Never add a build without a live test.
-- `[logging] default` is `color`, `level` is `debug`.
+- `[logging] default` is `color`, `level` is `debug`; the log file (`file = true`) is JSON at `debug`, 5 MB × 3 rotations.
 - Per-user data: `%LOCALAPPDATA%\WarcraftTeamFollow` (Windows), `~/Library/Application Support/WarcraftTeamFollow` (macOS), `$XDG_CONFIG_HOME/WarcraftTeamFollow` (Linux). `WF_DATA_DIR` overrides it.
 - `LICENSE`: MIT, copyright 2026 Mihai Mihaila.
 
@@ -65,7 +65,8 @@ To add a dependency (an outbound adapter or a domain service):
 
 ## Logging
 
-- The process logger is the `*slog.Logger` built by `logging.New` in `main.go` (also installed with `slog.SetDefault`). Components receive it through their constructor and keep it in a field.
+- The process logger is the `*slog.Logger` built by `logging.Setup` in `main.go` (also installed with `slog.SetDefault`): the console plus a rotated JSON-lines debug file and a crash file in `<data folder>/logs`. Components receive it through their constructor and keep it in a field.
+- Never log the menu session, passwords, account ids or event payloads; log command names and event types. New background goroutines start with a panic guard that logs the stack.
 - Log a dotted event name as the message and the details as typed attributes: `logger.InfoContext(ctx, "companion.connected", slog.String("version", v))`.
 - Return errors upward; log them once, at the edge that handles them. Errors meant for players are full sentences starting with a capital letter. See `docs/logging.md`.
 
