@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -37,7 +37,7 @@ var loaders = []string{
 }
 
 func (p procfs) path(parts ...string) string {
-	return filepath.Join(append([]string{p.root}, parts...)...)
+	return path.Join(append([]string{p.root}, parts...)...)
 }
 
 func (p procfs) pids() []int {
@@ -126,7 +126,7 @@ func (p procfs) socketInodes(pid int) map[string]bool {
 	}
 	inodes := map[string]bool{}
 	for _, e := range entries {
-		target, err := os.Readlink(filepath.Join(dir, e.Name()))
+		target, err := os.Readlink(path.Join(dir, e.Name()))
 		if err != nil {
 			continue
 		}
@@ -318,14 +318,14 @@ func (p procfs) winePrefixes(pid int) []string {
 		out = append(out, v)
 	}
 	if v := env["STEAM_COMPAT_DATA_PATH"]; v != "" {
-		out = append(out, filepath.Join(v, "pfx"))
+		out = append(out, path.Join(v, "pfx"))
 	}
 	home := env["HOME"]
 	if home == "" {
 		home = p.home
 	}
 	if home != "" {
-		out = append(out, filepath.Join(home, ".wine"))
+		out = append(out, path.Join(home, ".wine"))
 	}
 	return out
 }
@@ -352,5 +352,5 @@ func dosPath(prefix, winPath string) (string, bool) {
 	}
 	drive := strings.ToLower(winPath[:2])
 	rest := strings.ReplaceAll(winPath[3:], `\`, "/")
-	return filepath.Join(prefix, "dosdevices", drive, rest), true
+	return path.Join(prefix, "dosdevices", drive, rest), true
 }

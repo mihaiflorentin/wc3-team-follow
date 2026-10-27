@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -207,8 +209,8 @@ func TestProcfsReadsTheSessionFromMem(t *testing.T) {
 }
 
 func TestProcfsReportsBlockedMemoryAccess(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores file permissions")
+	if os.Geteuid() == 0 || runtime.GOOS == "windows" {
+		t.Skip("needs Unix file permissions, which root and Windows don't enforce")
 	}
 	p, root := fakeProc(t)
 	mem := filepath.Join(root, "4242", "mem")
@@ -221,7 +223,7 @@ func TestProcfsReportsBlockedMemoryAccess(t *testing.T) {
 func TestProcfsExeCandidatesCoverProtonAndThePrefix(t *testing.T) {
 	p, root := fakeProc(t)
 	got := p.exeCandidates(4242)
-	inRoot := filepath.Join(root, "4242", "root")
+	inRoot := path.Join(root, "4242", "root")
 	mapped := "/steam/compatdata/123/pfx/drive_c/Program Files (x86)/Warcraft III/_retail_/x86_64/Warcraft III.exe"
 	viaPrefix := "/steam/compatdata/123/pfx/dosdevices/c:/Program Files (x86)/Warcraft III/_retail_/x86_64/Warcraft III.exe"
 	viaHome := "/home/me/.wine/dosdevices/c:/Program Files (x86)/Warcraft III/_retail_/x86_64/Warcraft III.exe"

@@ -37,7 +37,7 @@ jobs:
       tag: ${{ steps.kind.outputs.tag }}
       version: ${{ steps.kind.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Classify the push
         id: kind
         env:
@@ -66,8 +66,8 @@ jobs:
         runner: [ubuntu-22.04, macos-latest, windows-latest]
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -100,10 +100,10 @@ jobs:
             file: dist/wc3-team-follow-macos-arm64.zip
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
