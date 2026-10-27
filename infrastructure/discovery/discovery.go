@@ -33,7 +33,9 @@ const (
 var (
 	// ErrNoGame: no game client is running.
 	ErrNoGame = errors.New("Warcraft III isn't running. Start it through Battle.net.")
-	// ErrManyGames: more than one client is running; which one to follow is ambiguous.
+	// ErrManyGames: more than one client is running; which one to follow is
+	// ambiguous. Platforms return manyGames(n), which matches it with
+	// errors.Is and says how many are running.
 	ErrManyGames = errors.New("More than one Warcraft III is running. Close the extra ones.")
 	// ErrNoMenu: the game runs but its menu service is not up yet.
 	ErrNoMenu = errors.New("Warcraft III is starting. Waiting for its menus to open.")
@@ -42,6 +44,17 @@ var (
 	// ErrAccess: the operating system refused to let the app read the game.
 	ErrAccess = errors.New("This computer blocked reading Warcraft III's menu session.")
 )
+
+// manyGamesError is ErrManyGames with the number of clients running.
+type manyGamesError struct{ count int }
+
+func manyGames(count int) error { return manyGamesError{count} }
+
+func (e manyGamesError) Error() string {
+	return fmt.Sprintf("%d copies of Warcraft III are running. Close the ones you aren't playing; a copy you restarted may still run in the background. Team Follow connects by itself once one is left.", e.count)
+}
+
+func (manyGamesError) Is(target error) bool { return target == ErrManyGames }
 
 var sessionPattern = regexp.MustCompile(`^\d{11,20}$`)
 

@@ -96,7 +96,7 @@ func (p procfs) findGame(context.Context) (game, error) {
 	case 1:
 		return found[0], nil
 	default:
-		return game{}, ErrManyGames
+		return game{}, manyGames(len(found))
 	}
 }
 

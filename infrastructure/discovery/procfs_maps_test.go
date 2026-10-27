@@ -93,7 +93,7 @@ func TestLinuxGamePathUnderDriveC(t *testing.T) {
 	mkdirs(t, home+"/.wine/drive_c/users/me")
 	p := procfs{root: filepath.ToSlash(t.TempDir()), home: home}
 	got := p.gamePath(context.Background(), nil, home+"/.wine/drive_c/users/me/Documents/Warcraft III/Maps/Download/Legion TD.w3x")
-	if want := `C:\users\me\Documents\Warcraft III\Maps\Download\Legion TD.w3x`; got != want {
+	if want := "C:/users/me/Documents/Warcraft III/Maps/Download/Legion TD.w3x"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
@@ -108,17 +108,47 @@ func TestLinuxGamePathThroughDosDevices(t *testing.T) {
 	_ = os.Symlink("/", home+"/.wine/dosdevices/z:")
 	_ = os.Symlink(maps, home+"/.wine/dosdevices/d:")
 	p := procfs{root: t.TempDir(), home: home}
-	if got := p.gamePath(context.Background(), nil, maps+"/x.w3x"); got != `D:\x.w3x` {
+	if got := p.gamePath(context.Background(), nil, maps+"/x.w3x"); got != "D:/x.w3x" {
 		t.Errorf("D: got %q", got)
 	}
-	if got := p.gamePath(context.Background(), nil, "/srv/maps/y.w3x"); got != `Z:\srv\maps\y.w3x` {
+	if got := p.gamePath(context.Background(), nil, "/srv/maps/y.w3x"); got != "Z:/srv/maps/y.w3x" {
 		t.Errorf("Z: got %q", got)
+	}
+}
+
+func TestLinuxGamePathResolvesProtonMyDocuments(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on Windows")
+	}
+	home := t.TempDir()
+	user := home + "/.wine/drive_c/users/steamuser"
+	mkdirs(t, user+"/Documents/Warcraft III/Maps/Download")
+	_ = os.Symlink("./Documents", user+"/My Documents")
+	p := procfs{root: t.TempDir(), home: home}
+	got := p.gamePath(context.Background(), nil, user+"/My Documents/Warcraft III/Maps/Download/(2)Amazonia.w3x")
+	if want := "C:/users/steamuser/Documents/Warcraft III/Maps/Download/(2)Amazonia.w3x"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestLinuxGamePathThroughWineDocumentsLink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on Windows")
+	}
+	home := t.TempDir()
+	mkdirs(t, home+"/.wine/drive_c/users/me", home+"/.wine/dosdevices", home+"/Documents/Warcraft III/Maps")
+	_ = os.Symlink(home+"/Documents", home+"/.wine/drive_c/users/me/Documents")
+	_ = os.Symlink("/", home+"/.wine/dosdevices/z:")
+	p := procfs{root: t.TempDir(), home: home}
+	got := p.gamePath(context.Background(), nil, home+"/Documents/Warcraft III/Maps/(2)Amazonia.w3x")
+	if want := "C:/users/me/Documents/Warcraft III/Maps/(2)Amazonia.w3x"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 
 func TestLinuxGamePathFallsBackToZ(t *testing.T) {
 	p := procfs{root: filepath.ToSlash(t.TempDir()), home: ""}
-	if got := p.gamePath(context.Background(), nil, "/home/me/maps/z.w3m"); got != `Z:\home\me\maps\z.w3m` {
+	if got := p.gamePath(context.Background(), nil, "/home/me/maps/z.w3m"); got != "Z:/home/me/maps/z.w3m" {
 		t.Fatalf("got %q", got)
 	}
 }

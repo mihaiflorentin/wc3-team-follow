@@ -39,4 +39,8 @@ func (windowsPlatform) mapsFolders(_ context.Context, g *game) []dto.MapsFolder 
 	return out
 }
 
-func (windowsPlatform) gamePath(_ context.Context, _ *game, path string) string { return path }
+// gamePath writes the path with forward slashes, as the game's own map list
+// does.
+func (windowsPlatform) gamePath(_ context.Context, _ *game, path string) string {
+	return filepath.ToSlash(path)
+}

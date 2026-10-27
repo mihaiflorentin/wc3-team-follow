@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -116,14 +117,25 @@ func (p procfs) mapsFolders(_ context.Context, g *game) []dto.MapsFolder {
 }
 
 // gamePath turns a Linux path into the Windows path the game sees: under a
-// prefix's drive_c it's on C:, otherwise on the drive letter Wine maps to
-// its folder (Z: maps to / by default).
+// prefix's drive_c it's on C:, in a folder a Wine user folder links to
+// (Documents -> ~/Documents) it's on C: through that link, otherwise on the
+// drive letter Wine maps to its folder (Z: maps to / by default). The path
+// is written as the game's own map list writes it, or CreateLobby opens a
+// lobby without slots: forward slashes, and links resolved (Proton's "My
+// Documents" is a link to "Documents").
 func (p procfs) gamePath(_ context.Context, g *game, host string) string {
-	host = path.Clean(host)
+	host = realPath(host)
 	prefixes := p.prefixes(g)
 	for _, pf := range prefixes {
-		if rel, ok := under(host, path.Join(pf.dir, "drive_c")); ok {
-			return `C:\` + windowsSlashes(rel)
+		if rel, ok := under(host, realPath(path.Join(pf.dir, "drive_c"))); ok {
+			return "C:/" + rel
+		}
+	}
+	for _, pf := range prefixes {
+		for _, user := range subdirs(path.Join(pf.dir, "drive_c", "users")) {
+			if linked, ok := userLink(user, host); ok {
+				return "C:/users/" + path.Base(user) + "/" + linked
+			}
 		}
 	}
 	best, bestLen := "", -1
@@ -145,15 +157,56 @@ func (p procfs) gamePath(_ context.Context, g *game, host string) string {
 			if !path.IsAbs(target) {
 				target = path.Join(devices, target)
 			}
-			if rel, ok := under(host, path.Clean(target)); ok && len(target) > bestLen {
-				best, bestLen = strings.ToUpper(name)+`\`+windowsSlashes(rel), len(target)
+			target = realPath(target)
+			if rel, ok := under(host, target); ok && len(target) > bestLen {
+				best, bestLen = strings.ToUpper(name)+"/"+rel, len(target)
 			}
 		}
 	}
 	if best != "" {
 		return best
 	}
-	return `Z:` + windowsSlashes(host)
+	return "Z:" + host
+}
+
+// userLink finds host inside a folder that one of user's entries links to,
+// such as Documents -> ~/Documents, and returns the path through the link.
+func userLink(user, host string) (string, bool) {
+	entries, err := os.ReadDir(user)
+	if err != nil {
+		return "", false
+	}
+	for _, e := range entries {
+		if e.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+		target, err := os.Readlink(path.Join(user, e.Name()))
+		if err != nil {
+			continue
+		}
+		if !path.IsAbs(target) {
+			target = path.Join(user, target)
+		}
+		if rel, ok := under(host, realPath(target)); ok {
+			return path.Join(e.Name(), rel), true
+		}
+	}
+	return "", false
+}
+
+// realPath resolves the links in p, as far as its folders exist.
+func realPath(p string) string {
+	p = path.Clean(p)
+	for dir, rest := p, ""; ; {
+		if real, err := filepath.EvalSymlinks(dir); err == nil {
+			return path.Join(filepath.ToSlash(real), rest)
+		}
+		parent := path.Dir(dir)
+		if parent == dir {
+			return p
+		}
+		dir, rest = parent, path.Join(path.Base(dir), rest)
+	}
 }
 
 // under reports whether p is base or inside it, and the rest of the path.
@@ -169,5 +222,3 @@ func under(p, base string) (string, bool) {
 	}
 	return "", false
 }
-
-func windowsSlashes(p string) string { return strings.ReplaceAll(p, "/", `\`) }

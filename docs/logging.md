@@ -24,7 +24,7 @@ The window's **Report a problem** dialog shows the diagnostic report, the log fo
 | --- | --- | --- |
 | `app.start`, `app.exit`, `app.panic` (with stack) | info / error | `main.go` |
 | `discovery.process`, `.listeners`, `.probe` (per port), `.session` (digit count and time taken), `.found` | debug | `infrastructure/discovery` |
-| `companion.run`, `.connected` (version, pid, port, verified), `.waiting` (each new reason once), `.disconnected`, `.stop` | info | `domain/companion` |
+| `companion.run`, `.connected` (version, pid, port, verified), `.waiting` (each new reason once), `.disconnected` (error, or `reason` logged out), `.stop` | info | `domain/companion` |
 | `companion.send` (command name), `companion.event` (event type) | debug | `domain/companion` |
 | `companion.screen`: the game screen the menu switched to (`SetGlueScreen`) | info | `domain/companion` |
 | `follow.status`: every status line the engine sets | info | `domain/companion` |

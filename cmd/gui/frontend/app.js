@@ -124,9 +124,18 @@ function tone(s) {
 
 const toneIcon = {off: 'plug', watching: 'eye', live: 'enter', paused: 'pause', alert: 'lock'};
 
+// The hint's first sentence becomes the title, so a problem such as two
+// copies of the game running reads as the headline, not small print.
+function waitingHeadline(hint) {
+  if (!hint) return ['Waiting for Warcraft III', 'Start the game through Battle.net. Team Follow finds it by itself.'];
+  const cut = hint.indexOf('. ');
+  if (cut < 0) return [hint.replace(/\.$/, ''), 'Team Follow connects by itself.'];
+  return [hint.slice(0, cut), hint.slice(cut + 2)];
+}
+
 function headline(s) {
   const n = s.watched.length;
-  if (!s.connected) return ['Waiting for Warcraft III', s.connectionHint || 'Start the game through Battle.net. Team Follow finds it by itself.'];
+  if (!s.connected) return waitingHeadline(s.connectionHint);
   if (s.passwordRequest) {
     const r = s.passwordRequest;
     return ['This lobby needs a password', `${r.friend}'s lobby “${r.lobby}” asked for one.`];
@@ -254,7 +263,7 @@ function renderActions(s) {
     ? (s.paused ? 'On, and paused while you’re in a lobby, match or queue.' : 'On. Joins the first friend in your group who opens a lobby.')
     : 'Join the first friend in your group who opens a lobby. Pauses while you play.';
   $('blocked').textContent = s.connected ? reason : '';
-  if (s.enabled || reason) $('confirm').hidden = true;
+  if (confirmFor === 'Auto-join' && (s.enabled || reason)) closeConfirm();
 }
 
 function watchedFor(s, tag) {
@@ -412,13 +421,17 @@ function renderLog(s) {
 /* Events --------------------------------------------------------------- */
 
 // confirmThen runs action once the player confirms they're in the menus,
-// or right away when the game has already shown it.
+// or right away when the game has already shown it. feature names what the
+// confirm button turns on; only that feature's own state closes the question.
 let confirmed = null;
-function confirmThen(toggle, action) {
+let confirmFor = null;
+function confirmThen(toggle, feature, action) {
   if (state.inMenus) return action();
   // The game hasn't said which screen it's on: ask before acting.
   toggle.checked = false;
   confirmed = action;
+  confirmFor = feature;
+  $('confirm-yes-text').textContent = `Yes, turn on ${feature}`;
   $('confirm').hidden = false;
   $('confirm-yes').focus();
 }
@@ -426,10 +439,14 @@ function confirmThen(toggle, action) {
 $('autojoin').onchange = event => {
   if (!state) return;
   if (!event.target.checked) return configure({enabled: false});
-  confirmThen(event.target, () => autoJoin(true));
+  confirmThen(event.target, 'Auto-join', () => autoJoin(true));
 };
-$('confirm-yes').onclick = () => { $('confirm').hidden = true; confirmed?.(); confirmed = null; };
-$('confirm-no').onclick = () => { $('confirm').hidden = true; };
+function closeConfirm() {
+  $('confirm').hidden = true;
+  confirmed = confirmFor = null;
+}
+$('confirm-yes').onclick = () => { const action = confirmed; closeConfirm(); action?.(); };
+$('confirm-no').onclick = closeConfirm;
 
 $('friend-search').oninput = () => render(state);
 $('show-offline').onchange = () => render(state);
@@ -586,12 +603,13 @@ function renderHost(s) {
   $('host-help').textContent = hostSummary(h.settings);
   $('host-setup').classList.toggle('needs-setup', !h.settings.mapPath || !h.settings.gameName);
   $('host-blocked').textContent = s.connected || !h.settings.mapPath ? reason : '';
+  if (confirmFor === 'Auto-host' && (h.enabled || reason)) closeConfirm();
 }
 
 $('autohost').onchange = event => {
   if (!state) return;
   if (!event.target.checked) return hostAct({enabled: false});
-  confirmThen(event.target, () => hostAct({enabled: true, fromMenus: true}));
+  confirmThen(event.target, 'Auto-host', () => hostAct({enabled: true, fromMenus: true}));
 };
 
 /* Auto-host setup dialog */
@@ -850,7 +868,7 @@ $('maps-choose').onclick = () => browser.selected && choose(browser.selected);
 
 /* Demo bridge: used only when the page runs outside the app, to preview
    the design in a browser. Pick a scene with ?scene=watching|first|live|
-   paused|password|waiting|linux|unverified. */
+   paused|password|waiting|many|linux|unverified|host-waiting|host-lobby. */
 function demoBridge() {
   const scene = new URLSearchParams(location.search).get('scene') || 'watching';
   const now = Date.now();
@@ -918,6 +936,7 @@ function demoBridge() {
     paused: {enabled: true, paused: true, busy: true, inMatch: true, inMenus: false, status: 'Follow is on but paused during the match.'},
     password: {enabled: true, passwordRequest: {lobby: 'Pros only', friend: 'Arthas#1123'}},
     waiting: {connected: false, team: [], roster: [], connectionHint: 'Warcraft III isn’t running. Start it through Battle.net.'},
+    many: {connected: false, team: [], roster: [], connectionHint: '2 copies of Warcraft III are running. Close the ones you aren’t playing; a copy you restarted may still run in the background. Team Follow connects by itself once one is left.'},
     linux: {connected: false, team: [], roster: [], connectionHint: 'This computer blocked reading Warcraft III’s menu session. To allow it, run: sudo setcap cap_sys_ptrace=ep <path to wc3-team-follow>'},
     unverified: {version: '3.0.2.25010', verifiedBuild: false},
   };

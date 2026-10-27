@@ -298,6 +298,17 @@ func (s *Service) read(ctx context.Context, session contract.GameSession) {
 			if ev.MessageType == "GameLobbySetup" {
 				s.logLobby(ctx, ev)
 			}
+			if ev.MessageType == "LoggedOut" {
+				// This game is signed out, often because the same account
+				// signed in from another copy: find the game again.
+				_ = session.Close()
+				s.session, s.nextDiscovery = nil, time.Time{}
+				s.logStatus()
+				s.mu.Unlock()
+				s.logger.InfoContext(ctx, "companion.disconnected", slog.String("reason", "logged out"))
+				s.notify()
+				return
+			}
 		}
 		s.logStatus()
 		s.mu.Unlock()

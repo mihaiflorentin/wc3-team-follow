@@ -13,7 +13,8 @@ type MapsLocator interface {
 	// likely first. It works without the game running, from known places.
 	MapsFolders(ctx context.Context) []dto.MapsFolder
 	// GamePath returns a map file's path as the game sees it: the same path
-	// on Windows and macOS, a Windows path under Wine or Proton.
+	// on macOS, a Windows path with forward slashes on Windows and under Wine
+	// or Proton (C:/users/…), as the game's own map list writes it.
 	GamePath(ctx context.Context, path string) (string, error)
 }
 

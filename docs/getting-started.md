@@ -44,7 +44,7 @@ Serve `cmd/gui/frontend` with any static server and open it in a browser. Outsid
 
 ```bash
 python3 -m http.server 8000 --directory cmd/gui/frontend
-# http://localhost:8000/?scene=watching   (first, live, paused, password, waiting, linux, unverified,
+# http://localhost:8000/?scene=watching   (first, live, paused, password, waiting, many, linux, unverified,
 #                                         host-waiting, host-lobby); add &open=host-setup|maps|maps-search|report
 ```
 

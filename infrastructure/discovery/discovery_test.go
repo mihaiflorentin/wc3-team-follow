@@ -173,7 +173,8 @@ func TestProcfsRejectsTwoGames(t *testing.T) {
 	p, root := fakeProc(t)
 	_ = os.MkdirAll(filepath.Join(root, "5000"), 0o755)
 	_ = os.WriteFile(filepath.Join(root, "5000", "cmdline"), []byte("wine\x00Warcraft III.exe\x00"), 0o644)
-	if _, err := p.findGame(context.Background()); !errors.Is(err, ErrManyGames) {
+	_, err := p.findGame(context.Background())
+	if !errors.Is(err, ErrManyGames) || !strings.HasPrefix(err.Error(), "2 copies of Warcraft III are running.") {
 		t.Fatalf("err = %v", err)
 	}
 }

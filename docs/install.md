@@ -76,7 +76,7 @@ Team Follow finds Warcraft III's Maps folder by itself:
 
 - **Windows:** `Documents\Warcraft III\Maps` (following OneDrive or a moved Documents folder), then a `Maps` folder next to the game.
 - **macOS:** `~/Library/Application Support/Blizzard/Warcraft III/Maps`.
-- **Linux:** `drive_c/users/<user>/Documents/Warcraft III/Maps` inside the Wine or Proton prefix of the running game (from its environment or its own path, which covers Steam → Proton → Battle.net → Warcraft III), then in `~/.wine`, every Steam library's Proton prefixes, Lutris (`~/Games/*`) and Bottles. Maps are handed to the game as Windows paths (`C:\users\…`).
+- **Linux:** `drive_c/users/<user>/Documents/Warcraft III/Maps` inside the Wine or Proton prefix of the running game (from its environment or its own path, which covers Steam → Proton → Battle.net → Warcraft III), then in `~/.wine`, every Steam library's Proton prefixes, Lutris (`~/Games/*`) and Bottles. Maps are handed to the game as Windows paths written the way the game's own map list writes them: forward slashes and links resolved (`C:/users/steamuser/Documents/…`, never Proton's `My Documents` link; a map in a folder Wine links into the prefix, such as `~/Documents`, goes through that link), as the game's own map list writes them; with backslashes the game opens a lobby without slots.
 
 `wc3-team-follow discover` prints the folders it found. If none is right, use **Change folder** in the map browser.
 
@@ -89,7 +89,7 @@ Open **Report a problem** in the Activity panel. Copy the report, press **Open l
 | Message | What to do |
 | --- | --- |
 | Warcraft III isn't running | Start the game through Battle.net and wait for the main menu. |
-| More than one Warcraft III is running | Close the extra copies; Team Follow won't guess which to follow. |
+| More than one Warcraft III is running | Close the extra copies; Team Follow won't guess which to follow. A copy that was signed out when you started the game again can keep running in the background (common under Proton); close it in your task manager or with `kill`. |
 | Waiting for its menus to open / finish loading | Wait on the main menu; Team Follow retries every 10 seconds. |
 | This computer blocked reading Warcraft III's menu session | Do the setup step for your system above. |
 | Auto-join isn't available on game build … | The game updated. Watching still works; joining waits for that build to be checked. |

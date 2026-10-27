@@ -78,7 +78,7 @@ A leave or loading signal alone never resumes. Stop always wins over automatic r
 
 ## Disconnects
 
-Losing the game connection, or `LoggedOut`, forgets the roster and switches Follow off. The friend list and mode stay. Follow always starts off when the app opens.
+Losing the game connection, or `LoggedOut`, forgets the roster and switches Follow off. The friend list and mode stay. Follow always starts off when the app opens. After `LoggedOut` the companion closes that connection and looks for the game again at once: the same account signing in from another copy signs the first one out, and that copy may keep running. If both copies are still running, the window says so (see `docs/install.md`) until the extra one is closed.
 
 ## Diagnostics
 
@@ -98,4 +98,4 @@ Losing the game connection, or `LoggedOut`, forgets the roster and switches Foll
    - The host leaving the lobby (`MultiplayerGameLeave`) turns Auto-host off.
 4. **Match → waiting:** loading and match screens mark the match; the score screen (or `ExitedGame`) starts the next delay, and the next lobby is created as in step 1.
 
-Commands, all taken from the game's own menu code: `CreateLobby` (Create Game's create button), `LobbyStart` and `LobbyCancel` (the host's lobby buttons), `SetTeam` (the host's team menu), `SendInviteToGame` (the friends list's Invite to game). Checked live on 3.0.1.24371 (27 October 2026): `CreateLobby` opens the hosted lobby, full detection counts computer players, Start when full waits for missing group members, and `LobbyStart` starts a full lobby. `LobbyCancel`, `SetTeam` and `SendInviteToGame` are not live-tested yet.
+Commands, all taken from the game's own menu code: `CreateLobby` (Create Game's create button), `LobbyStart` and `LobbyCancel` (the host's lobby buttons), `SetTeam` (the host's team menu), `SendInviteToGame` (the friends list's Invite to game). Checked live on 3.0.1.24371 (27 October 2026): `CreateLobby` opens the hosted lobby, full detection counts computer players, Start when full waits for missing group members, and `LobbyStart` starts a full lobby. Under Proton on Linux (27 October 2026), `CreateLobby` opens a lobby with the map's slots and the host seated only when `filename` is written exactly as the game's own `MapList` writes it: forward slashes and no links (`C:/users/steamuser/Documents/…`). With backslashes, or through Proton's `My Documents` link, the lobby has one empty slot. `LobbyCancel`, `SetTeam` and `SendInviteToGame` are not live-tested yet.

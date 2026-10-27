@@ -145,6 +145,20 @@ func TestASessionErrorDisconnects(t *testing.T) {
 	waitFor(t, "disconnect", func() bool { return !h.svc.State().Connected })
 }
 
+func TestLoggingOutFindsTheGameAgain(t *testing.T) {
+	h := newHarness(t, mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}))
+	h.run(t)
+	waitFor(t, "connection", func() bool { return h.svc.State().Connected })
+	h.discovery.Set(dto.GameConnection{}, errors.New("More than one Warcraft III is running. Close the extra ones."))
+	h.session.Push(dto.GameEvent{MessageType: "LoggedOut"})
+	waitFor(t, "hint", func() bool {
+		return h.svc.State().ConnectionHint == "More than one Warcraft III is running. Close the extra ones."
+	})
+	if h.svc.State().Connected {
+		t.Fatal("still connected to the signed-out game")
+	}
+}
+
 func TestDiscoveryErrorsBecomeAHint(t *testing.T) {
 	h := newHarness(t, mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}))
 	h.discovery.Set(dto.GameConnection{}, fmt.Errorf("list game listeners: %w", errors.New("Warcraft III isn't running.")))

@@ -50,7 +50,7 @@ func (windowsPlatform) findGame(context.Context) (game, error) {
 		g.exe = imagePath(uint32(g.pid))
 		return g, nil
 	default:
-		return game{}, ErrManyGames
+		return game{}, manyGames(len(found))
 	}
 }
 
