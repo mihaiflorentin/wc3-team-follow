@@ -2,8 +2,10 @@
 // menu service: the loopback port it serves the menu on and the menu
 // session identifier.
 //
-// It only reads. It never writes game memory, injects code or looks for
-// account credentials, and it inspects no process other than the game.
+// Discovery only reads. It never writes game memory, injects code or looks
+// for account credentials, and it inspects no process other than the game.
+// The one action that changes anything is Processes.CloseAll, which closes
+// the game's own processes when the player asks for it and confirms.
 package discovery
 
 import (
@@ -51,14 +53,19 @@ type manyGamesError struct{ count int }
 func manyGames(count int) error { return manyGamesError{count} }
 
 func (e manyGamesError) Error() string {
-	return fmt.Sprintf("Warcraft III is running %d times. Close the ones you aren't playing; a copy you restarted may still run in the background. Team Follow connects by itself once one is left.", e.count)
+	return fmt.Sprintf("Warcraft III is running %d times. Close the ones you aren't playing, or use Close all Warcraft III; a copy you restarted may still run in the background. Team Follow connects by itself once one is left.", e.count)
 }
 
 func (manyGamesError) Is(target error) bool { return target == ErrManyGames }
 
+// GameCount implements contract.GameCounter.
+func (e manyGamesError) GameCount() int { return e.count }
+
+var _ contract.GameCounter = manyGamesError{}
+
 var sessionPattern = regexp.MustCompile(`^\d{11,20}$`)
 
-// game identifies the one running client.
+// game identifies one running client.
 type game struct {
 	pid int
 	// exe is the executable's path on this machine, when known.
@@ -67,9 +74,25 @@ type game struct {
 	uid int
 }
 
+// oneGame picks the game to follow: exactly one must be running.
+func oneGame(games []game, err error) (game, error) {
+	if err != nil {
+		return game{}, err
+	}
+	switch len(games) {
+	case 0:
+		return game{}, ErrNoGame
+	case 1:
+		return games[0], nil
+	default:
+		return game{}, manyGames(len(games))
+	}
+}
+
 // platform is the operating-system specific part of discovery.
 type platform interface {
-	findGame(ctx context.Context) (game, error)
+	// findGames lists every running game process, of any user.
+	findGames(ctx context.Context) ([]game, error)
 	// listeners returns loopback ports that may be the menu service, most
 	// likely first.
 	listeners(ctx context.Context, g game) ([]int, error)
@@ -80,6 +103,12 @@ type platform interface {
 	mapsFolders(ctx context.Context, g *game) []dto.MapsFolder
 	// gamePath converts a path on this computer to the game's view of it.
 	gamePath(ctx context.Context, g *game, path string) string
+	// closable reports whether g belongs to this user, where the operating
+	// system says who owns a process.
+	closable(g game) bool
+	// stop asks g to close; force kills it. A process already gone is not
+	// an error.
+	stop(g game, force bool) error
 }
 
 // Discovery implements contract.GameDiscovery.
@@ -102,7 +131,7 @@ func NewMapsLocator(logger *slog.Logger) contract.MapsLocator {
 // MapsFolders returns the existing Maps folders, most likely first.
 func (d *Discovery) MapsFolders(ctx context.Context) []dto.MapsFolder {
 	var running *game
-	if g, err := d.platform.findGame(ctx); err == nil {
+	if g, err := oneGame(d.platform.findGames(ctx)); err == nil {
 		running = &g
 	}
 	var out []dto.MapsFolder
@@ -124,7 +153,7 @@ func (d *Discovery) MapsFolders(ctx context.Context) []dto.MapsFolder {
 // GamePath returns path as the running game sees it.
 func (d *Discovery) GamePath(ctx context.Context, path string) (string, error) {
 	var running *game
-	if g, err := d.platform.findGame(ctx); err == nil {
+	if g, err := oneGame(d.platform.findGames(ctx)); err == nil {
 		running = &g
 	}
 	out := d.platform.gamePath(ctx, running, path)
@@ -144,7 +173,7 @@ func newDiscovery(p platform, logger *slog.Logger) *Discovery {
 // Discover finds the game's menu port and session. The session is returned
 // to the caller only; it is never logged.
 func (d *Discovery) Discover(ctx context.Context) (dto.GameConnection, error) {
-	g, err := d.platform.findGame(ctx)
+	g, err := oneGame(d.platform.findGames(ctx))
 	if err != nil {
 		d.logger.DebugContext(ctx, "discovery.process", slog.Any("error", err))
 		return dto.GameConnection{}, err

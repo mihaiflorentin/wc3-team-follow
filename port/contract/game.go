@@ -27,3 +27,19 @@ type GameSession interface {
 	Receive(ctx context.Context) (dto.GameEvent, error)
 	Close() error
 }
+
+// GameProcesses closes the running Warcraft III clients. It is used only
+// when the player asks for it and confirms.
+type GameProcesses interface {
+	// CloseAll asks every Warcraft III process of this user to close,
+	// forces any still running a few seconds later, and returns how many it
+	// asked. It touches no other program.
+	CloseAll(ctx context.Context) (int, error)
+}
+
+// GameCounter is implemented by a discovery error that knows how many
+// copies of the game are running, so the companion can report the number
+// without parsing the message.
+type GameCounter interface {
+	GameCount() int
+}

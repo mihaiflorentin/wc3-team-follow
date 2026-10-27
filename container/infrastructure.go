@@ -21,6 +21,7 @@ type InfrastructureContainer struct {
 	preferenceStore lazy[contract.PreferenceStore]
 	mapsLocator     lazy[contract.MapsLocator]
 	mapLibrary      lazy[contract.MapLibrary]
+	gameProcesses   lazy[contract.GameProcesses]
 }
 
 // MapsLocator returns the Maps folder locator for this operating system.
@@ -41,6 +42,14 @@ func (s *ServiceContainer) MapLibrary() (contract.MapLibrary, error) {
 func (s *ServiceContainer) GameDiscovery() (contract.GameDiscovery, error) {
 	return s.infrastructure.gameDiscovery.get(func() (contract.GameDiscovery, error) {
 		return discovery.New(s.logger), nil
+	})
+}
+
+// GameProcesses returns the closer for the game's processes on this
+// operating system, used only when the player asks to close the game.
+func (s *ServiceContainer) GameProcesses() (contract.GameProcesses, error) {
+	return s.infrastructure.gameProcesses.get(func() (contract.GameProcesses, error) {
+		return discovery.NewProcesses(s.logger), nil
 	})
 }
 

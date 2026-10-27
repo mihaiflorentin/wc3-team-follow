@@ -77,3 +77,15 @@ func TestBridgePassesHostAndMapCalls(t *testing.T) {
 		t.Fatal("folder picker ran outside the app")
 	}
 }
+
+func TestBridgePassesCloseGamesOn(t *testing.T) {
+	c := &mockcompanion.Companion{Current: dto.FollowState{GameCount: 0, Status: "Closed 2 copies of Warcraft III."}}
+	s, err := gui.NewBridge(c, "", "", "").CloseGames()
+	if err != nil || c.CloseCalls != 1 || s.Status != c.Current.Status {
+		t.Fatalf("CloseGames = %+v, %v (calls %d)", s, err, c.CloseCalls)
+	}
+	c.Err = errors.New("Warcraft III couldn't be closed. Close it in your task manager.")
+	if _, err := gui.NewBridge(c, "", "", "").CloseGames(); err == nil || err.Error() != c.Err.Error() {
+		t.Fatalf("err = %v", err)
+	}
+}

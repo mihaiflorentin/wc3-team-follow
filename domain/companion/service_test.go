@@ -30,6 +30,7 @@ type harness struct {
 	prefs     *mockprefs.Store
 	locator   *mockmaps.Locator
 	library   *mockmaps.Library
+	processes *mockgame.Processes
 }
 
 func newHarness(t *testing.T, prefs *mockprefs.Store) *harness {
@@ -38,10 +39,12 @@ func newHarness(t *testing.T, prefs *mockprefs.Store) *harness {
 		discovery: &mockgame.Discovery{Conn: dto.GameConnection{Port: 5000, Session: "12345678901", Version: build}},
 		session:   mockgame.NewSession(),
 		prefs:     prefs,
+		processes: &mockgame.Processes{},
 	}
 	h.locator = &mockmaps.Locator{Folders: []dto.MapsFolder{{Path: "/detected/Maps", Source: "test"}}, GamePrefix: "GAME:"}
 	h.library = &mockmaps.Library{Entries: []dto.MapEntry{{Name: "Legion TD", Path: "/detected/Maps/Legion TD.w3x"}, {Name: "Footmen Frenzy", Path: "/detected/Maps/ff.w3x"}}}
-	h.svc = companion.New(companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library}, slog.New(slog.DiscardHandler), companion.Options{
+	ports := companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library, Processes: h.processes}
+	h.svc = companion.New(ports, slog.New(slog.DiscardHandler), companion.Options{
 		VerifiedBuilds:    []string{build},
 		RefreshInterval:   5 * time.Second,
 		DiscoveryInterval: 10 * time.Second,
@@ -316,5 +319,69 @@ func TestSearchUsesTheDetectedFolder(t *testing.T) {
 	got, err := h.svc.SearchMaps(context.Background(), "legion")
 	if err != nil || len(got.Entries) != 1 || h.library.LastRoot != "/detected/Maps" {
 		t.Fatalf("got %+v, %v (root %q)", got, err, h.library.LastRoot)
+	}
+}
+
+func TestSeveralGamesAreCountedInTheState(t *testing.T) {
+	h := newHarness(t, mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}))
+	h.discovery.Set(dto.GameConnection{}, fmt.Errorf("find game: %w", mockgame.CountedError{Message: "Warcraft III is running 3 times.", Count: 3}))
+	h.run(t)
+	waitFor(t, "count", func() bool { return h.svc.State().GameCount == 3 })
+	if hint := h.svc.State().ConnectionHint; hint != "Warcraft III is running 3 times." {
+		t.Fatalf("hint = %q", hint)
+	}
+	h.discovery.Set(dto.GameConnection{Port: 5000, Session: "12345678901", Version: build}, nil)
+	h.processes.Count = 3
+	s, err := h.svc.CloseGames(context.Background())
+	if err != nil || s.GameCount != 0 || s.ConnectionHint != "" || s.Status != "Closed 3 copies of Warcraft III." {
+		t.Fatalf("CloseGames = %+v, %v", s, err)
+	}
+	// Discovery runs again at once, without waiting for discovery_interval.
+	waitFor(t, "connection", func() bool { return h.svc.State().Connected })
+	if h.svc.State().GameCount != 0 {
+		t.Fatal("count kept while connected")
+	}
+}
+
+func TestClosingGamesDropsTheSession(t *testing.T) {
+	h := newHarness(t, mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}))
+	h.run(t)
+	waitFor(t, "connection", func() bool { return h.svc.State().Connected })
+	h.discovery.Set(dto.GameConnection{}, errors.New("Warcraft III isn't running. Start it through Battle.net."))
+	h.processes.Count = 1
+	s, err := h.svc.CloseGames(context.Background())
+	if err != nil || s.Connected || s.Status != "Closed 1 copy of Warcraft III." {
+		t.Fatalf("CloseGames = %+v, %v", s, err)
+	}
+	if err := h.session.Send(context.Background(), "TeamGetInfo", nil); err == nil {
+		t.Fatal("the game session is still open")
+	}
+	if h.processes.CallCount() != 1 {
+		t.Fatalf("CloseAll ran %d times", h.processes.CallCount())
+	}
+	waitFor(t, "new hint", func() bool { return strings.HasPrefix(h.svc.State().ConnectionHint, "Warcraft III isn't running.") })
+}
+
+func TestClosingWhenNoGameRunsSaysSo(t *testing.T) {
+	h := newHarness(t, mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}))
+	s, err := h.svc.CloseGames(context.Background())
+	if err != nil || s.Status != "No copy of Warcraft III was running." {
+		t.Fatalf("CloseGames = %+v, %v", s, err)
+	}
+}
+
+func TestClosingErrorsAreSentencesForPlayers(t *testing.T) {
+	h := newHarness(t, mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}))
+	h.processes.Err = errors.New("close game process 42: operation not permitted")
+	if _, err := h.svc.CloseGames(context.Background()); err == nil || err.Error() != "Warcraft III couldn't be closed. Close it in your task manager." {
+		t.Fatalf("err = %v", err)
+	}
+	h.processes.Count = 1
+	_, err := h.svc.CloseGames(context.Background())
+	if err == nil || !strings.HasPrefix(err.Error(), "Not every copy") {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(h.svc.State().Status, "Closed 1 copy") {
+		t.Fatalf("status = %q", h.svc.State().Status)
 	}
 }

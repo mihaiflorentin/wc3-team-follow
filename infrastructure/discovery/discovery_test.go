@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
@@ -158,12 +159,12 @@ func fakeProc(t *testing.T) (procfs, string) {
 	}
 	write("100/cmdline", "C:\\windows\\system32\\services.exe\x00")
 	write("self/cmdline", "ignored")
-	return procfs{root: root, home: "/home/me"}, root
+	return procfs{root: root, home: "/home/me", self: 1000}, root
 }
 
 func TestProcfsFindsTheWineGame(t *testing.T) {
 	p, _ := fakeProc(t)
-	g, err := p.findGame(context.Background())
+	g, err := oneGame(p.findGames(context.Background()))
 	if err != nil || g.pid != 4242 || g.uid != 1000 {
 		t.Fatalf("got %+v, %v", g, err)
 	}
@@ -173,9 +174,14 @@ func TestProcfsRejectsTwoGames(t *testing.T) {
 	p, root := fakeProc(t)
 	_ = os.MkdirAll(filepath.Join(root, "5000"), 0o755)
 	_ = os.WriteFile(filepath.Join(root, "5000", "cmdline"), []byte("wine\x00Warcraft III.exe\x00"), 0o644)
-	_, err := p.findGame(context.Background())
+	_, err := oneGame(p.findGames(context.Background()))
 	if !errors.Is(err, ErrManyGames) || !strings.HasPrefix(err.Error(), "Warcraft III is running 2 times.") {
 		t.Fatalf("err = %v", err)
+	}
+	// The companion reads the count without parsing the message.
+	var counter contract.GameCounter
+	if !errors.As(err, &counter) || counter.GameCount() != 2 {
+		t.Fatalf("count not available from %v", err)
 	}
 	// The companion shows only errors that read as sentences for players.
 	if msg := err.Error(); msg[0] < 'A' || msg[0] > 'Z' {
@@ -253,7 +259,7 @@ type fakePlatform struct {
 	sessionID string
 }
 
-func (f fakePlatform) findGame(context.Context) (game, error)         { return game{pid: 7}, nil }
+func (f fakePlatform) findGames(context.Context) ([]game, error)      { return []game{{pid: 7}}, nil }
 func (f fakePlatform) listeners(context.Context, game) ([]int, error) { return f.ports, nil }
 func (f fakePlatform) session(context.Context, game) (string, error)  { return f.sessionID, nil }
 func (f fakePlatform) version(context.Context, game) string           { return "3.0.1.24371" }
@@ -261,6 +267,8 @@ func (f fakePlatform) mapsFolders(context.Context, *game) []dto.MapsFolder {
 	return nil
 }
 func (f fakePlatform) gamePath(_ context.Context, _ *game, p string) string { return p }
+func (f fakePlatform) closable(game) bool                                   { return false }
+func (f fakePlatform) stop(game, bool) error                                { return errors.New("not in tests") }
 
 func TestDiscoverProbesForTheMenuPage(t *testing.T) {
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "hello") }))

@@ -54,6 +54,9 @@ type FollowState struct {
 	// ConnectionHint explains why the game is not connected yet, when
 	// discovery knows.
 	ConnectionHint string `json:"connectionHint"`
+	// GameCount is how many copies of Warcraft III discovery found while
+	// not connected, when it found more than one; 0 otherwise.
+	GameCount int `json:"gameCount"`
 	// Host is Auto-host's state.
 	Host HostState `json:"host"`
 	// MapsFolder is the folder the map browser opens.

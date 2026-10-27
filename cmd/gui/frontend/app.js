@@ -203,6 +203,7 @@ function render(s) {
   $('next').textContent = next === title ? '' : next;
 
   renderCommand(s);
+  renderCloseGames(s);
   renderSteps(s);
   renderParty(s);
   $('password-form').hidden = !s.passwordRequest;
@@ -223,9 +224,20 @@ function renderCommand(s) {
   $('hint-command-text').textContent = command.replace('<path to wc3-team-follow>', exePath || '<path to wc3-team-follow>');
 }
 
+// manyGames: discovery found more than one copy of the game, so the hero
+// offers to close them all.
+const manyGames = s => !s.connected && s.gameCount > 1;
+
+function renderCloseGames(s) {
+  const show = manyGames(s);
+  if (!show) $('close-confirm').hidden = true;
+  $('close-games-row').hidden = !show || !$('close-confirm').hidden;
+  $('close-games').disabled = closingGames;
+}
+
 function renderSteps(s) {
   const steps = $('steps');
-  steps.hidden = s.enabled || s.host?.enabled || Boolean(s.passwordRequest) || !$('hint-command').hidden;
+  steps.hidden = s.enabled || s.host?.enabled || Boolean(s.passwordRequest) || !$('hint-command').hidden || manyGames(s);
   const done = {game: s.connected, people: hasTargets(s), start: false};
   const current = !done.game ? 'game' : !done.people ? 'people' : 'start';
   for (const li of steps.children) {
@@ -477,7 +489,63 @@ async function copy(text) {
 
 $('copy-command').onclick = () => copy($('hint-command-text').textContent);
 
+/* Closing Warcraft III ------------------------------------------------- */
+
+// Both buttons ask first, in the page; the Go side does the closing.
+let closingGames = false;
+
+async function closeGames(error) {
+  closingGames = true;
+  error.textContent = '';
+  for (const id of ['close-games', 'close-yes', 'report-close-games', 'report-close-yes']) $(id).disabled = true;
+  try {
+    render(await bridge.CloseGames());
+    return true;
+  } catch (err) {
+    error.textContent = String(err?.message ?? err);
+    return false;
+  } finally {
+    closingGames = false;
+    for (const id of ['close-games', 'close-yes', 'report-close-games', 'report-close-yes']) $(id).disabled = false;
+  }
+}
+
+$('close-games').onclick = () => {
+  $('close-confirm').hidden = false;
+  $('close-games-row').hidden = true;
+  $('close-no').focus();
+};
+$('close-no').onclick = () => {
+  $('close-confirm').hidden = true;
+  render(state);
+};
+$('close-yes').onclick = async () => {
+  $('close-confirm').hidden = true;
+  await closeGames($('error'));
+  render(state);
+};
+
+function resetReportClose() {
+  $('report-close-confirm').hidden = true;
+  $('report-close-games').hidden = false;
+  $('report-games-note').textContent = '';
+  $('report-error').textContent = '';
+}
+$('report-close-games').onclick = () => {
+  $('report-close-confirm').hidden = false;
+  $('report-close-games').hidden = true;
+  $('report-games-note').textContent = '';
+  $('report-close-no').focus();
+};
+$('report-close-no').onclick = resetReportClose;
+$('report-close-yes').onclick = async () => {
+  $('report-close-confirm').hidden = true;
+  $('report-close-games').hidden = false;
+  if (await closeGames($('report-error'))) $('report-games-note').textContent = state.status;
+};
+
 $('report').onclick = async () => {
+  resetReportClose();
   try {
     $('report-text').textContent = await bridge.Diagnostics();
     const folder = await bridge.LogFolder();
@@ -514,7 +582,7 @@ async function boot() {
 boot();
 
 // demoOpen opens a dialog in the demo page, for screenshots:
-// ?open=host-setup|maps|maps-search|report.
+// ?open=host-setup|maps|maps-search|report|close-games.
 async function demoOpen(what) {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   switch (what) {
@@ -540,6 +608,9 @@ async function demoOpen(what) {
       break;
     case 'report':
       $('report').click();
+      break;
+    case 'close-games':
+      $('close-games').click();
       break;
   }
 }
@@ -904,7 +975,7 @@ function demoBridge() {
     connected: true, version: '3.0.1.24371', verifiedBuild: true, enabled: false, diagnostic: false,
     manualTags: ['Arthas#1123', 'Jaina#2214', 'Thrall#1820', 'Uther#5521'], includeTeam: true,
     status: '', screen: 'CUSTOM_LOBBIES', busy: false, queued: false, inMatch: false, paused: false, inMenus: true,
-    joinPending: false, passwordRequest: null, preferencesError: '', connectionHint: '',
+    joinPending: false, passwordRequest: null, preferencesError: '', connectionHint: '', gameCount: 0,
     team: [
       {battleTag: 'Player#1234', isSelf: true, status: 'You'},
       {battleTag: 'Sylvanas#9031', isFriend: true, status: 'In Warcraft III'},
@@ -938,7 +1009,7 @@ function demoBridge() {
     paused: {enabled: true, paused: true, busy: true, inMatch: true, inMenus: false, status: 'Follow is on but paused during the match.'},
     password: {enabled: true, passwordRequest: {lobby: 'Pros only', friend: 'Arthas#1123'}},
     waiting: {connected: false, team: [], roster: [], connectionHint: 'Warcraft III isn’t running. Start it through Battle.net.'},
-    many: {connected: false, team: [], roster: [], connectionHint: 'Warcraft III is running 2 times. Close the ones you aren’t playing; a copy you restarted may still run in the background. Team Follow connects by itself once one is left.'},
+    many: {connected: false, gameCount: 2, team: [], roster: [], connectionHint: 'Warcraft III is running 2 times. Close the ones you aren’t playing, or use Close all Warcraft III; a copy you restarted may still run in the background. Team Follow connects by itself once one is left.'},
     linux: {connected: false, team: [], roster: [], connectionHint: 'This computer blocked reading Warcraft III’s menu session. To allow it, run: sudo setcap cap_sys_ptrace=ep <path to wc3-team-follow>'},
     unverified: {version: '3.0.2.25010', verifiedBuild: false},
   };
@@ -951,6 +1022,14 @@ function demoBridge() {
     Diagnostics: async () => JSON.stringify({version: s.version, connected: s.connected, platform: 'demo', logFolder: '/home/me/.config/WarcraftTeamFollow/logs'}, null, 2),
     LogFolder: async () => '/home/me/.config/WarcraftTeamFollow/logs',
     OpenLogFolder: async () => {},
+    CloseGames: async () => {
+      const n = s.connected ? 1 : s.gameCount;
+      const status = n ? `Closed ${plural(n, 'copy', 'copies')} of Warcraft III.` : 'No copy of Warcraft III was running.';
+      if (n) Object.assign(s, {connected: false, gameCount: 0, enabled: false, team: [], roster: [], watched: [], connectionHint: '', host: {...s.host, enabled: false, phase: 'off'}});
+      s.status = status;
+      s.log.push({time: new Date().toISOString(), message: status});
+      return clone();
+    },
     SubmitPassword: async () => { s.passwordRequest = null; return clone(); },
     ConfigureHost: async cfg => {
       if (cfg.settings) s.host.settings = cfg.settings;

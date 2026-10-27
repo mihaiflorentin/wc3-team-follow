@@ -22,6 +22,8 @@ type Companion struct {
 	Listing      dto.MapListing
 	LastFolder   string
 	LastQuery    string
+	// CloseCalls counts CloseGames calls.
+	CloseCalls int
 }
 
 func (c *Companion) Run(ctx context.Context) error {
@@ -65,4 +67,9 @@ func (c *Companion) BrowseMaps(_ context.Context, dir string) (dto.MapListing, e
 func (c *Companion) SearchMaps(_ context.Context, query string) (dto.MapListing, error) {
 	c.LastQuery = query
 	return c.Listing, c.Err
+}
+
+func (c *Companion) CloseGames(context.Context) (dto.FollowState, error) {
+	c.CloseCalls++
+	return c.Current, c.Err
 }

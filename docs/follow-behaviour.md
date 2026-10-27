@@ -79,7 +79,9 @@ A leave or loading signal alone never resumes. Stop always wins over automatic r
 
 ## Disconnects
 
-Losing the game connection, or `LoggedOut`, forgets the roster and switches Follow off. The friend list and mode stay. Follow always starts off when the app opens. After `LoggedOut` the companion closes that connection and looks for the game again at once: the same account signing in from another copy signs the first one out, and that copy may keep running. If both copies are still running, the window says so (see `docs/install.md`) until the extra one is closed.
+Losing the game connection, or `LoggedOut`, forgets the roster and switches Follow off. The friend list and mode stay. Follow always starts off when the app opens. After `LoggedOut` the companion closes that connection and looks for the game again at once: the same account signing in from another copy signs the first one out, and that copy may keep running. If both copies are still running, the window says so (see `docs/install.md`) until the extra one is closed, and offers **Close all Warcraft III**.
+
+**Close all Warcraft III** (`Companion.CloseGames`, also in Report a problem) runs only after the player confirms. It closes every copy of the game this user runs (`contract.GameProcesses`, see `docs/adr/0005-closing-the-game-on-request.md`), drops the game session (Follow and Auto-host go off, as on any disconnect), notes "Closed 2 copies of Warcraft III." (or "No copy of Warcraft III was running.") in Activity, and looks for the game again straight away. The player then starts the game again through Battle.net.
 
 ## Diagnostics
 

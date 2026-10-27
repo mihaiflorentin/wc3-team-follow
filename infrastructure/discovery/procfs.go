@@ -26,6 +26,10 @@ type procfs struct {
 	root string
 	// home is the user's home folder, for the default ~/.wine prefix.
 	home string
+	// self is the uid running Team Follow; only its games may be closed.
+	self int
+	// signal sends SIGTERM, or SIGKILL with force, to pid.
+	signal func(pid int, force bool) error
 }
 
 // loaders are argv[0] names that run the program given in the next
@@ -83,21 +87,33 @@ func isGameBinaryForLoader(arg string) bool {
 	return strings.HasPrefix(arg, "/") && !strings.Contains(arg, `\`)
 }
 
-func (p procfs) findGame(context.Context) (game, error) {
+func (p procfs) findGames(context.Context) ([]game, error) {
 	var found []game
 	for _, pid := range p.pids() {
 		if _, ok := gameArg(p.cmdline(pid)); ok {
 			found = append(found, game{pid: pid, uid: p.uid(pid)})
 		}
 	}
-	switch len(found) {
-	case 0:
-		return game{}, ErrNoGame
-	case 1:
-		return found[0], nil
-	default:
-		return game{}, manyGames(len(found))
+	return found, nil
+}
+
+// closable accepts only the games of the user running Team Follow. A game
+// whose owner can't be read is left alone.
+func (p procfs) closable(g game) bool {
+	return g.uid >= 0 && g.uid == p.self
+}
+
+// stop signals g after checking that its pid still runs the game, so a pid
+// the system gave to another program in the meantime is left alone. A
+// zombie has no command line and counts as gone.
+func (p procfs) stop(g game, force bool) error {
+	if _, ok := gameArg(p.cmdline(g.pid)); !ok {
+		return nil
 	}
+	if p.signal == nil {
+		return errors.New("closing processes is not supported here")
+	}
+	return p.signal(g.pid, force)
 }
 
 func (p procfs) uid(pid int) int {

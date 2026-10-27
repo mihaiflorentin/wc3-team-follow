@@ -53,6 +53,8 @@ type Ports struct {
 	Prefs     contract.PreferenceStore
 	Maps      contract.MapsLocator
 	Library   contract.MapLibrary
+	// Processes closes the game when the player asks for it.
+	Processes contract.GameProcesses
 }
 
 type Service struct {
@@ -61,6 +63,7 @@ type Service struct {
 	prefs     contract.PreferenceStore
 	maps      contract.MapsLocator
 	library   contract.MapLibrary
+	processes contract.GameProcesses
 	logger    *slog.Logger
 	opts      Options
 
@@ -72,6 +75,11 @@ type Service struct {
 	lastRefresh   time.Time
 	prefsError    string
 	hint          string
+	// gameCount is how many copies of the game discovery last found, when
+	// more than one.
+	gameCount int
+	// closing is set while CloseGames runs; discovery waits for it.
+	closing bool
 	// mapsFolder is the folder the player chose, or "".
 	mapsFolder string
 	// lastStatus is the last status line written to the log.
@@ -94,6 +102,7 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		prefs:       ports.Prefs,
 		maps:        ports.Maps,
 		library:     ports.Library,
+		processes:   ports.Processes,
 		logger:      logger,
 		opts:        opts,
 		subscribers: map[int]func(dto.FollowState){},
@@ -186,7 +195,7 @@ func (s *Service) step(ctx context.Context) {
 	s.engine.Tick()
 	s.logStatus()
 	s.refresh()
-	start := s.session == nil && !s.connecting && !s.opts.Now().Before(s.nextDiscovery)
+	start := s.session == nil && !s.connecting && !s.closing && !s.opts.Now().Before(s.nextDiscovery)
 	if start {
 		s.connecting = true
 		s.nextDiscovery = s.opts.Now().Add(s.opts.DiscoveryInterval)
@@ -228,7 +237,7 @@ func (s *Service) connect(ctx context.Context) {
 			// Log each new reason once; the same reason repeats every few seconds.
 			s.logger.InfoContext(ctx, "companion.waiting", slog.String("hint", hint), slog.Any("error", err))
 		}
-		s.hint = hint
+		s.hint, s.gameCount = hint, gameCount(err)
 		if s.engine.Connected() {
 			s.engine.Connection(false, "")
 			s.logStatus()
@@ -238,7 +247,7 @@ func (s *Service) connect(ctx context.Context) {
 		s.notify()
 		return
 	}
-	s.session, s.hint = session, ""
+	s.session, s.hint, s.gameCount = session, "", 0
 	s.engine.Connection(true, conn.Version)
 	s.logStatus()
 	s.lastRefresh = time.Time{}
@@ -260,6 +269,16 @@ func playerMessage(err error) string {
 		}
 	}
 	return "Waiting for Warcraft III."
+}
+
+// gameCount returns how many copies of the game a discovery error says are
+// running, or 0 when it doesn't say.
+func gameCount(err error) int {
+	var counter contract.GameCounter
+	if errors.As(err, &counter) {
+		return counter.GameCount()
+	}
+	return 0
 }
 
 func (s *Service) read(ctx context.Context, session contract.GameSession) {
@@ -329,6 +348,7 @@ func (s *Service) snapshot() dto.FollowState {
 	state.PreferencesError = s.prefsError
 	if !state.Connected {
 		state.ConnectionHint = s.hint
+		state.GameCount = s.gameCount
 	}
 	return state
 }
@@ -590,4 +610,61 @@ func (s *Service) logLobby(ctx context.Context, ev dto.GameEvent) {
 		slog.Int("players", host.Players), slog.Int("slots", host.Slots), slog.Bool("full", host.Full),
 		slog.Any("missing", host.Missing), slog.Any("off_team", host.OffTeam),
 		slog.Any("fields", slices.Sorted(maps.Keys(ev.Payload))), slog.Any("player_fields", playerFields))
+}
+
+// CloseGames closes every copy of the game this user runs, which the player
+// asked for and confirmed in the window. It drops the game session and
+// looks for the game again straight away.
+func (s *Service) CloseGames(ctx context.Context) (dto.FollowState, error) {
+	s.mu.Lock()
+	if s.closing {
+		state := s.snapshot()
+		s.mu.Unlock()
+		return state, errors.New("Warcraft III is already being closed.")
+	}
+	// Discovery waits, so it doesn't connect to a game that is closing.
+	s.closing = true
+	s.mu.Unlock()
+
+	// The lock isn't held here: closing may wait a few seconds for the game.
+	count, err := s.processes.CloseAll(ctx)
+
+	s.mu.Lock()
+	s.closing = false
+	if count > 0 {
+		if s.session != nil {
+			session := s.session
+			s.session = nil
+			_ = session.Close()
+		}
+		if s.engine.Connected() {
+			s.engine.Connection(false, "")
+		}
+		s.hint, s.gameCount = "", 0
+	}
+	switch {
+	case count == 1:
+		s.engine.Note("Closed 1 copy of Warcraft III.")
+	case count > 1:
+		s.engine.Note(fmt.Sprintf("Closed %d copies of Warcraft III.", count))
+	case err == nil:
+		s.engine.Note("No copy of Warcraft III was running.")
+	}
+	s.nextDiscovery = time.Time{}
+	s.logStatus()
+	state := s.snapshot()
+	s.mu.Unlock()
+
+	if err != nil {
+		s.logger.WarnContext(ctx, "companion.close_games", slog.Int("count", count), slog.Any("error", err))
+		if count > 0 {
+			err = errors.New("Not every copy of Warcraft III could be closed. Close the rest in your task manager.")
+		} else {
+			err = errors.New("Warcraft III couldn't be closed. Close it in your task manager.")
+		}
+	} else {
+		s.logger.InfoContext(ctx, "companion.close_games", slog.Int("count", count))
+	}
+	s.notify()
+	return state, err
 }

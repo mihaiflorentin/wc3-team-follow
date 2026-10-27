@@ -9,7 +9,9 @@ Warcraft Team Follow is a hexagonal (ports and adapters) desktop app. The core (
   ┌──────────────────────────┐   ┌─────────────────────┐   ┌──────────────────────────────┐
   │ cmd/gui  (Wails window)  │──▶│ contract.Companion   │──▶│ contract.GameDiscovery        │
   │   frontend/ (HTML/JS)    │   │  domain/companion    │   │   infrastructure/discovery    │
-  │ cmd/cli  (commands)      │   │   └ domain/follow    │   │ contract.GameDialer/Session   │
+  │ cmd/cli  (commands)      │   │   └ domain/follow    │   │ contract.GameProcesses        │
+  │                          │   │                     │   │   infrastructure/discovery    │
+  │                          │   │                     │   │ contract.GameDialer/Session   │
   └──────────────────────────┘   └─────────────────────┘   │   infrastructure/gamesocket   │
                                                            │ contract.PreferenceStore      │
                                                            │   infrastructure/settings     │
@@ -23,7 +25,7 @@ Warcraft Team Follow is a hexagonal (ports and adapters) desktop app. The core (
 | Core | `domain/companion` | Discovery loop, the one game session, saving friends, publishing state |
 | | `domain/follow` | The follow state machine (`docs/follow-behaviour.md`) |
 | Ports | `port/contract`, `port/dto` | Interfaces and plain data |
-| Driven adapters | `infrastructure/discovery` | Finds the game, its menu port and session, per OS |
+| Driven adapters | `infrastructure/discovery` | Finds the game, its menu port and session, per OS; closes the game's processes when the player asks |
 | | `infrastructure/gamesocket` | Loopback websocket with the command allowlist |
 | | `infrastructure/settings` | `friends.json` in the per-user data folder |
 
@@ -33,7 +35,7 @@ Warcraft Team Follow is a hexagonal (ports and adapters) desktop app. The core (
 2. With no command, `cmd/cli` resolves `contract.Companion` from the container and calls `gui.Run`.
 3. `gui.Run` opens the Wails window. On startup it subscribes to state changes (pushed to the page as the `state` event) and starts `Companion.Run`. Closing the window cancels it, which switches Follow off and closes the game session.
 
-The page calls the Go side as `window.go.gui.Bridge.*`: `State`, `Configure`, `SubmitPassword`, `Diagnostics`, `ExecutablePath`. Errors come back as rejected promises whose text is written for players.
+The page calls the Go side as `window.go.gui.Bridge.*`: `State`, `Configure`, `SubmitPassword`, `Diagnostics`, `ExecutablePath`, `CloseGames`. Errors come back as rejected promises whose text is written for players.
 
 ## The companion loop
 
@@ -43,11 +45,15 @@ The page calls the Go side as `window.go.gui.Bridge.*`: `State`, `Configure`, `S
 - every `[follow] refresh_interval`, while connected, `TeamGetInfo` and `FriendsGetFriends`;
 - while disconnected, every `[follow] discovery_interval`, discovery and dial in the background.
 
-A reader goroutine feeds each game event to the engine. One mutex serialises the engine; state is published to subscribers after every change. A discovery error becomes `FollowState.ConnectionHint` when it is a sentence for players (discovery's errors start with a capital letter), or a generic hint otherwise.
+A reader goroutine feeds each game event to the engine. One mutex serialises the engine; state is published to subscribers after every change. A discovery error becomes `FollowState.ConnectionHint` when it is a sentence for players (discovery's errors start with a capital letter), or a generic hint otherwise. When the error implements `contract.GameCounter` (several copies running), its count becomes `FollowState.GameCount`.
+
+## Closing the game
+
+`Companion.CloseGames` runs only when the player clicks **Close all Warcraft III** and confirms. The window shows that button when not connected and `gameCount > 1`, and always in **Report a problem**. It calls `contract.GameProcesses.CloseAll` without holding the companion's lock (closing can take a few seconds), pauses discovery meanwhile, then drops the game session, notes the result in Activity and looks for the game again at once. See `docs/adr/0005-closing-the-game-on-request.md`.
 
 ## Game discovery
 
-Discovery finds exactly one game process, its loopback listener that serves `/webui/index.html` containing `GlueManager`, the menu session (11–20 digits after `/webui/index.html?guid=` or `/webui-socket/`) and the game version. Only the game process is inspected, read-only, with a 12 s and 2 GiB scan budget.
+Discovery finds exactly one game process, its loopback listener that serves `/webui/index.html` containing `GlueManager`, the menu session (11–20 digits after `/webui/index.html?guid=` or `/webui-socket/`) and the game version. Only the game process is inspected, read-only, with a 12 s and 2 GiB scan budget. The one exception is `Processes.CloseAll`, which closes this user's game processes when the player asks (see Closing the game).
 
 | | Windows | macOS | Linux (Wine/Proton) |
 | --- | --- | --- | --- |
@@ -61,4 +67,4 @@ The OS-specific parts are `platform_<os>.go`. Parsing that doesn't need the OS (
 
 ## Window
 
-`cmd/gui/frontend/` is plain HTML, CSS and JavaScript, embedded into the binary. There is no build step or Node.js. Opened outside the app (for example `python3 -m http.server -d cmd/gui/frontend`), the page uses a demo bridge; pick a state with `?scene=first|watching|live|paused|password|waiting|linux|unverified`. See `docs/adr/0002-desktop-window-with-wails.md`.
+`cmd/gui/frontend/` is plain HTML, CSS and JavaScript, embedded into the binary. There is no build step or Node.js. Opened outside the app (for example `python3 -m http.server -d cmd/gui/frontend`), the page uses a demo bridge; pick a state with `?scene=first|watching|live|paused|password|waiting|many|linux|unverified|host-waiting|host-lobby`, and open a dialog or confirm with `?open=host-setup|maps|maps-search|report|close-games`. See `docs/adr/0002-desktop-window-with-wails.md`.

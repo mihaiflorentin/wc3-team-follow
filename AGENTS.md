@@ -17,7 +17,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `domain/companion/` | `contract.Companion`: discovery loop, game session, saving friends, publishing state. |
 | `port/contract/` | Interfaces (ports) that domain and adapters meet at. Interfaces only, no structs. |
 | `port/dto/` | Plain data shapes, `package dto`, no subfolders. |
-| `infrastructure/discovery/` | Finds the game, menu port, session and version, and the Maps folders (`MapsLocator`, with Wine path translation). `platform_<os>.go` per OS; portable parsing beside it. |
+| `infrastructure/discovery/` | Finds the game, menu port, session and version, and the Maps folders (`MapsLocator`, with Wine path translation). `Processes` closes the game's own processes when the player asks (`contract.GameProcesses`). `platform_<os>.go` per OS; portable parsing beside it. |
 | `infrastructure/maps/` | Lists and searches maps in a Maps folder (`MapLibrary`). |
 | `infrastructure/gamesocket/` | Loopback websocket to the game with the command allowlist. |
 | `infrastructure/settings/` | `friends.json` in the per-user data folder. |
@@ -36,6 +36,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 ## Safety rules for game access
 
 - Discovery is read-only and inspects only the Warcraft III process. Never write game memory, inject code or search for credentials.
+- The only action that changes a process is closing the game: `contract.GameProcesses` (`infrastructure/discovery/processes.go`) runs only when the player clicks Close all Warcraft III and confirms in the window. It closes only processes discovery identifies as the game executable (never Battle.net or anything else), only the current user's (the process uid on Linux and macOS, the token's user SID on Windows; a process whose owner can't be read is left alone), re-checks each pid is still the game before signalling it, and asks first (SIGTERM, then SIGKILL after 3 s; `TerminateProcess` on Windows). Nothing closes the game automatically.
 - The menu session, passwords and account ids are never logged, printed, saved or put in `FollowState` or `Diagnostics`.
 - The game socket sends only the allowlisted commands in `infrastructure/gamesocket`, each one the game's own menu sends for the same purpose: watching and Auto-join (`TeamGetInfo`, `FriendsGetFriends`, `RequestCancelTeamInvitations`, `TeamLeave`, `JoinFriendGameLobby`, `JoinGameByGameName`, `SendGameListing`, `GetGameList`) and Auto-host (`CreateLobby`, `LobbyStart`, `LobbyCancel`, `SetTeam`, `SendInviteToGame`). `SendGameLobbySetup` and `GetGameInfo` crashed the game and must never be added.
 - Nothing starts a match unless the host switched on Start when full; Auto-host otherwise only creates the lobby.
@@ -128,4 +129,5 @@ Architectural decisions are recorded as ADRs in `docs/adr/`, one numbered file p
 - `0001`: composition root and constructor injection.
 - `0002`: desktop window with Wails.
 - `0003`: game discovery per operating system.
+- `0005`: closing the game's processes on request.
 - `0004`: crash dialog and window supervisor.

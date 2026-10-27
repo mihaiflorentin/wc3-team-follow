@@ -282,6 +282,9 @@ input, pre, .log, code { user-select: text; }
 .password label { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; color: var(--danger); font-weight: 600; }
 .confirm p { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; }
 .confirm p .icon { color: var(--preview); margin-top: 2px; }
+.confirm.danger p .icon { color: var(--danger); }
+.close-games { margin-top: 14px; }
+.primary.danger { background: var(--danger); color: var(--spruce-deep); }
 
 /* Avatars ------------------------------------------------------------ */
 
@@ -609,6 +612,7 @@ input::placeholder { color: color-mix(in srgb, var(--lichen) 75%, transparent); 
 
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .row.end { justify-content: flex-end; }
+.row.end .start { margin-right: auto; }
 
 .fine { color: var(--lichen); font-size: 12.5px; margin: 8px 0 0; }
 .fine.error-note { color: var(--danger); }
@@ -639,6 +643,7 @@ dialog {
 dialog h2 { margin-bottom: 4px; }
 dialog code { font: 12px ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace; color: var(--bone); }
 #log-path { overflow-wrap: anywhere; user-select: text; }
+#report-games-note:empty { display: none; }
 dialog::backdrop { background: rgba(10, 16, 16, .6); }
 dialog pre {
   max-height: 320px;

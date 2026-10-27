@@ -148,3 +148,9 @@ func (b *Bridge) BrowseMaps(dir string) (dto.MapListing, error) {
 func (b *Bridge) SearchMaps(query string) (dto.MapListing, error) {
 	return b.companion.SearchMaps(b.context(), query)
 }
+
+// CloseGames closes every copy of Warcraft III. The page asks the player to
+// confirm first.
+func (b *Bridge) CloseGames() (dto.FollowState, error) {
+	return b.companion.CloseGames(b.context())
+}

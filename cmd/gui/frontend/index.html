@@ -66,6 +66,18 @@
         <button type="button" id="copy-command" class="ghost small"><svg class="icon"><use href="#i-copy"/></svg>Copy</button>
       </div>
 
+      <div id="close-games-row" class="row close-games" hidden>
+        <button type="button" id="close-games" class="ghost"><svg class="icon"><use href="#i-x"/></svg>Close all Warcraft III</button>
+      </div>
+
+      <div id="close-confirm" class="confirm danger" hidden>
+        <p><svg class="icon"><use href="#i-alert"/></svg>Close every copy of Warcraft III? Anything unsaved in the game is lost.</p>
+        <div class="row">
+          <button type="button" id="close-yes" class="primary danger"><svg class="icon"><use href="#i-x"/></svg>Close all Warcraft III</button>
+          <button type="button" id="close-no" class="ghost">Cancel</button>
+        </div>
+      </div>
+
       <form id="password-form" class="password" hidden>
         <label for="lobby-password" id="password-label"><svg class="icon"><use href="#i-lock"/></svg>Lobby password</label>
         <div class="row">
@@ -297,9 +309,19 @@
   <p class="fine">Send the report below together with the files in the log folder (<code>team-follow.log</code>, and <code>crash.log</code> if there is one). The report has no names or BattleTags. The logs include BattleTags and lobby names, but never passwords or the game's session.</p>
   <pre id="report-text"></pre>
   <p id="log-path" class="fine"></p>
+  <div id="report-close-confirm" class="confirm danger" hidden>
+    <p><svg class="icon"><use href="#i-alert"/></svg>Close every copy of Warcraft III? Anything unsaved in the game is lost.</p>
+    <div class="row">
+      <button type="button" id="report-close-yes" class="primary danger"><svg class="icon"><use href="#i-x"/></svg>Close all Warcraft III</button>
+      <button type="button" id="report-close-no" class="ghost">Cancel</button>
+    </div>
+  </div>
+  <p id="report-games-note" class="fine"></p>
+  <p id="report-error" class="error" role="alert"></p>
   <div class="row end">
+    <button type="button" id="report-close-games" class="ghost start"><svg class="icon"><use href="#i-x"/></svg>Close all Warcraft III</button>
     <button type="button" id="open-logs" class="ghost"><svg class="icon"><use href="#i-folder"/></svg>Open log folder</button>
-    <button type="button" id="report-copy" class="primary"><svg class="icon"><use href="#i-copy"/></svg><span>Copy report</span></button>
+    <button type="button" id="report-copy" class="primary" autofocus><svg class="icon"><use href="#i-copy"/></svg><span>Copy report</span></button>
     <button type="button" id="report-close" class="ghost">Close</button>
   </div>
 </dialog>

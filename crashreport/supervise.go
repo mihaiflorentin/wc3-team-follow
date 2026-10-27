@@ -102,7 +102,7 @@ func record(path, message string) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, _ = fmt.Fprintf(f, "%s %s: %s\n", time.Now().Format(time.RFC3339), Title, strings.ReplaceAll(message, "\n", " "))
 }
 

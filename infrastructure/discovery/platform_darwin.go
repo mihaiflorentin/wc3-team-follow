@@ -62,35 +62,42 @@ type darwinPlatform struct{}
 
 func newPlatform() platform { return darwinPlatform{} }
 
-func (darwinPlatform) findGame(context.Context) (game, error) {
+func (darwinPlatform) findGames(context.Context) ([]game, error) {
 	n := C.wf_list_pids(nil, 0)
 	if n <= 0 {
-		return game{}, errors.New("list processes failed")
+		return nil, errors.New("list processes failed")
 	}
 	pids := make([]C.int, n+64)
 	n = C.wf_list_pids(&pids[0], C.int(len(pids)*int(unsafe.Sizeof(pids[0]))))
 	var found []game
-	buf := make([]byte, 4096)
 	for _, pid := range pids[:max(n, 0)] {
 		if pid <= 0 {
 			continue
 		}
-		l := C.wf_pid_path(pid, (*C.char)(unsafe.Pointer(&buf[0])), C.int(len(buf)))
-		if l <= 0 {
-			continue
-		}
-		if path := string(buf[:l]); strings.HasSuffix(path, gameBinary) {
+		if path := pidPath(int(pid)); strings.HasSuffix(path, gameBinary) {
 			found = append(found, game{pid: int(pid), exe: path})
 		}
 	}
-	switch len(found) {
-	case 0:
-		return game{}, ErrNoGame
-	case 1:
-		return found[0], nil
-	default:
-		return game{}, manyGames(len(found))
+	return found, nil
+}
+
+// pidPath returns the executable path of pid, or "" when it can't be read.
+func pidPath(pid int) string {
+	buf := make([]byte, 4096)
+	l := C.wf_pid_path(C.int(pid), (*C.char)(unsafe.Pointer(&buf[0])), C.int(len(buf)))
+	if l <= 0 {
+		return ""
 	}
+	return string(buf[:l])
+}
+
+// stop signals g after checking that its pid still runs the game, so a pid
+// the system gave to another program in the meantime is left alone.
+func (darwinPlatform) stop(g game, force bool) error {
+	if !strings.HasSuffix(pidPath(g.pid), gameBinary) {
+		return nil
+	}
+	return signalProcess(g.pid, force)
 }
 
 // listeners asks lsof for the loopback TCP listeners of this user's

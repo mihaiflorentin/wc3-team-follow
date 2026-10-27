@@ -13,7 +13,9 @@ type unsupported struct{}
 
 func newPlatform() platform { return unsupported{} }
 
-func (unsupported) findGame(context.Context) (game, error)         { return game{}, errUnsupported }
+func (unsupported) findGames(context.Context) ([]game, error)      { return nil, errUnsupported }
 func (unsupported) listeners(context.Context, game) ([]int, error) { return nil, errUnsupported }
 func (unsupported) session(context.Context, game) (string, error)  { return "", errUnsupported }
 func (unsupported) version(context.Context, game) string           { return "" }
+func (unsupported) closable(game) bool                             { return false }
+func (unsupported) stop(game, bool) error                          { return errUnsupported }

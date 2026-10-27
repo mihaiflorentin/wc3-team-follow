@@ -9,6 +9,8 @@ This folder holds interfaces only. The data they accept and return are DTOs in `
 | `Companion` | inbound | `domain/companion` | `mock/companion` |
 | `GameDiscovery` | outbound | `infrastructure/discovery` | `mock/game` |
 | `GameDialer`, `GameSession` | outbound | `infrastructure/gamesocket` | `mock/game` |
+| `GameProcesses` | outbound | `infrastructure/discovery` (`Processes`) | `mock/game` |
+| `GameCounter` | outbound (implemented by a discovery error) | `infrastructure/discovery` | `mock/game` (`CountedError`) |
 | `PreferenceStore` | outbound | `infrastructure/settings` | `mock/preferences` |
 
 Each contract has:

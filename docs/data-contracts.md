@@ -6,7 +6,8 @@ Ports (`port/contract`) and DTOs (`port/dto`) are the only types that cross laye
 
 - `port/contract/`: interfaces only, no structs.
   - Inbound: `Companion`, which the window and commands drive.
-  - Outbound: `GameDiscovery`, `GameDialer`, `GameSession` and `PreferenceStore`, which adapters implement and the domain calls.
+  - Outbound: `GameDiscovery`, `GameDialer`, `GameSession`, `GameProcesses`, `MapsLocator`, `MapLibrary` and `PreferenceStore`, which adapters implement and the domain calls.
+  - `GameCounter` is implemented by discovery's several-copies error; the companion reads it with `errors.As` to fill `FollowState.GameCount`, so the domain never imports the adapter or parses the message.
 - `port/dto/` (`package dto`): plain data between layers. There are no subfolders: the app has no HTTP API.
   - `follow.go`: `FollowConfig` (what the page sends), `FollowState` (what it renders), `TeamMember`, `WatchedMember`, `Friend` (one Battle.net friend in `FollowState.Roster`), `PasswordRequest`, `JoinRecord`, `LogEntry`, `Diagnostics`, `Preferences`.
   - `game.go`: `GameConnection` (port, session, version, pid) and `GameEvent` (one loosely typed message from the game).
@@ -18,5 +19,6 @@ Ports (`port/contract`) and DTOs (`port/dto`) are the only types that cross laye
 3. `FollowConfig` uses pointers for optional fields, so "not sent" differs from "false" or an empty tag list.
 4. `GameEvent.Payload` keeps the game's own JSON shape as `map[string]any`, with numbers as `json.Number` so account ids keep their precision. `domain/follow/values.go` reads it the way the game's menu code does: a value of the wrong type counts as absent.
 5. `Diagnostics.LogFolder` is filled by the window's bridge, so a report says where the logs are.
-6. `FollowState.Roster` carries friends' BattleTags and status for the picker. It never carries account ids, and `Diagnostics` never carries the roster.
-7. Secrets never enter a DTO that leaves the process. `GameConnection.Session` exists only between discovery and the dialer, and the companion clears it. `FollowState` and `Diagnostics` carry no account ids, passwords or session.
+6. `FollowState.GameCount` (`gameCount`) is how many copies of the game discovery found while not connected, when more than one; otherwise 0. The window shows Close all Warcraft III in its headline when it is above 1.
+7. `FollowState.Roster` carries friends' BattleTags and status for the picker. It never carries account ids, and `Diagnostics` never carries the roster.
+8. Secrets never enter a DTO that leaves the process. `GameConnection.Session` exists only between discovery and the dialer, and the companion clears it. `FollowState` and `Diagnostics` carry no account ids, passwords or session.

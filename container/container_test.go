@@ -111,3 +111,14 @@ func TestCompanion_BuildsFromTheEmbeddedConfig(t *testing.T) {
 		t.Fatalf("companion did not start off in preview: %+v", state)
 	}
 }
+
+func TestGameProcesses_IsBuiltOnce(t *testing.T) {
+	c := New(&config.Config{}, slog.New(slog.DiscardHandler))
+	first, err := c.GameProcesses()
+	if err != nil || first == nil {
+		t.Fatalf("GameProcesses = %v, %v", first, err)
+	}
+	if second, _ := c.GameProcesses(); second != first {
+		t.Fatal("GameProcesses built twice")
+	}
+}

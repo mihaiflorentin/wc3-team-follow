@@ -30,6 +30,8 @@ The window's **Report a problem** dialog shows the diagnostic report, the log fo
 | `gui.startup`: the window has started (the crash reporter's marker) | info | `cmd/gui` |
 | `gui.wails` (`message`): Wails' own messages, such as web view start-up and process failures | debug to error | `cmd/gui` |
 | `discovery.process`, `.listeners`, `.probe` (per port), `.session` (digit count and time taken), `.found` | debug | `infrastructure/discovery` |
+| `discovery.close` (pids asked to close, pids forced, failures), `discovery.close_skipped` (count of other users' games left alone) | info | `infrastructure/discovery` |
+| `companion.close_games` (count closed; the error at warn) | info / warn | `domain/companion` |
 | `companion.run`, `.connected` (version, pid, port, verified), `.waiting` (each new reason once), `.disconnected` (error, or `reason` logged out), `.stop` | info | `domain/companion` |
 | `companion.send` (command name), `companion.event` (event type) | debug | `domain/companion` |
 | `companion.screen`: the game screen the menu switched to (`SetGlueScreen`) | info | `domain/companion` |

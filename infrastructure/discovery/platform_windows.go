@@ -4,6 +4,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -28,10 +29,10 @@ type windowsPlatform struct{}
 
 func newPlatform() platform { return windowsPlatform{} }
 
-func (windowsPlatform) findGame(context.Context) (game, error) {
+func (windowsPlatform) findGames(context.Context) ([]game, error) {
 	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
-		return game{}, fmt.Errorf("list processes: %w", err)
+		return nil, fmt.Errorf("list processes: %w", err)
 	}
 	defer windows.CloseHandle(snapshot)
 
@@ -39,19 +40,10 @@ func (windowsPlatform) findGame(context.Context) (game, error) {
 	entry := windows.ProcessEntry32{Size: uint32(unsafe.Sizeof(windows.ProcessEntry32{}))}
 	for err = windows.Process32First(snapshot, &entry); err == nil; err = windows.Process32Next(snapshot, &entry) {
 		if strings.EqualFold(windows.UTF16ToString(entry.ExeFile[:]), GameExe) {
-			found = append(found, game{pid: int(entry.ProcessID)})
+			found = append(found, game{pid: int(entry.ProcessID), exe: imagePath(entry.ProcessID)})
 		}
 	}
-	switch len(found) {
-	case 0:
-		return game{}, ErrNoGame
-	case 1:
-		g := found[0]
-		g.exe = imagePath(uint32(g.pid))
-		return g, nil
-	default:
-		return game{}, manyGames(len(found))
-	}
+	return found, nil
 }
 
 func imagePath(pid uint32) string {
@@ -60,12 +52,59 @@ func imagePath(pid uint32) string {
 		return ""
 	}
 	defer windows.CloseHandle(h)
+	return imageName(h)
+}
+
+func imageName(h windows.Handle) string {
 	buf := make([]uint16, windows.MAX_LONG_PATH)
 	size := uint32(len(buf))
 	if err := windows.QueryFullProcessImageName(h, 0, &buf[0], &size); err != nil {
 		return ""
 	}
 	return windows.UTF16ToString(buf[:size])
+}
+
+// closable accepts only games whose token belongs to the user running
+// Team Follow. A game whose owner can't be read is left alone.
+func (windowsPlatform) closable(g game) bool {
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(g.pid))
+	if err != nil {
+		return false
+	}
+	defer windows.CloseHandle(h)
+	var token windows.Token
+	if err := windows.OpenProcessToken(h, windows.TOKEN_QUERY, &token); err != nil {
+		return false
+	}
+	defer token.Close()
+	owner, err := token.GetTokenUser()
+	if err != nil {
+		return false
+	}
+	self, err := windows.GetCurrentProcessToken().GetTokenUser()
+	return err == nil && owner.User.Sid.Equals(self.User.Sid)
+}
+
+// stop terminates g once its handle confirms it still runs the game.
+// Windows has no polite request for a program without a window message
+// loop of ours, so both calls terminate.
+func (windowsPlatform) stop(g game, _ bool) error {
+	h, err := windows.OpenProcess(windows.PROCESS_TERMINATE|windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(g.pid))
+	if err != nil {
+		if errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
+			return nil // already gone
+		}
+		return err
+	}
+	defer windows.CloseHandle(h)
+	name := imageName(h)
+	if name == "" {
+		return errors.New("couldn't confirm the process is the game")
+	}
+	if !isGameExe(name) {
+		return nil // the pid now belongs to another program
+	}
+	return windows.TerminateProcess(h, 1)
 }
 
 type tcpRow struct {

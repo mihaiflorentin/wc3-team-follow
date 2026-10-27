@@ -1,5 +1,5 @@
-// Package game holds test doubles for the game discovery and socket
-// contracts.
+// Package game holds test doubles for the game discovery, socket and
+// process contracts.
 package game
 
 import (
@@ -15,7 +15,43 @@ var (
 	_ contract.GameDiscovery = (*Discovery)(nil)
 	_ contract.GameDialer    = (*Dialer)(nil)
 	_ contract.GameSession   = (*Session)(nil)
+	_ contract.GameProcesses = (*Processes)(nil)
+	_ contract.GameCounter   = CountedError{}
 )
+
+// Processes reports Count closed games, or fails with Err, and counts calls.
+// It never touches a real process.
+type Processes struct {
+	mu    sync.Mutex
+	Count int
+	Err   error
+	Calls int
+}
+
+func (p *Processes) CloseAll(context.Context) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Calls++
+	return p.Count, p.Err
+}
+
+// CallCount returns how many times CloseAll ran.
+func (p *Processes) CallCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.Calls
+}
+
+// CountedError is a discovery error that says how many games are running,
+// like discovery's own error for several copies.
+type CountedError struct {
+	Message string
+	Count   int
+}
+
+func (e CountedError) Error() string { return e.Message }
+
+func (e CountedError) GameCount() int { return e.Count }
 
 // Discovery returns Conn, or Err when set.
 type Discovery struct {

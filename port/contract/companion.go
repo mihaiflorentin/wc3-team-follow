@@ -28,6 +28,9 @@ type Companion interface {
 	BrowseMaps(ctx context.Context, dir string) (dto.MapListing, error)
 	// SearchMaps finds maps by name anywhere in the Maps folder.
 	SearchMaps(ctx context.Context, query string) (dto.MapListing, error)
+	// CloseGames closes every copy of Warcraft III this user runs, when the
+	// player asked for it and confirmed, then looks for the game again.
+	CloseGames(ctx context.Context) (dto.FollowState, error)
 	// Subscribe calls fn with every new state until the returned function
 	// is called.
 	Subscribe(fn func(dto.FollowState)) (unsubscribe func())
