@@ -27,6 +27,7 @@ func NewRootCmd(c *container.ServiceContainer) *cobra.Command {
 	root.SilenceUsage = true
 	root.SilenceErrors = true
 	root.AddCommand(newDiscoverCmd(c))
+	root.AddCommand(newSayCmd(c))
 	return root
 }
 

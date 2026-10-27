@@ -31,6 +31,17 @@ const MaxChatLine = 100
 // ErrChatLine reports text sendChat refuses to type.
 var ErrChatLine = errors.New("chat line must be one non-empty line of at most 100 characters")
 
+// ChatLine trims text and checks it is one chat line Team Follow may type:
+// non-empty, at most MaxChatLine characters, without control characters.
+// It returns ErrChatLine otherwise. sendChat and the say command share it.
+func ChatLine(text string) (string, error) {
+	line := strings.TrimSpace(text)
+	if line == "" || utf8.RuneCountInString(line) > MaxChatLine || strings.ContainsFunc(line, unicode.IsControl) {
+		return "", ErrChatLine
+	}
+	return line, nil
+}
+
 // sendChat types one line in the game's lobby or match chat, as the host.
 // It trims the text and rejects it, sending nothing, unless it is a single
 // non-empty line of at most MaxChatLine characters without control
@@ -39,9 +50,9 @@ var ErrChatLine = errors.New("chat line must be one non-empty line of at most 10
 // of its lobby or match. The error is ErrChatLine for bad text, or says the
 // game connection is closed.
 func (e *Engine) sendChat(text string) error {
-	line := strings.TrimSpace(text)
-	if line == "" || utf8.RuneCountInString(line) > MaxChatLine || strings.ContainsFunc(line, unicode.IsControl) {
-		return ErrChatLine
+	line, err := ChatLine(text)
+	if err != nil {
+		return err
 	}
 	if !e.send(CmdSendGameChatMessage, map[string]any{"content": line}) {
 		return errors.New("send chat line: the game connection is not open")

@@ -21,10 +21,11 @@ The game's own chat box does it with `SendGameChatMessage`, payload `{content: "
 - Only Auto-host's own lobby and match, as the host, may type. `sendChat` does not know the phase, so each caller checks that Auto-host is on and the player hosts that lobby or match before calling it.
 - The text is fixed by the feature (a command built from the player's settings), never free text from the player or from other players. Chat lines are not logged; the engine notes the command's purpose, not its content.
 - Auto-join, watching and Auto-host's existing steps type nothing, and tests assert it.
+- The one manual exception is the `say` command (`wc3-team-follow say "<text>"`, issue 8), a diagnostic the player runs from a terminal to check the chat. It applies the same limits through `follow.ChatLine`, which `sendChat` also uses, and prints only event names, chat lines and channel names, never the session, account ids or whole payloads.
 
 ## Consequences
 
 - AGENTS.md's safety rules list `SendGameChatMessage` in the allowlist and state when typing is allowed.
 - Adding a chat feature means a caller that gates on phase and Auto-host, plus a test that it types only then.
 - The game may drop or filter a line (flood limits, muted host); `sendChat` reports a closed connection but cannot know the line was shown.
-- The command is checked against the game's own client code and an allowlist test; it has not been tested live yet.
+- Live check on Linux under Proton (issue 4): the command is accepted but nothing showed in a solo lobby or in a match; see `docs/follow-behaviour.md`. Re-checks on macOS and Linux follow in issue 7.

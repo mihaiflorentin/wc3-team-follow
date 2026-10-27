@@ -101,7 +101,7 @@ Losing the game connection, or `LoggedOut`, forgets the roster and switches Foll
    - The host leaving the lobby (`MultiplayerGameLeave`) turns Auto-host off.
 4. **Match → waiting:** loading and match screens mark the match; the score screen (or `ExitedGame`) starts the next delay, and the next lobby is created as in step 1.
 
-Typing in the game chat: the engine can send one line with `SendGameChatMessage {content}` (`sendChat` in `host.go`, ADR 0006). The line is trimmed and must be a single non-empty line of at most 100 characters, or it is rejected and nothing is sent. It is meant only for Auto-host's own lobby or match as host; the features that use it check that themselves. Nothing types today.
+Typing in the game chat: the engine can send one line with `SendGameChatMessage {content}` (`sendChat` in `host.go`, ADR 0006). The line is trimmed and must be a single non-empty line of at most 100 characters, or it is rejected and nothing is sent. It is meant only for Auto-host's own lobby or match as host; the features that use it check that themselves. Nothing in Auto-host types today. To check the chat by hand, run `wc3-team-follow say "<text>"`: it sends one line under the same limits and prints the game's events for `--wait` (10 s by default).
 
 Live check (issue 4, game 3.0.1.24371 under Proton, 2026-10-28):
 
