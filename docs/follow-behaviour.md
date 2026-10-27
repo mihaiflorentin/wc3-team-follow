@@ -34,6 +34,10 @@ Joining happens only from the game's menus. The screen names are the keys of the
 
 A screen in neither list (a future game build) changes nothing. Joining from menus other than Custom Games follows the game's own rules but has not been live-tested yet.
 
+**Which screens are reported.** Checked live on 3.0.1.24371 (27 October 2026): moving between menus by clicking is handled inside the game's menu page and sends no `SetGlueScreen` at all. The game reports only the screen changes it drives itself. A single-player custom game sent, in order: `MultiplayerGameCreateStarted`, `SetGlueScreen GAME_LOBBY`, `GameLobbySetup`, `LobbyCountdown`, `GameLobbyGracefulExit`, `SetGlueScreen LOADING_SCREEN`, `SetGlueScreen DISABLED_SCREEN`, `IsGameUIActive`; and on quitting: `ExitedGame`, `IsGameUIActive`, `SetGlueScreen SCORE_SCREEN`, `MultiplayerGameLeave`. Returning from the score screen to the main menu sent nothing.
+
+So the engine knows the player is in the menus (`FollowState.inMenus`) only from game-driven evidence: a menu `SetGlueScreen`, the custom game list (`GameList`, sent while Custom Games is open), or a resume after a match. Otherwise the window asks the player to confirm before turning Auto-join on.
+
 ## Starting (Auto-join)
 
 Start (Configure with `enabled: true`) remembers the selection: non-self team members when *Follow my team* is on, plus each manually added friend, without duplicates. It refuses when:
@@ -65,7 +69,12 @@ The first matching `RequestForPassword` for the pending join is answered with an
 
 ## Pausing and resuming
 
-Follow stays on across joins, pausing while the player is in a lobby, loading, in a match, at the score screen or queued. After leaving, it resumes only with menu evidence (any menu screen's `SetGlueScreen`, or a `GameList` after leaving a match), at least 2 seconds later, then asks for fresh friend activity. A leave or loading signal alone never resumes. Stop always wins over automatic resume.
+Follow stays on across joins, pausing while the player is in a lobby, loading, in a match or queued. It resumes 2 seconds after evidence that the player is out of the match and back in the menus, then asks for fresh friend activity:
+
+- **After a match:** the score screen (`SCORE_SCREEN`, `RANKED_SCORE_SCREEN`, `CAMPAIGN_SCORE`, `RANK_UP_ANIMATION`, `RATING_SPLASH_SCREEN`). The game shows it only once the match has ended, the click from it back to the menus is never reported, and the game's own Join Friend works from it. The `MultiplayerGameLeave` that follows keeps this evidence.
+- **After leaving a lobby:** a menu `SetGlueScreen` or the custom game list (`GameList`).
+
+A leave or loading signal alone never resumes. Stop always wins over automatic resume.
 
 ## Disconnects
 

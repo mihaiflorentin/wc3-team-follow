@@ -139,7 +139,11 @@ type Engine struct {
 	inMatch      bool
 	awaitingMenu bool
 	menuReady    bool
-	resumeAt     time.Time
+	// menusKnown is set once the game itself has shown the player is in its
+	// menus: a menu screen, the custom game list, or a resume after a match.
+	// Menu clicks are not reported, so this can't track every screen.
+	menusKnown bool
+	resumeAt   time.Time
 
 	attempted      []string
 	presenceEpochs map[string]presenceEpoch
@@ -200,6 +204,7 @@ func (e *Engine) Connection(connected bool, version string) {
 	e.watched = nil
 	e.busy, e.queued, e.screen = false, false, ""
 	e.inMatch, e.awaitingMenu, e.menuReady, e.resumeAt = false, false, false, time.Time{}
+	e.menusKnown = false
 	e.attempted = nil
 	clear(e.presenceEpochs)
 	clear(e.seenOpen)
@@ -409,37 +414,58 @@ func (e *Engine) Receive(event dto.GameEvent) {
 		if kind == "ExitedGame" {
 			e.inMatch = false
 		}
-		e.busy, e.awaitingMenu, e.menuReady = true, true, false
-		e.resumeAt = e.now().Add(resumeDelay)
+		// Leaving keeps the evidence of a score screen already shown: the
+		// game sends MultiplayerGameLeave after it.
+		e.busy, e.awaitingMenu = true, true
+		e.menuReady = e.menuReady && slices.Contains(scoreScreens, e.screen)
+		if !e.menuReady {
+			e.resumeAt = e.now().Add(resumeDelay)
+		}
 		e.pending, e.password = nil, nil
 		clear(e.friends)
-		if e.enabled {
+		switch {
+		case e.enabled && e.menuReady:
+			e.Note("The match is over. Follow resumes in a moment.")
+		case e.enabled:
 			e.Note("Follow is still on. It resumes when you're back in the game's menus.")
-		} else {
+		default:
 			e.Note("Returned from a game or lobby. Follow is off.")
 		}
 	case "GameList":
 		// Only the game's own interface requests listings; this companion
 		// never does. A listing after leaving shows Custom Games is open,
 		// which is one of the menu screens.
-		if _, ok := list(p["games"]); ok && e.awaitingMenu && !e.inMatch && !e.queued {
-			e.menuReady = true
+		if _, ok := list(p["games"]); ok && !e.inMatch && !e.queued {
+			if e.awaitingMenu {
+				e.menuReady = true
+			} else if !e.busy {
+				e.menusKnown = true
+			}
 		}
 	case "SetGlueScreen":
 		e.screen, _ = p["screen"].(string)
 		switch {
+		case slices.Contains(scoreScreens, e.screen):
+			// The game shows a score screen only once the match is over, and
+			// leaving it for the menus is a click the game doesn't report. So
+			// the score screen itself is the return to the menus; the game's
+			// own Join Friend works from it.
+			e.busy, e.inMatch = true, false
+			e.awaitingMenu, e.menuReady = true, true
+			e.resumeAt = e.now().Add(resumeDelay)
+			e.pending, e.password = nil, nil
+			if e.enabled {
+				e.Note("The match is over. Follow resumes in a moment.")
+			}
 		case slices.Contains(busyScreens, e.screen):
 			e.busy, e.menuReady = true, false
 			if slices.Contains(matchScreens, e.screen) {
 				e.inMatch = true
 			}
-			if slices.Contains(scoreScreens, e.screen) {
-				e.inMatch, e.awaitingMenu = false, true
-				e.resumeAt = e.now().Add(resumeDelay)
-			}
 			e.pause("Follow is on but paused in this lobby or game screen.")
 		case slices.Contains(menuScreens, e.screen):
 			e.inMatch = false
+			e.menusKnown = true
 			if e.busy || e.awaitingMenu {
 				e.awaitingMenu, e.menuReady = true, true
 				if next := e.now().Add(resumeDelay); next.After(e.resumeAt) {
@@ -546,6 +572,7 @@ func (e *Engine) resumeIfReady() {
 		return
 	}
 	e.busy, e.awaitingMenu, e.menuReady = false, false, false
+	e.menusKnown = true
 	clear(e.friends)
 	e.send(CmdFriendsGetFriends, map[string]any{})
 	if e.enabled {
@@ -735,7 +762,7 @@ func (e *Engine) Snapshot() dto.FollowState {
 		Queued:        e.queued,
 		InMatch:       e.inMatch,
 		Paused:        e.enabled && (e.busy || e.queued || e.inMatch || e.awaitingMenu),
-		InMenus:       e.connected && slices.Contains(menuScreens, e.screen) && !e.busy && !e.queued && !e.inMatch && !e.awaitingMenu,
+		InMenus:       e.connected && e.menusKnown && !e.busy && !e.queued && !e.inMatch && !e.awaitingMenu,
 		JoinPending:   e.pending != nil,
 		Team:          []dto.TeamMember{},
 		Watched:       []dto.WatchedMember{},

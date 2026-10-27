@@ -880,3 +880,74 @@ func TestRankedScoreScreenThenAnyMenuResumes(t *testing.T) {
 		t.Fatalf("joins = %d", len(f.joins()))
 	}
 }
+
+// soloMatch replays the events a real single-player custom game sent on
+// 3.0.1.24371, from creating it to quitting at the score screen.
+func soloMatch(f *fixture) {
+	f.receive("MultiplayerGameCreateStarted", nil)
+	f.receive("SetGlueScreen", map[string]any{"screen": "GAME_LOBBY"})
+	f.receive("GameLobbySetup", map[string]any{"players": []any{map[string]any{"isSelf": true, "slotStatus": 2}}})
+	f.receive("LobbyCountdown", nil)
+	f.receive("GameLobbyGracefulExit", nil)
+	f.receive("SetGlueScreen", map[string]any{"screen": "LOADING_SCREEN"})
+	f.receive("SetGlueScreen", map[string]any{"screen": "DISABLED_SCREEN"})
+	f.receive("IsGameUIActive", map[string]any{"isActive": true})
+	f.receive("MultiplayerGameCreateResult", nil)
+	f.receive("ExitedGame", nil)
+	f.receive("IsGameUIActive", map[string]any{"isActive": false})
+	f.receive("SetGlueScreen", map[string]any{"screen": "SCORE_SCREEN"})
+	f.receive("MultiplayerGameLeave", nil)
+}
+
+func TestFollowResumesFromTheScoreScreenOfARealMatch(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(false)
+	soloMatch(f)
+	f.presence(nil)
+	if s := f.state(); len(f.joins()) != 0 || !s.Paused || notes(f, "The match is over") != 1 {
+		t.Fatalf("joined too early or missing note: joins=%d log=%+v", len(f.joins()), s.Log)
+	}
+	f.advance(3 * time.Second)
+	f.engine.Tick()
+	if s := f.state(); s.Paused || !s.Enabled || !s.InMenus {
+		t.Fatalf("did not resume after the score screen: %+v", s)
+	}
+	f.presence(nil)
+	if len(f.joins()) != 1 {
+		t.Fatalf("joins = %d", len(f.joins()))
+	}
+}
+
+func TestLeavingALobbyStillWaitsForMenuEvidence(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(false)
+	f.receive("SetGlueScreen", map[string]any{"screen": "GAME_LOBBY"})
+	f.receive("GameLobbySetup", nil)
+	f.receive("MultiplayerGameLeave", nil)
+	f.advance(3 * time.Second)
+	f.engine.Tick()
+	f.presence(nil)
+	if len(f.joins()) != 0 || !f.state().Paused {
+		t.Fatal("resumed after leaving a lobby without menu evidence")
+	}
+	f.receive("GameList", map[string]any{"games": []any{}})
+	f.presence(nil)
+	if len(f.joins()) != 1 {
+		t.Fatal("did not resume once the custom game list showed")
+	}
+}
+
+func TestInMenusIsKnownFromTheGameListOrAMenuScreen(t *testing.T) {
+	f := newFixture(t)
+	if f.state().InMenus {
+		t.Fatal("in menus before any evidence")
+	}
+	f.receive("GameList", map[string]any{"games": []any{}})
+	if !f.state().InMenus {
+		t.Fatal("the custom game list did not count as menus")
+	}
+	f.receive("QueueEntered", nil)
+	if f.state().InMenus {
+		t.Fatal("in menus while queued")
+	}
+}
