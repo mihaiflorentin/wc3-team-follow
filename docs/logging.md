@@ -16,7 +16,7 @@ The Windows release is a GUI program with no console, so for it the file is the 
 
 ## Crash dialog
 
-When the window stops because of an error, the player sees a dialog with the reason and the log folder (`crashreport`, see `docs/adr/0004-crash-dialog-and-supervisor.md`). On Windows and Linux a supervisor process runs the window as a child and reads the reason from its output: a `panic:`, `fatal error:` or `SIG…:` line, `[WebView2 Error]`, the app's `error:` line, or a `log.Fatal` line. It stays quiet for a stop the player asked for and for a second launch turned away before `gui.startup`. If the window hasn't started within a minute, it tells the player the usual cause (WebView2 on Windows, WebKitGTK on Linux) and closes the stuck window process. On macOS the window process shows the dialog itself for an error returned by `run` or a panic on the main goroutine.
+When the window stops because of an error, the player sees a dialog with the reason and the log folder (`crashreport`, see `docs/adr/0004-crash-dialog-and-supervisor.md`). On Windows and Linux a supervisor process runs the window as a child and reads the reason from its output: a `panic:`, `fatal error:` or `SIG…:` line, `[WebView2 Error]`, the app's `error:` line, or a `log.Fatal` line. It stays quiet for a stop the player asked for and for a second launch that hands over to the open window (code 1 before `gui.startup`, or after `gui.already_open`). If the window hasn't started within a minute, it tells the player the usual cause (WebView2 on Windows, WebKitGTK on Linux) and closes the stuck window process. On macOS the window process shows the dialog itself for an error returned by `run` or a panic on the main goroutine.
 
 ## Getting logs from a player
 
@@ -28,6 +28,7 @@ The window's **Report a problem** dialog shows the diagnostic report, the log fo
 | --- | --- | --- |
 | `app.start`, `app.exit`, `app.panic` (with stack) | info / error | `main.go` |
 | `gui.startup`: the window has started (the crash reporter's marker) | info | `cmd/gui` |
+| `gui.already_open`: another window holds the one-instance lock, so this launch hands over to it (Linux; the crash reporter's marker) | info | `cmd/gui` |
 | `gui.wails` (`message`): Wails' own messages, such as web view start-up and process failures | debug to error | `cmd/gui` |
 | `discovery.process`, `.listeners`, `.probe` (per port), `.session` (digit count and time taken), `.found` | debug | `infrastructure/discovery` |
 | `discovery.close` (pids asked to close, pids forced, failures), `discovery.close_skipped` (count of other users' games left alone) | info | `infrastructure/discovery` |

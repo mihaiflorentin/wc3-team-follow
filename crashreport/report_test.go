@@ -33,9 +33,10 @@ func TestReportStaysQuiet(t *testing.T) {
 		code   int
 		quiet  bool
 	}{
-		"closed normally":            {"INFO gui.startup\nINFO app.exit\n", 0, false},
-		"stopped on request":         {"INFO gui.startup\n", -1, true},
-		"second launch, turned away": {"INFO app.start\n", 1, false},
+		"closed normally":             {"INFO gui.startup\nINFO app.exit\n", 0, false},
+		"stopped on request":          {"INFO gui.startup\n", -1, true},
+		"second launch, turned away":  {"INFO app.start\n", 1, false},
+		"second launch after startup": {"INFO gui.already_open\nINFO gui.startup\n", 1, false},
 	}
 	for name, c := range cases {
 		if msg, ok := Report(c.output, c.code, c.quiet, ""); ok {

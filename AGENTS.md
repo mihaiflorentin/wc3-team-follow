@@ -71,7 +71,7 @@ To add a dependency (an outbound adapter or a domain service):
 
 - The process logger is the `*slog.Logger` built by `logging.Setup` in `main.go` (also installed with `slog.SetDefault`): the console plus a rotated JSON-lines debug file and a crash file in `<data folder>/logs`. Components receive it through their constructor and keep it in a field.
 - Never log the menu session, passwords, account ids or event payloads; log command names and event types. New background goroutines start with a panic guard that logs the stack.
-- A failure that ends the window must reach the player as a dialog (`crashreport`): keep the `error:` line in `main.go` and the `gui.startup` log line in `cmd/gui`, which the supervisor reads.
+- A failure that ends the window must reach the player as a dialog (`crashreport`): keep the `error:` line in `main.go` and the `gui.startup` and `gui.already_open` log lines in `cmd/gui`, which the supervisor reads.
 - Log a dotted event name as the message and the details as typed attributes: `logger.InfoContext(ctx, "companion.connected", slog.String("version", v))`.
 - Return errors upward; log them once, at the edge that handles them. Errors meant for players are full sentences starting with a capital letter. See `docs/logging.md`.
 

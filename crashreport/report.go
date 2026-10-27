@@ -23,6 +23,12 @@ const maxReason = 400
 // Linux turned away, not a crash.
 const StartupMarker = "gui.startup"
 
+// AlreadyOpenMarker is logged when another window already holds the
+// single-instance lock. Wails on Linux runs the startup hook before it
+// checks the lock, so a second launch logs StartupMarker too and then exits
+// with code 1 after handing over to the open window.
+const AlreadyOpenMarker = "gui.already_open"
+
 var (
 	ansi   = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	stdlog = regexp.MustCompile(`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} (.+)$`)
@@ -40,7 +46,7 @@ func Report(output string, code int, quiet bool, logDir string) (string, bool) {
 	output = ansi.ReplaceAllString(output, "")
 	reason := failureLine(output)
 	if reason == "" {
-		if code == 1 && !strings.Contains(output, StartupMarker) {
+		if code == 1 && (!strings.Contains(output, StartupMarker) || strings.Contains(output, AlreadyOpenMarker)) {
 			return "", false
 		}
 		reason = fmt.Sprintf("It exited with code %d.", code)

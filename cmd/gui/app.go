@@ -24,6 +24,9 @@ import (
 //go:embed frontend
 var frontend embed.FS
 
+// instanceID names the single-instance lock.
+const instanceID = "a6c1d2a4-wc3-team-follow"
+
 // StateEvent is the event the page listens to for new state.
 const StateEvent = "state"
 
@@ -67,7 +70,7 @@ func Run(deps Deps, opts Options) error {
 	)
 	startup := func(ctx context.Context) {
 		bridge.ctx = ctx
-		// The crash reporter reads this to tell a crash from a second launch.
+		// The crash reporter reads this to tell a window that never started.
 		deps.Logger.Info("gui.startup")
 		stop = deps.Companion.Subscribe(func(state dtoState) { wailsruntime.EventsEmit(ctx, StateEvent, state) })
 		var runCtx context.Context
@@ -88,6 +91,10 @@ func Run(deps Deps, opts Options) error {
 		wg.Wait()
 	}
 
+	if alreadyOpen(instanceID) {
+		// The crash reporter reads this to tell a second launch from a crash.
+		deps.Logger.Info("gui.already_open")
+	}
 	err = wails.Run(&options.App{
 		Title:            opts.Title,
 		Width:            opts.Width,
@@ -105,7 +112,7 @@ func Run(deps Deps, opts Options) error {
 		OnShutdown:         shutdown,
 		Bind:               []any{bridge},
 		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: "a6c1d2a4-wc3-team-follow",
+			UniqueId: instanceID,
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
 				if bridge.ctx != nil {
 					wailsruntime.WindowUnminimise(bridge.ctx)
