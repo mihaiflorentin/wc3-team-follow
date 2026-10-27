@@ -438,6 +438,16 @@ func TestOpenLobbyConfirmationIsAnsweredOnceWithNoPassword(t *testing.T) {
 	f.mustArm(false)
 	f.presence(lobby("Open lobby"))
 	f.receive("RequestForPassword", map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Open lobby"}})
+	// The game list is loaded first: joining by name only finds lobbies in it.
+	if last := f.commands[len(f.commands)-1]; last.message != follow.CmdGetGameList {
+		t.Fatalf("last command = %+v", last)
+	}
+	// A repeat of the same request while the list loads is not an answer.
+	f.receive("RequestForPassword", map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Open lobby"}})
+	if f.count(follow.CmdJoinGameByGameName) != 0 || f.state().PasswordRequest != nil {
+		t.Fatal("confirmed before the game list loaded")
+	}
+	f.receive("GameList", map[string]any{"games": []any{}})
 	last := f.commands[len(f.commands)-1]
 	if last.message != follow.CmdJoinGameByGameName || last.payload["gameName"] != "Open lobby" || last.payload["gamePass"] != "" {
 		t.Fatalf("last command = %+v", last)
@@ -460,6 +470,7 @@ func TestRepeatedPasswordRequestSkipsTheLobbyUnlessPasswordsAreOn(t *testing.T) 
 	f.presence(nil)
 	event := map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Protected"}}
 	f.receive("RequestForPassword", event)
+	f.receive("GameList", map[string]any{"games": []any{}})
 	f.receive("RequestForPassword", event)
 	s := f.state()
 	if s.PasswordRequest != nil || s.JoinPending || !strings.Contains(s.Status, "needs a password, so it was skipped") {
@@ -483,6 +494,7 @@ func TestSwitchingPasswordsOffDropsAnOpenRequest(t *testing.T) {
 	f.presence(nil)
 	event := map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Protected"}}
 	f.receive("RequestForPassword", event)
+	f.receive("GameList", map[string]any{"games": []any{}})
 	f.receive("RequestForPassword", event)
 	if f.state().PasswordRequest == nil {
 		t.Fatal("no password request")
@@ -504,6 +516,7 @@ func TestRepeatedPasswordRequestPromptsAndThePasswordIsNotKept(t *testing.T) {
 	f.presence(nil)
 	event := map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Protected"}}
 	f.receive("RequestForPassword", event)
+	f.receive("GameList", map[string]any{"games": []any{}})
 	f.receive("RequestForPassword", event)
 	if f.count(follow.CmdJoinGameByGameName) != 1 {
 		t.Fatalf("confirmations = %d", f.count(follow.CmdJoinGameByGameName))
@@ -521,6 +534,23 @@ func TestRepeatedPasswordRequestPromptsAndThePasswordIsNotKept(t *testing.T) {
 	report, _ := json.Marshal(f.engine.Diagnostics())
 	if strings.Contains(string(state)+string(report), "local-test-secret") {
 		t.Error("the password leaked into state or diagnostics")
+	}
+}
+
+func TestJoinConfirmsAnywayWhenTheGameListDoesNotArrive(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(false)
+	f.presence(lobby("Open lobby"))
+	f.receive("RequestForPassword", map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Open lobby"}})
+	f.advance(2 * time.Second)
+	f.engine.Tick()
+	if f.count(follow.CmdJoinGameByGameName) != 0 {
+		t.Fatal("confirmed before the wait was over")
+	}
+	f.advance(time.Second)
+	f.engine.Tick()
+	if f.count(follow.CmdJoinGameByGameName) != 1 {
+		t.Fatal("did not confirm after waiting for the game list")
 	}
 }
 
@@ -568,6 +598,7 @@ func TestPasswordPromptExpiresAndDiesWithTheConnection(t *testing.T) {
 	f.presence(nil)
 	event := map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Open"}}
 	f.receive("RequestForPassword", event)
+	f.receive("GameList", map[string]any{"games": []any{}})
 	f.receive("RequestForPassword", event)
 	f.advance(2*time.Minute + time.Millisecond)
 	f.engine.Tick()

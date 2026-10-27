@@ -32,6 +32,9 @@ var allowed = map[string]bool{
 	"TeamLeave":                    true,
 	"JoinFriendGameLobby":          true,
 	"JoinGameByGameName":           true,
+	// The Custom Games screen's listing request: joining by name only finds
+	// lobbies in the list it loads.
+	"GetGameList": true,
 	// Auto-host: Create Game's create button, and the host's lobby controls.
 	"CreateLobby": true,
 	"LobbyStart":  true,

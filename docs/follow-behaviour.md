@@ -12,6 +12,7 @@ Commands the app may send, enforced by `infrastructure/gamesocket`:
 | --- | --- |
 | `TeamGetInfo`, `FriendsGetFriends` | Background refresh |
 | `RequestCancelTeamInvitations`, `TeamLeave`, `JoinFriendGameLobby { auroraId }` | One join attempt, in this order, as the game's own Join Friend does |
+| `GetGameList` | Before answering the lobby confirmation: loads the custom game list that joining by name searches |
 | `JoinGameByGameName { gameName, gamePass }` | Answering the game's lobby confirmation or password request |
 
 `SendGameLobbySetup` and `GetGameInfo` closed the game during development and must never be added.
@@ -65,7 +66,7 @@ A remembered player is joinable when their fresh (under 20 s) presence is online
 
 ## Lobby confirmations and passwords
 
-The first matching `RequestForPassword` for the pending join is answered with an empty password. A second one means the lobby wants a password. With **Ask for lobby passwords** off (`askPassword`, the default, saved with the friend list), the lobby is skipped with a note and not tried again while it stays open; switching it off also drops a password field already showing. With it on, a password field is shown. The password is sent once, never stored, and the request expires after 2 minutes. Confirmations that are unsolicited, late, for another lobby, or arrive after Stop or a queue are ignored.
+The first matching `RequestForPassword` for the pending join is answered with an empty password, after the companion asks for the custom game list (`GetGameList`, as the Custom Games screen does when it opens) and it arrives, or after 3 seconds: the game finds a lobby by name only in that list, so from the main menu the confirmation failed and looked like a password request. Repeats of the request while the list loads are ignored. A second request after the confirmation means the lobby wants a password. With **Ask for lobby passwords** off (`askPassword`, the default, saved with the friend list), the lobby is skipped with a note and not tried again while it stays open; switching it off also drops a password field already showing. With it on, a password field is shown. The password is sent once, never stored, and the request expires after 2 minutes. Confirmations that are unsolicited, late, for another lobby, or arrive after Stop or a queue are ignored.
 
 ## Pausing and resuming
 
