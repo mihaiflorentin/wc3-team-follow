@@ -32,6 +32,16 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAskPasswordIsSaved(t *testing.T) {
+	dir := t.TempDir()
+	if err := settings.New(dir).Save(dto.Preferences{Tags: []string{}, IncludeTeam: true, AskPassword: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := settings.New(dir).Load(); err != nil || !got.AskPassword {
+		t.Fatalf("loaded %+v, %v", got, err)
+	}
+}
+
 func TestSaveLeavesNoTemporaryFiles(t *testing.T) {
 	dir := t.TempDir()
 	store := settings.New(dir)

@@ -34,6 +34,7 @@ func New(dir string) contract.PreferenceStore {
 type fileShape struct {
 	Tags        []string          `json:"tags"`
 	IncludeTeam *bool             `json:"includeTeam"`
+	AskPassword bool              `json:"askPassword,omitempty"`
 	MapsFolder  string            `json:"mapsFolder,omitempty"`
 	Host        *dto.HostSettings `json:"host,omitempty"`
 }
@@ -60,7 +61,7 @@ func (s *Store) Load() (dto.Preferences, error) {
 	if err := decoder.Decode(&saved); err != nil || saved.Tags == nil || saved.IncludeTeam == nil {
 		return dto.Preferences{}, fmt.Errorf("%w: unrecognized content", ErrUnreadable)
 	}
-	return dto.Preferences{Tags: saved.Tags, IncludeTeam: *saved.IncludeTeam, MapsFolder: saved.MapsFolder, Host: saved.Host}, nil
+	return dto.Preferences{Tags: saved.Tags, IncludeTeam: *saved.IncludeTeam, AskPassword: saved.AskPassword, MapsFolder: saved.MapsFolder, Host: saved.Host}, nil
 }
 
 // Save replaces the file atomically. Only the selection, the Maps folder and
@@ -70,7 +71,7 @@ func (s *Store) Save(prefs dto.Preferences) error {
 	if tags == nil {
 		tags = []string{}
 	}
-	content, err := json.MarshalIndent(fileShape{Tags: tags, IncludeTeam: &prefs.IncludeTeam, MapsFolder: prefs.MapsFolder, Host: prefs.Host}, "", "  ")
+	content, err := json.MarshalIndent(fileShape{Tags: tags, IncludeTeam: &prefs.IncludeTeam, AskPassword: prefs.AskPassword, MapsFolder: prefs.MapsFolder, Host: prefs.Host}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode friends: %w", err)
 	}

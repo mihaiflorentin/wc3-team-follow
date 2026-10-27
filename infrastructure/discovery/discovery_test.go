@@ -174,8 +174,12 @@ func TestProcfsRejectsTwoGames(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(root, "5000"), 0o755)
 	_ = os.WriteFile(filepath.Join(root, "5000", "cmdline"), []byte("wine\x00Warcraft III.exe\x00"), 0o644)
 	_, err := p.findGame(context.Background())
-	if !errors.Is(err, ErrManyGames) || !strings.HasPrefix(err.Error(), "2 copies of Warcraft III are running.") {
+	if !errors.Is(err, ErrManyGames) || !strings.HasPrefix(err.Error(), "Warcraft III is running 2 times.") {
 		t.Fatalf("err = %v", err)
+	}
+	// The companion shows only errors that read as sentences for players.
+	if msg := err.Error(); msg[0] < 'A' || msg[0] > 'Z' {
+		t.Fatalf("message doesn't start with a capital letter: %q", msg)
 	}
 }
 

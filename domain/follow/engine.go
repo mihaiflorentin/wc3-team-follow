@@ -134,6 +134,9 @@ type Engine struct {
 	lastJoin    *dto.JoinRecord
 	manualTags  []string
 	includeTeam bool
+	// askPassword lets a lobby that wants a password ask the player; off
+	// (the default), such a lobby is skipped.
+	askPassword bool
 	password    *passwordRequest
 
 	inMatch      bool
@@ -245,6 +248,13 @@ func (e *Engine) Configure(cfg dto.FollowConfig) error {
 	if cfg.IncludeTeam != nil {
 		e.includeTeam = *cfg.IncludeTeam
 		e.selectionChanged()
+	}
+	if cfg.AskPassword != nil {
+		e.askPassword = *cfg.AskPassword
+		if !e.askPassword && e.password != nil {
+			e.password = nil
+			e.Note("Lobby passwords are off. Waiting for a new lobby.")
+		}
 	}
 	if cfg.Diagnostic != nil && *cfg.Diagnostic != e.diagnostic {
 		e.disarm()
@@ -600,8 +610,15 @@ func (e *Engine) confirmLobbyRequest(p map[string]any) {
 		return
 	}
 	if e.pending.emptyConfirmationSent {
-		e.password = &passwordRequest{lobby: name, friend: e.pending.friend, started: e.now()}
+		friend := e.pending.friend
 		e.pending = nil
+		if !e.askPassword {
+			// Each lobby is tried once, so this one isn't tried again while
+			// it stays open.
+			e.Note(friend + "'s lobby " + quote(name) + " needs a password, so it was skipped. Switch on Ask for lobby passwords to type one.")
+			return
+		}
+		e.password = &passwordRequest{lobby: name, friend: friend, started: e.now()}
 		e.Note("The game is asking for a lobby password.")
 		return
 	}
@@ -755,6 +772,9 @@ func (e *Engine) ManualTags() []string { return slices.Clone(e.manualTags) }
 // IncludeTeam reports whether the current team is part of the selection.
 func (e *Engine) IncludeTeam() bool { return e.includeTeam }
 
+// AskPassword reports whether a lobby that wants a password may ask for it.
+func (e *Engine) AskPassword() bool { return e.askPassword }
+
 // Snapshot returns the state for the interface. It never includes account
 // identifiers or passwords.
 func (e *Engine) Snapshot() dto.FollowState {
@@ -766,6 +786,7 @@ func (e *Engine) Snapshot() dto.FollowState {
 		Diagnostic:    e.diagnostic,
 		ManualTags:    e.ManualTags(),
 		IncludeTeam:   e.includeTeam,
+		AskPassword:   e.askPassword,
 		Status:        e.status,
 		Screen:        e.screen,
 		Busy:          e.busy,

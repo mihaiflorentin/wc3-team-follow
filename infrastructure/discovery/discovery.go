@@ -51,7 +51,7 @@ type manyGamesError struct{ count int }
 func manyGames(count int) error { return manyGamesError{count} }
 
 func (e manyGamesError) Error() string {
-	return fmt.Sprintf("%d copies of Warcraft III are running. Close the ones you aren't playing; a copy you restarted may still run in the background. Team Follow connects by itself once one is left.", e.count)
+	return fmt.Sprintf("Warcraft III is running %d times. Close the ones you aren't playing; a copy you restarted may still run in the background. Team Follow connects by itself once one is left.", e.count)
 }
 
 func (manyGamesError) Is(target error) bool { return target == ErrManyGames }

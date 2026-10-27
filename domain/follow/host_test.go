@@ -35,9 +35,10 @@ func (f *fixture) lastCommand(message string) (command, bool) {
 
 // seat is one playable lobby slot: an empty name is an open slot.
 type seat struct {
-	name    string
-	team    int
-	canMove bool
+	name     string
+	team     int
+	canMove  bool
+	computer bool
 }
 
 // lobbyWith builds a GameLobbySetup; the first seat is the host. An open
@@ -49,7 +50,11 @@ func lobbyWith(seats ...seat) map[string]any {
 		if s.name == "" {
 			status = 0
 		}
-		players = append(players, map[string]any{"slot": i, "slotStatus": status, "name": s.name, "team": s.team,
+		slotType := 0
+		if s.computer {
+			slotType = 1
+		}
+		players = append(players, map[string]any{"slot": i, "slotStatus": status, "slotType": slotType, "name": s.name, "team": s.team,
 			"teamChangeEnabled": s.canMove, "isSelf": i == 0})
 	}
 	players = append(players, map[string]any{"slot": 99, "slotStatus": 0, "isObserver": true})
@@ -263,43 +268,91 @@ func TestStartWaitsForTheWholeGroup(t *testing.T) {
 	}
 }
 
-func TestSameTeamMovesTheGroupBeforeStarting(t *testing.T) {
+func sameTeamHost(t *testing.T, startWhenFull bool) *fixture {
+	t.Helper()
 	f := newFixture(t)
 	s := hostSettings()
-	s.DelaySeconds, s.StartWhenFull, s.SameTeam = 0, true, true
+	s.DelaySeconds, s.StartWhenFull, s.SameTeam = 0, startWhenFull, true
 	f.mustHost(s)
 	f.openOwnLobby()
-	f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0}, seat{name: "Friend#1234", team: 1, canMove: true}))
+	return f
+}
+
+// The live case on 3.0.1.24371 (Castle Fight): the host's force holds the
+// host and two locked computers, the friend's force has open slots, and
+// the game lets the host move only its own slot.
+func TestSameTeamMovesTheHostToTheMembersTeam(t *testing.T) {
+	f := sameTeamHost(t, true)
+	lobby := lobbyWith(seat{name: "Self#1111", team: 0, canMove: true},
+		seat{name: "Computer (Normal)", team: 0, computer: true}, seat{name: "Computer (Normal)", team: 0, computer: true},
+		seat{name: "Friend#1234", team: 1}, seat{team: 1}, seat{team: 1})
+	f.receive("GameLobbySetup", lobby)
 	c, ok := f.lastCommand(follow.CmdSetTeam)
-	if !ok || c.payload["slot"] != 1 || c.payload["team"] != 0 {
-		t.Fatalf("SetTeam = %+v, %v", c, ok)
+	if !ok || c.payload["slot"] != 0 || c.payload["team"] != 1 || notes(f, "Moving you to Friend#1234's team.") != 1 {
+		t.Fatalf("SetTeam = %+v, %v, log %+v", c, ok, f.state().Log)
 	}
-	if f.count(follow.CmdLobbyStart) != 0 || len(f.state().Host.OffTeam) != 1 {
-		t.Fatal("started before the group was on one team")
+	if len(f.state().Host.OffTeam) != 1 {
+		t.Fatal("the friend wasn't reported off the team")
 	}
-	// Refused moves are retried a limited number of times.
+	// A refused move is retried a limited number of times.
 	for range 3 {
-		f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0}, seat{name: "Friend#1234", team: 1, canMove: true}))
+		f.receive("GameLobbySetup", lobby)
 	}
 	if f.count(follow.CmdSetTeam) != 2 {
 		t.Fatalf("SetTeam sent %d times", f.count(follow.CmdSetTeam))
 	}
-	f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0}, seat{name: "Friend#1234", team: 0, canMove: true}))
+	f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 1, canMove: true},
+		seat{name: "Computer (Normal)", team: 0, computer: true}, seat{name: "Computer (Normal)", team: 0, computer: true},
+		seat{name: "Friend#1234", team: 1}, seat{team: 0}, seat{team: 1}))
+	if len(f.state().Host.OffTeam) != 0 {
+		t.Fatalf("still off team: %v", f.state().Host.OffTeam)
+	}
+}
+
+func TestSameTeamMovesAMovableMemberToTheHostsTeam(t *testing.T) {
+	f := sameTeamHost(t, true)
+	f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0, canMove: true}, seat{team: 0},
+		seat{name: "Friend#1234", team: 1, canMove: true}))
+	c, ok := f.lastCommand(follow.CmdSetTeam)
+	if !ok || c.payload["slot"] != 2 || c.payload["team"] != 0 {
+		t.Fatalf("SetTeam = %+v, %v", c, ok)
+	}
+	if f.count(follow.CmdLobbyStart) != 0 {
+		t.Fatal("started before the group was on one team")
+	}
+	f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0, canMove: true}, seat{name: "Friend#1234", team: 0, canMove: true},
+		seat{name: "Stranger#5555", team: 1}))
 	if f.count(follow.CmdLobbyStart) != 1 {
 		t.Fatal("did not start once everyone was on the host's team")
 	}
 }
 
-func TestSameTeamReportsPlayersTheHostCannotMove(t *testing.T) {
-	f := newFixture(t)
-	s := hostSettings()
-	s.DelaySeconds, s.SameTeam = 0, true
-	f.mustHost(s)
-	f.openOwnLobby()
-	for range 2 {
-		f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0}, seat{name: "Friend#1234", team: 1}))
+func TestSameTeamMovesAComputerToMakeRoomForTheHost(t *testing.T) {
+	f := sameTeamHost(t, false)
+	// The friend's team is full with a computer that can move; the host's
+	// team has room for it.
+	f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0, canMove: true}, seat{team: 0},
+		seat{name: "Friend#1234", team: 1}, seat{name: "Computer (Normal)", team: 1, canMove: true, computer: true}))
+	c, ok := f.lastCommand(follow.CmdSetTeam)
+	if !ok || c.payload["slot"] != 3 || c.payload["team"] != 0 || notes(f, "Moving Computer (Normal) to make room for Friend#1234.") != 1 {
+		t.Fatalf("SetTeam = %+v, %v, log %+v", c, ok, f.state().Log)
 	}
-	if f.count(follow.CmdSetTeam) != 0 || notes(f, "doesn't let the host move Friend#1234") != 1 {
+	// The computer moved, so the friend's team has room: now the host moves.
+	f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0, canMove: true}, seat{name: "Computer (Normal)", team: 0, canMove: true, computer: true},
+		seat{name: "Friend#1234", team: 1}, seat{team: 1}))
+	c, ok = f.lastCommand(follow.CmdSetTeam)
+	if !ok || c.payload["slot"] != 0 || c.payload["team"] != 1 {
+		t.Fatalf("SetTeam = %+v, %v", c, ok)
+	}
+}
+
+func TestSameTeamSaysOnceWhenNothingCanMove(t *testing.T) {
+	f := sameTeamHost(t, false)
+	for range 2 {
+		f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0, canMove: true}, seat{name: "Stranger#5555", team: 0},
+			seat{name: "Friend#1234", team: 1}, seat{name: "Computer (Normal)", team: 1, computer: true}))
+	}
+	if f.count(follow.CmdSetTeam) != 0 || notes(f, "You and Friend#1234 can't be put on one team") != 1 {
 		t.Fatalf("setTeam=%d log=%+v", f.count(follow.CmdSetTeam), f.state().Log)
 	}
 }

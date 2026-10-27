@@ -9,6 +9,9 @@ type FollowConfig struct {
 	// clears them.
 	Tags        *[]string `json:"tags,omitempty"`
 	IncludeTeam *bool     `json:"includeTeam,omitempty"`
+	// AskPassword lets a lobby that wants a password ask the player for it;
+	// off, such a lobby is skipped.
+	AskPassword *bool `json:"askPassword,omitempty"`
 	// Diagnostic selects preview mode: watch friends but never join.
 	Diagnostic *bool `json:"diagnostic,omitempty"`
 	Enabled    *bool `json:"enabled,omitempty"`
@@ -27,6 +30,7 @@ type FollowState struct {
 	Diagnostic    bool     `json:"diagnostic"`
 	ManualTags    []string `json:"manualTags"`
 	IncludeTeam   bool     `json:"includeTeam"`
+	AskPassword   bool     `json:"askPassword"`
 	Status        string   `json:"status"`
 	Screen        string   `json:"screen"`
 	Busy          bool     `json:"busy"`
@@ -128,11 +132,12 @@ type Diagnostics struct {
 	AppVersion string `json:"appVersion"`
 }
 
-// Preferences is what is saved on disk between runs: only the friend
-// BattleTags and whether to include the current team.
+// Preferences is what is saved on disk between runs: the friend BattleTags,
+// whether to include the current team and to ask for lobby passwords.
 type Preferences struct {
 	Tags        []string `json:"tags"`
 	IncludeTeam bool     `json:"includeTeam"`
+	AskPassword bool     `json:"askPassword,omitempty"`
 	// MapsFolder is the Maps folder the player chose; "" detects it.
 	MapsFolder string `json:"mapsFolder,omitempty"`
 	// Host is the saved Auto-host setup.

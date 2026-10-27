@@ -283,6 +283,7 @@ function teamRow(s, m) {
 
 function renderTeam(s) {
   $('include-team').checked = s.includeTeam;
+  $('ask-password').checked = Boolean(s.askPassword);
   const list = $('team');
   list.replaceChildren();
   list.dataset.muted = String(!s.includeTeam);
@@ -451,6 +452,7 @@ $('confirm-no').onclick = closeConfirm;
 $('friend-search').oninput = () => render(state);
 $('show-offline').onchange = () => render(state);
 $('include-team').onchange = event => changeGroup({includeTeam: event.target.checked});
+$('ask-password').onchange = event => configure({askPassword: event.target.checked});
 
 $('friend-form').onsubmit = async event => {
   event.preventDefault();
@@ -936,7 +938,7 @@ function demoBridge() {
     paused: {enabled: true, paused: true, busy: true, inMatch: true, inMenus: false, status: 'Follow is on but paused during the match.'},
     password: {enabled: true, passwordRequest: {lobby: 'Pros only', friend: 'Arthas#1123'}},
     waiting: {connected: false, team: [], roster: [], connectionHint: 'Warcraft III isn’t running. Start it through Battle.net.'},
-    many: {connected: false, team: [], roster: [], connectionHint: '2 copies of Warcraft III are running. Close the ones you aren’t playing; a copy you restarted may still run in the background. Team Follow connects by itself once one is left.'},
+    many: {connected: false, team: [], roster: [], connectionHint: 'Warcraft III is running 2 times. Close the ones you aren’t playing; a copy you restarted may still run in the background. Team Follow connects by itself once one is left.'},
     linux: {connected: false, team: [], roster: [], connectionHint: 'This computer blocked reading Warcraft III’s menu session. To allow it, run: sudo setcap cap_sys_ptrace=ep <path to wc3-team-follow>'},
     unverified: {version: '3.0.2.25010', verifiedBuild: false},
   };
@@ -968,6 +970,7 @@ function demoBridge() {
     Configure: async cfg => {
       if (cfg.tags) { s.manualTags = cfg.tags; s.enabled = false; }
       if ('includeTeam' in cfg) { s.includeTeam = cfg.includeTeam; s.enabled = false; }
+      if ('askPassword' in cfg) s.askPassword = cfg.askPassword;
       if ('diagnostic' in cfg && cfg.diagnostic !== s.diagnostic) { s.diagnostic = cfg.diagnostic; s.enabled = false; }
       if (cfg.enabled === false) s.enabled = false;
       if (cfg.enabled === true) { s.enabled = true; s.diagnostic = false; s.host = {...s.host, enabled: false, phase: 'off'}; watch(); }

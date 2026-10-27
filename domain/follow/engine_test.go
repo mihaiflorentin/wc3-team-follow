@@ -451,8 +451,55 @@ func TestOpenLobbyConfirmationIsAnsweredOnceWithNoPassword(t *testing.T) {
 	}
 }
 
+func TestRepeatedPasswordRequestSkipsTheLobbyUnlessPasswordsAreOn(t *testing.T) {
+	f := newFixture(t)
+	if f.state().AskPassword {
+		t.Fatal("asking for passwords is on by default")
+	}
+	f.mustArm(false)
+	f.presence(nil)
+	event := map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Protected"}}
+	f.receive("RequestForPassword", event)
+	f.receive("RequestForPassword", event)
+	s := f.state()
+	if s.PasswordRequest != nil || s.JoinPending || !strings.Contains(s.Status, "needs a password, so it was skipped") {
+		t.Fatalf("password request %+v, pending %v, status %q", s.PasswordRequest, s.JoinPending, s.Status)
+	}
+	// The same lobby is not tried again while it stays open.
+	f.advance(time.Minute)
+	f.engine.Tick()
+	f.presence(nil)
+	if f.count(follow.CmdJoinFriendGameLobby) != 1 {
+		t.Fatalf("joins = %d", f.count(follow.CmdJoinFriendGameLobby))
+	}
+}
+
+func TestSwitchingPasswordsOffDropsAnOpenRequest(t *testing.T) {
+	f := newFixture(t)
+	if err := f.engine.Configure(dto.FollowConfig{AskPassword: ptr(true)}); err != nil {
+		t.Fatal(err)
+	}
+	f.mustArm(false)
+	f.presence(nil)
+	event := map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Protected"}}
+	f.receive("RequestForPassword", event)
+	f.receive("RequestForPassword", event)
+	if f.state().PasswordRequest == nil {
+		t.Fatal("no password request")
+	}
+	if err := f.engine.Configure(dto.FollowConfig{AskPassword: ptr(false)}); err != nil {
+		t.Fatal(err)
+	}
+	if f.state().PasswordRequest != nil {
+		t.Fatal("the password request stayed open")
+	}
+}
+
 func TestRepeatedPasswordRequestPromptsAndThePasswordIsNotKept(t *testing.T) {
 	f := newFixture(t)
+	if err := f.engine.Configure(dto.FollowConfig{AskPassword: ptr(true)}); err != nil {
+		t.Fatal(err)
+	}
 	f.mustArm(false)
 	f.presence(nil)
 	event := map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Protected"}}
