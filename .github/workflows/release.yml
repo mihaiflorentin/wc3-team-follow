@@ -1,0 +1,93 @@
+name: release
+
+# Pushing a Release Tag (X.Y.Z, optionally with a leading v and a pre-release
+# part) vets and tests the project, cross-compiles every `make build-all`
+# target with the tag, commit and build date injected,
+# and publishes a GitHub Release with the binaries and a SHA-256 checksums
+# file. scripts/release-tag.sh classifies the tag; tags it rejects run nothing.
+# Branch pushes and pull requests never run this workflow. Any failing job stops
+# the release. See docs/ci.md.
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+      - "[0-9]+.[0-9]+.[0-9]+*"
+
+permissions:
+  contents: read
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.tag.outputs.release }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+      environment: ${{ steps.tag.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Classify the tag
+        id: tag
+        run: |
+          sh scripts/release-tag.sh "${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
+  test:
+    needs: classify
+    if: needs.classify.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+
+  build:
+    needs: [classify, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Cross-compile
+        run: make build-all VERSION="${{ github.ref_name }}" COMMIT="${{ github.sha }}" DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum wc3-team-follow-* > checksums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            dist/wc3-team-follow-*
+            dist/checksums.txt
+          if-no-files-found: error
+
+  release:
+    needs: [classify, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.classify.outputs.prerelease }}
+        run: |
+          prerelease=""
+          if [ "$PRERELEASE" = "true" ]; then prerelease="--prerelease"; fi
+          gh release create "$TAG" dist/wc3-team-follow-* dist/checksums.txt \
+            --title "$TAG" --generate-notes --verify-tag $prerelease

@@ -1,0 +1,25 @@
+[app]
+name = "wc3-team-follow"
+env  = "development"
+
+[logging]
+default        = "color"
+server_default = "color"
+level          = "debug"
+
+[auth]
+# When enabled, requests whose path starts with one of `routes` must send
+# the token in the X-Auth-Token header; every other path (e.g. /health,
+# /docs) stays open.
+enabled = false
+token   = "change-me"
+routes  = ["/example"]
+
+[http]
+host          = "0.0.0.0"
+port          = 8080
+read_timeout  = "20s"
+write_timeout = "60s"
+idle_timeout  = "120s"
+# Bounds GET /health/ready: checks still running when it expires count as failed.
+readiness_timeout = "2s"
