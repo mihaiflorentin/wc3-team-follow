@@ -44,7 +44,8 @@ Serve `cmd/gui/frontend` with any static server and open it in a browser. Outsid
 
 ```bash
 python3 -m http.server 8000 --directory cmd/gui/frontend
-# http://localhost:8000/?scene=watching   (first, live, paused, password, waiting, linux, unverified)
+# http://localhost:8000/?scene=watching   (first, live, paused, password, waiting, linux, unverified,
+#                                         host-waiting, host-lobby); add &open=host-setup|maps|maps-search|report
 ```
 
 ## Trying discovery without the game
@@ -53,4 +54,19 @@ python3 -m http.server 8000 --directory cmd/gui/frontend
 
 ## Screenshots
 
-`docs/screenshots/` holds the README images, taken from the demo scenes `live` (saved as `following.png`), `watching` and `first` (`first-run.png`) at 1100×960, rendered at 2× and scaled to 1600 px wide. On macOS they were rendered with an offscreen `WKWebView`, the same engine the macOS app uses. Retake them after visible interface changes.
+`docs/screenshots/` holds the README images, one per feature, taken from the demo page at 1100×960, rendered at 2× and scaled to 1400 px wide. Retake them after visible interface changes. On macOS they were rendered with an offscreen `WKWebView` (the engine the macOS app uses) with CSS transitions turned off, since an offscreen window doesn't run them.
+
+| File | Demo URL |
+| --- | --- |
+| `following.png` | `?scene=live` |
+| `watching.png` | `?scene=watching` |
+| `first-run.png` | `?scene=first` |
+| `auto-host.png` | `?scene=host-lobby` |
+| `host-setup.png` | `?scene=watching&open=host-setup` |
+| `map-browser.png` | `?scene=watching&open=maps` |
+| `map-search.png` | `?scene=watching&open=maps-search` |
+| `password.png` | `?scene=password` |
+| `linux-setup.png` | `?scene=linux` |
+| `report.png` | `?scene=live&open=report` |
+
+The demo page only uses sample friends and maps; keep it that way, since the images are public.

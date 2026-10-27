@@ -490,8 +490,40 @@ async function boot() {
   try { render(await bridge.State()); } catch (err) { $('status').textContent = String(err); }
   // The Go side pushes every change; this poll only covers a missed event.
   setInterval(async () => { try { render(await bridge.State()); } catch { /* window closing */ } }, 5000);
+  if (!window.go) demoOpen(new URLSearchParams(location.search).get('open'));
 }
 boot();
+
+// demoOpen opens a dialog in the demo page, for screenshots:
+// ?open=host-setup|maps|maps-search|report.
+async function demoOpen(what) {
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  switch (what) {
+    case 'host-setup':
+      $('host-setup').click();
+      break;
+    case 'maps':
+    case 'maps-search':
+      $('host-setup').click();
+      await wait(50);
+      $('host-choose-map').click();
+      await wait(150);
+      if (what === 'maps') {
+        document.querySelector('#maps-rows tr')?.click();
+        await wait(100);
+        document.querySelectorAll('#maps-rows tr')[2]?.click();
+      } else {
+        $('maps-search').value = 'legion';
+        $('maps-search').dispatchEvent(new Event('input'));
+        await wait(400);
+        document.querySelector('#maps-rows tr')?.click();
+      }
+      break;
+    case 'report':
+      $('report').click();
+      break;
+  }
+}
 
 /* Auto-host ------------------------------------------------------------- */
 
