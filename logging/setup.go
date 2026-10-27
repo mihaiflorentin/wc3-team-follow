@@ -40,7 +40,9 @@ func (f *Files) Close() error {
 		errs = append(errs, f.log.Close())
 	}
 	if f.crash != nil {
-		errs = append(errs, f.crash.Close())
+		// The runtime keeps its own handle to the crash file; release it,
+		// or Windows can't delete or replace the file.
+		errs = append(errs, debug.SetCrashOutput(nil, debug.CrashOptions{}), f.crash.Close())
 	}
 	return errors.Join(errs...)
 }
