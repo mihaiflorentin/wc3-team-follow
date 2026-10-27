@@ -37,7 +37,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 
 - Discovery is read-only and inspects only the Warcraft III process. Never write game memory, inject code or search for credentials.
 - The menu session, passwords and account ids are never logged, printed, saved or put in `FollowState` or `Diagnostics`.
-- The game socket sends only the allowlisted commands in `infrastructure/gamesocket`, each one the game's own menu sends for the same purpose: watching and Auto-join (`TeamGetInfo`, `FriendsGetFriends`, `RequestCancelTeamInvitations`, `TeamLeave`, `JoinFriendGameLobby`, `JoinGameByGameName`, `GetGameList`) and Auto-host (`CreateLobby`, `LobbyStart`, `LobbyCancel`, `SetTeam`, `SendInviteToGame`). `SendGameLobbySetup` and `GetGameInfo` crashed the game and must never be added.
+- The game socket sends only the allowlisted commands in `infrastructure/gamesocket`, each one the game's own menu sends for the same purpose: watching and Auto-join (`TeamGetInfo`, `FriendsGetFriends`, `RequestCancelTeamInvitations`, `TeamLeave`, `JoinFriendGameLobby`, `JoinGameByGameName`, `SendGameListing`, `GetGameList`) and Auto-host (`CreateLobby`, `LobbyStart`, `LobbyCancel`, `SetTeam`, `SendInviteToGame`). `SendGameLobbySetup` and `GetGameInfo` crashed the game and must never be added.
 - Nothing starts a match unless the host switched on Start when full; Auto-host otherwise only creates the lobby.
 - Follow always starts off; nothing re-enables it automatically after a disconnect.
 

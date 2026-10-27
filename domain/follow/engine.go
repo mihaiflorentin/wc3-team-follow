@@ -19,7 +19,7 @@ const (
 	joinTimeout = 15 * time.Second
 	// listWait is how long a join waits for the game list it asked for
 	// before confirming anyway.
-	listWait        = 3 * time.Second
+	listWait        = 4 * time.Second
 	passwordTTL     = 2 * time.Minute
 	attemptCooldown = 10 * time.Second
 	resumeDelay     = 2 * time.Second
@@ -36,9 +36,12 @@ const (
 	CmdTeamLeave             = "TeamLeave"
 	CmdJoinFriendGameLobby   = "JoinFriendGameLobby"
 	CmdJoinGameByGameName    = "JoinGameByGameName"
-	// CmdGetGameList loads the custom game list, as the Custom Games screen
-	// does when it opens. Joining by name only finds lobbies in that list.
-	CmdGetGameList = "GetGameList"
+	// CmdSendGameListing switches the custom game list on and CmdGetGameList
+	// asks for it, as the Custom Games screen does when it opens (checked
+	// live: without SendGameListing the list stays empty). Joining by name
+	// only finds lobbies in that list.
+	CmdSendGameListing = "SendGameListing"
+	CmdGetGameList     = "GetGameList"
 )
 
 // Sender delivers one command to the game. It reports false when the game
@@ -458,7 +461,7 @@ func (e *Engine) Receive(event dto.GameEvent) {
 			e.Note("Returned from a game or lobby. Follow is off.")
 		}
 	case "GameList":
-		if e.pending != nil && !e.pending.listAsked.IsZero() {
+		if games, _ := list(p["games"]); e.pending != nil && !e.pending.listAsked.IsZero() && len(games) > 0 {
 			e.confirmLobby()
 		}
 		// The game's Custom Games screen requests listings; the companion
@@ -644,9 +647,9 @@ func (e *Engine) confirmLobbyRequest(p map[string]any) {
 		e.lastJoin.Lobby = name
 	}
 	// The game finds the lobby by name only in the custom game list, which
-	// exists once Custom Games has loaded it: ask for it first, and confirm
-	// when it arrives (or after listWait).
-	if !e.send(CmdGetGameList, map[string]any{}) {
+	// exists once Custom Games has loaded it: switch it on, ask for it each
+	// second, and confirm once it has lobbies (or after listWait).
+	if !e.send(CmdSendGameListing, map[string]any{}) {
 		e.pending = nil
 		e.Note("The lobby confirmation could not be sent. Waiting for a new lobby.")
 		return
@@ -791,8 +794,13 @@ func (e *Engine) Tick() {
 		e.password = nil
 		e.Note("The lobby password request expired. Waiting for a new lobby.")
 	}
-	if e.pending != nil && !e.pending.listAsked.IsZero() && e.now().Sub(e.pending.listAsked) >= listWait {
-		e.confirmLobby()
+	if e.pending != nil && !e.pending.listAsked.IsZero() {
+		if e.now().Sub(e.pending.listAsked) >= listWait {
+			e.confirmLobby()
+		} else {
+			// The list fills in the background: ask until it has lobbies.
+			e.send(CmdGetGameList, map[string]any{})
+		}
 	}
 	if e.pending != nil && e.now().Sub(e.pending.started) > joinTimeout {
 		e.pending = nil

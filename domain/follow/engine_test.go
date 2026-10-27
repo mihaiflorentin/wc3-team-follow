@@ -439,7 +439,7 @@ func TestOpenLobbyConfirmationIsAnsweredOnceWithNoPassword(t *testing.T) {
 	f.presence(lobby("Open lobby"))
 	f.receive("RequestForPassword", map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Open lobby"}})
 	// The game list is loaded first: joining by name only finds lobbies in it.
-	if last := f.commands[len(f.commands)-1]; last.message != follow.CmdGetGameList {
+	if last := f.commands[len(f.commands)-1]; last.message != follow.CmdSendGameListing {
 		t.Fatalf("last command = %+v", last)
 	}
 	// A repeat of the same request while the list loads is not an answer.
@@ -447,7 +447,7 @@ func TestOpenLobbyConfirmationIsAnsweredOnceWithNoPassword(t *testing.T) {
 	if f.count(follow.CmdJoinGameByGameName) != 0 || f.state().PasswordRequest != nil {
 		t.Fatal("confirmed before the game list loaded")
 	}
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	last := f.commands[len(f.commands)-1]
 	if last.message != follow.CmdJoinGameByGameName || last.payload["gameName"] != "Open lobby" || last.payload["gamePass"] != "" {
 		t.Fatalf("last command = %+v", last)
@@ -470,7 +470,7 @@ func TestRepeatedPasswordRequestSkipsTheLobbyUnlessPasswordsAreOn(t *testing.T) 
 	f.presence(nil)
 	event := map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Protected"}}
 	f.receive("RequestForPassword", event)
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	f.receive("RequestForPassword", event)
 	s := f.state()
 	if s.PasswordRequest != nil || s.JoinPending || !strings.Contains(s.Status, "needs a password, so it was skipped") {
@@ -494,7 +494,7 @@ func TestSwitchingPasswordsOffDropsAnOpenRequest(t *testing.T) {
 	f.presence(nil)
 	event := map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Protected"}}
 	f.receive("RequestForPassword", event)
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	f.receive("RequestForPassword", event)
 	if f.state().PasswordRequest == nil {
 		t.Fatal("no password request")
@@ -516,7 +516,7 @@ func TestRepeatedPasswordRequestPromptsAndThePasswordIsNotKept(t *testing.T) {
 	f.presence(nil)
 	event := map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Protected"}}
 	f.receive("RequestForPassword", event)
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	f.receive("RequestForPassword", event)
 	if f.count(follow.CmdJoinGameByGameName) != 1 {
 		t.Fatalf("confirmations = %d", f.count(follow.CmdJoinGameByGameName))
@@ -542,10 +542,14 @@ func TestJoinConfirmsAnywayWhenTheGameListDoesNotArrive(t *testing.T) {
 	f.mustArm(false)
 	f.presence(lobby("Open lobby"))
 	f.receive("RequestForPassword", map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Open lobby"}})
-	f.advance(2 * time.Second)
-	f.engine.Tick()
-	if f.count(follow.CmdJoinGameByGameName) != 0 {
-		t.Fatal("confirmed before the wait was over")
+	// An empty list isn't enough: the list is asked for again each second.
+	f.receive("GameList", map[string]any{"games": []any{}})
+	for range 3 {
+		f.advance(time.Second)
+		f.engine.Tick()
+	}
+	if f.count(follow.CmdJoinGameByGameName) != 0 || f.count(follow.CmdGetGameList) != 3 {
+		t.Fatalf("confirmations %d, list requests %d", f.count(follow.CmdJoinGameByGameName), f.count(follow.CmdGetGameList))
 	}
 	f.advance(time.Second)
 	f.engine.Tick()
@@ -598,7 +602,7 @@ func TestPasswordPromptExpiresAndDiesWithTheConnection(t *testing.T) {
 	f.presence(nil)
 	event := map[string]any{"message": map[string]any{"matchJoinGameByNameText": "Open"}}
 	f.receive("RequestForPassword", event)
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	f.receive("RequestForPassword", event)
 	f.advance(2*time.Minute + time.Millisecond)
 	f.engine.Tick()
@@ -629,7 +633,7 @@ func TestFollowResumesAfterALobbyAMatchAndCustomGames(t *testing.T) {
 	}
 	f.receive("IsGameUIActive", map[string]any{"isActive": "true"})
 	f.receive("MultiplayerGameLeave", nil)
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	f.advance(3 * time.Second)
 	f.engine.Tick()
 	if len(f.joins()) != 1 || !f.state().InMatch {
@@ -637,7 +641,7 @@ func TestFollowResumesAfterALobbyAMatchAndCustomGames(t *testing.T) {
 	}
 	f.receive("ExitedGame", nil)
 	f.advance(3 * time.Second)
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	if s := f.state(); s.Busy || !s.Enabled {
 		t.Fatalf("did not resume: %+v", s)
 	}
@@ -654,7 +658,7 @@ func TestLeavingALobbyDoesNotRejoinItImmediately(t *testing.T) {
 	f.receive("GameLobbySetup", nil)
 	f.receive("MultiplayerGameLeave", nil)
 	f.advance(11 * time.Second)
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	f.presence(nil)
 	f.engine.Tick()
 	if len(f.joins()) != 1 {
@@ -673,7 +677,7 @@ func TestAReturnSignalAloneCannotResume(t *testing.T) {
 	f.receive("GameFound", nil)
 	f.receive("MultiplayerGameLeave", nil)
 	f.advance(3 * time.Second)
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	f.presence(nil)
 	if len(f.joins()) != 0 {
 		t.Fatal("resumed while loading")
@@ -685,7 +689,7 @@ func TestAReturnSignalAloneCannotResume(t *testing.T) {
 	if len(f.joins()) != 0 {
 		t.Fatal("resumed without menu evidence")
 	}
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	f.presence(nil)
 	if len(f.joins()) != 1 {
 		t.Fatal("did not resume after menu evidence")
@@ -699,7 +703,7 @@ func TestStopOverridesAutomaticResume(t *testing.T) {
 	_ = f.engine.Configure(dto.FollowConfig{Enabled: ptr(false)})
 	f.receive("ExitedGame", nil)
 	f.advance(3 * time.Second)
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	f.presence(nil)
 	if len(f.joins()) != 0 || f.state().Enabled {
 		t.Fatal("resumed after Stop")
@@ -1008,7 +1012,7 @@ func TestLeavingALobbyStillWaitsForMenuEvidence(t *testing.T) {
 	if len(f.joins()) != 0 || !f.state().Paused {
 		t.Fatal("resumed after leaving a lobby without menu evidence")
 	}
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	f.presence(nil)
 	if len(f.joins()) != 1 {
 		t.Fatal("did not resume once the custom game list showed")
@@ -1020,7 +1024,7 @@ func TestInMenusIsKnownFromTheGameListOrAMenuScreen(t *testing.T) {
 	if f.state().InMenus {
 		t.Fatal("in menus before any evidence")
 	}
-	f.receive("GameList", map[string]any{"games": []any{}})
+	f.receive("GameList", map[string]any{"games": []any{map[string]any{}}})
 	if !f.state().InMenus {
 		t.Fatal("the custom game list did not count as menus")
 	}
