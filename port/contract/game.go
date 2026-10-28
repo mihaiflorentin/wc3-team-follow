@@ -25,6 +25,11 @@ type GameSession interface {
 	// Receive blocks for the next event. It returns an error once the
 	// session is closed.
 	Receive(ctx context.Context) (dto.GameEvent, error)
+	// TryReceive returns the next event already received, without
+	// waiting; ok is false when none is waiting. It returns an error once
+	// the session is closed. Auto-ban reads every waiting event before it
+	// bans (docs/adr/0008).
+	TryReceive() (ev dto.GameEvent, ok bool, err error)
 	Close() error
 }
 

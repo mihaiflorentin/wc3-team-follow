@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/coder/websocket"
 
@@ -106,6 +107,94 @@ func TestSessionSendsTheLobbyChatMessage(t *testing.T) {
 	}
 	if got := <-received; got != `{"type":"webui","message":"SendGameChatMessage","payload":{"content":"!swap 1 2"}}` {
 		t.Fatalf("sent %s", got)
+	}
+}
+
+// TestSessionSendsTheLobbyBanButNotKick covers auto-ban (docs/adr/0008):
+// the game's own Ban is allowed, Kick never was.
+func TestSessionSendsTheLobbyBanButNotKick(t *testing.T) {
+	received := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ws, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = ws.CloseNow() }()
+		_, body, err := ws.Read(r.Context())
+		if err != nil {
+			return
+		}
+		received <- string(body)
+	}))
+	defer server.Close()
+	port, _ := strconv.Atoi(server.URL[strings.LastIndex(server.URL, ":")+1:])
+
+	ctx := context.Background()
+	session, err := gamesocket.NewDialer().Dial(ctx, dto.GameConnection{Port: port, Session: "12345678901"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = session.Close() }()
+
+	if err := session.Send(ctx, "KickPlayerFromGameLobby", map[string]any{"slot": 2}); !errors.Is(err, gamesocket.ErrNotAllowed) {
+		t.Fatalf("KickPlayerFromGameLobby: err = %v", err)
+	}
+	if err := session.Send(ctx, "BanPlayerFromGameLobby", map[string]any{"slot": json.Number("2")}); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-received; got != `{"type":"webui","message":"BanPlayerFromGameLobby","payload":{"slot":2}}` {
+		t.Fatalf("sent %s", got)
+	}
+}
+
+func TestTryReceiveReturnsWaitingEventsWithoutBlocking(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ws, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = ws.CloseNow() }()
+		_ = ws.Write(r.Context(), websocket.MessageText, []byte(`{"messageType":"GameLobbySetup","payload":{}}`))
+		_ = ws.Write(r.Context(), websocket.MessageText, []byte(`{"messageType":"ChatMessage","payload":{}}`))
+		_, _, _ = ws.Read(r.Context())
+	}))
+	defer server.Close()
+	port, _ := strconv.Atoi(server.URL[strings.LastIndex(server.URL, ":")+1:])
+
+	ctx := context.Background()
+	session, err := gamesocket.NewDialer().Dial(ctx, dto.GameConnection{Port: port, Session: "12345678901"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := session.Receive(ctx)
+	if err != nil || first.MessageType != "GameLobbySetup" {
+		t.Fatalf("Receive = %+v, %v", first, err)
+	}
+	var second dto.GameEvent
+	for deadline := time.Now().Add(3 * time.Second); second.MessageType == ""; {
+		ev, ok, err := session.TryReceive()
+		if err != nil || time.Now().After(deadline) {
+			t.Fatalf("TryReceive: %v", err)
+		}
+		if ok {
+			second = ev
+		}
+	}
+	if second.MessageType != "ChatMessage" {
+		t.Fatalf("second = %+v", second)
+	}
+	if _, ok, err := session.TryReceive(); ok || err != nil {
+		t.Fatalf("nothing waiting: ok = %v, err = %v", ok, err)
+	}
+	_ = session.Close()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, _, err := session.TryReceive(); err != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("TryReceive reported no error after Close")
+		}
 	}
 }
 

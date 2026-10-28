@@ -148,6 +148,11 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		err = s.engine.Configure(dto.FollowConfig{Tags: &saved.Tags, IncludeTeam: &saved.IncludeTeam, AskPassword: &saved.AskPassword,
 			JoinHostTeam: &saved.JoinHostTeam})
 	}
+	if err == nil {
+		// After the group, so a player on both lists leaves the group.
+		err = s.engine.Configure(dto.FollowConfig{Blacklist: &saved.Blacklist, AutoBan: &saved.AutoBan,
+			BlacklistManualBans: &saved.BlacklistManualBans})
+	}
 	if err == nil && saved.Host != nil {
 		err = s.engine.ConfigureHost(dto.HostConfig{Settings: saved.Host})
 	}
@@ -346,41 +351,83 @@ func (s *Service) read(ctx context.Context, session contract.GameSession) {
 			s.notify()
 			return
 		}
-		if ev.Malformed {
-			s.logger.WarnContext(ctx, "companion.event_malformed")
-			off := false
-			_ = s.engine.Configure(dto.FollowConfig{Enabled: &off})
-			s.engine.Note("The game sent something unrecognized. Follow is off.")
-		} else {
-			// The type only: payloads hold friends' details. The custom game
-			// list streams several updates a second; diagnostics count them.
-			if screen, ok := ev.Payload["screen"].(string); ok && ev.MessageType == "SetGlueScreen" {
-				s.logger.InfoContext(ctx, "companion.screen", slog.String("screen", screen))
-			} else if !quietEvents[ev.MessageType] {
-				s.logger.DebugContext(ctx, "companion.event", slog.String("type", ev.MessageType))
-			}
-			s.engine.Receive(ev)
-			s.recent.Receive(ev)
-			s.typeChatLines(ctx)
-			if ev.MessageType == "GameLobbySetup" {
-				s.logLobby(ctx, ev)
-			}
-			if ev.MessageType == "LoggedOut" {
-				// This game is signed out, often because the same account
-				// signed in from another copy: find the game again.
-				s.dropSession()
-				s.nextDiscovery = time.Time{}
-				s.logStatus()
-				s.mu.Unlock()
-				s.logger.InfoContext(ctx, "companion.disconnected", slog.String("reason", "logged out"))
-				s.notify()
-				return
-			}
+		if s.handle(ctx, ev) || s.sendBan(ctx, session) {
+			// This game is signed out, often because the same account
+			// signed in from another copy: find the game again.
+			s.dropSession()
+			s.nextDiscovery = time.Time{}
+			s.logStatus()
+			s.mu.Unlock()
+			s.logger.InfoContext(ctx, "companion.disconnected", slog.String("reason", "logged out"))
+			s.notify()
+			return
 		}
 		s.logStatus()
 		s.mu.Unlock()
 		s.notify()
 	}
+}
+
+// handle applies one event from the game. It reports true when the game
+// signed out. It runs with s.mu held.
+func (s *Service) handle(ctx context.Context, ev dto.GameEvent) (loggedOut bool) {
+	if ev.Malformed {
+		s.logger.WarnContext(ctx, "companion.event_malformed")
+		off := false
+		_ = s.engine.Configure(dto.FollowConfig{Enabled: &off})
+		s.engine.Note("The game sent something unrecognized. Follow is off.")
+		return false
+	}
+	// The type only: payloads hold friends' details. The custom game list
+	// streams several updates a second; diagnostics count them.
+	if screen, ok := ev.Payload["screen"].(string); ok && ev.MessageType == "SetGlueScreen" {
+		s.logger.InfoContext(ctx, "companion.screen", slog.String("screen", screen))
+	} else if !quietEvents[ev.MessageType] {
+		s.logger.DebugContext(ctx, "companion.event", slog.String("type", ev.MessageType))
+	}
+	s.engine.Receive(ev)
+	for _, warning := range s.engine.TakeBanMistakes() {
+		s.logger.WarnContext(ctx, "follow.ban_mistake", slog.String("warning", warning))
+	}
+	if s.engine.TakeBlacklistChanged() {
+		// A player banned by hand joined the blacklist.
+		if err := s.save(); err != nil {
+			s.logger.ErrorContext(ctx, "companion.preferences_save", slog.Any("error", err))
+			s.prefsError = saveFailed
+		} else {
+			s.prefsError = ""
+		}
+	}
+	s.recent.Receive(ev)
+	s.typeChatLines(ctx)
+	if ev.MessageType == "GameLobbySetup" {
+		s.logLobby(ctx, ev)
+	}
+	return ev.MessageType == "LoggedOut"
+}
+
+// sendBan sends the ban the engine chose, if any (docs/adr/0008). The
+// game's Ban takes only a slot, so every event already waiting on the
+// socket is handled first, without waiting for more, and the engine checks
+// its choice against the newest lobby update before sending. There is no
+// safe way to ask the game for the lobby (GetGameInfo and
+// SendGameLobbySetup closed the game), so the waiting events are the
+// newest it has. It reports true when the game signed out meanwhile. It
+// runs with s.mu held.
+func (s *Service) sendBan(ctx context.Context, session contract.GameSession) (loggedOut bool) {
+	for s.engine.HasPendingBan() {
+		for {
+			ev, ok, err := session.TryReceive()
+			if err != nil || !ok {
+				break
+			}
+			if s.handle(ctx, ev) {
+				return true
+			}
+		}
+		s.engine.SendPendingBan()
+	}
+	return false
 }
 
 // State returns the current snapshot.
@@ -409,7 +456,9 @@ func (s *Service) Configure(cfg dto.FollowConfig) (dto.FollowState, error) {
 	s.mu.Lock()
 	err := s.engine.Configure(cfg)
 	s.logger.Info("follow.configure", configAttrs(cfg, err)...)
-	if err == nil && (cfg.Tags != nil || cfg.IncludeTeam != nil || cfg.AskPassword != nil || cfg.JoinHostTeam != nil) {
+	if err == nil && (cfg.Tags != nil || cfg.IncludeTeam != nil || cfg.AskPassword != nil || cfg.JoinHostTeam != nil ||
+		cfg.Blacklist != nil || cfg.BlacklistAdd != nil || cfg.BlacklistRemove != nil || cfg.AutoBan != nil ||
+		cfg.BlacklistManualBans != nil) {
 		if saveErr := s.save(); saveErr != nil {
 			s.logger.Error("companion.preferences_save", slog.Any("error", saveErr))
 			s.prefsError = saveFailed
@@ -439,6 +488,18 @@ func configAttrs(cfg dto.FollowConfig, err error) []any {
 	}
 	if cfg.IncludeTeam != nil {
 		attrs = append(attrs, slog.Bool("include_team", *cfg.IncludeTeam))
+	}
+	if cfg.BlacklistAdd != nil {
+		attrs = append(attrs, slog.Int("blacklist_add", len(cfg.BlacklistAdd)))
+	}
+	if cfg.BlacklistRemove != nil {
+		attrs = append(attrs, slog.Int("blacklist_remove", len(cfg.BlacklistRemove)))
+	}
+	if cfg.AutoBan != nil {
+		attrs = append(attrs, slog.Bool("auto_ban", *cfg.AutoBan))
+	}
+	if cfg.BlacklistManualBans != nil {
+		attrs = append(attrs, slog.Bool("blacklist_manual_bans", *cfg.BlacklistManualBans))
 	}
 	if cfg.Diagnostic != nil {
 		attrs = append(attrs, slog.Bool("preview", *cfg.Diagnostic))
@@ -513,6 +574,7 @@ func (s *Service) save() error {
 		Tags: s.engine.ManualTags(), IncludeTeam: s.engine.IncludeTeam(), AskPassword: s.engine.AskPassword(),
 		JoinHostTeam: s.engine.JoinHostTeam(),
 		MapsFolder:   s.mapsFolder, Host: &host,
+		Blacklist: s.engine.Blacklist(), AutoBan: s.engine.AutoBan(), BlacklistManualBans: s.engine.BlacklistManualBans(),
 	})
 }
 

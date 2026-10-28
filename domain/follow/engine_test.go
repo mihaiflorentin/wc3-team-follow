@@ -43,6 +43,8 @@ func (f *fixture) advance(d time.Duration) { f.time = f.time.Add(d) }
 
 func (f *fixture) receive(kind string, payload map[string]any) {
 	f.engine.Receive(dto.GameEvent{MessageType: kind, Payload: payload})
+	// As the companion does once no other event is waiting.
+	f.engine.SendPendingBan()
 }
 
 func member(tag string) map[string]any {

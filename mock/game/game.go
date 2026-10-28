@@ -131,6 +131,20 @@ func (s *Session) Receive(ctx context.Context) (dto.GameEvent, error) {
 	}
 }
 
+func (s *Session) TryReceive() (dto.GameEvent, bool, error) {
+	select {
+	case ev := <-s.events:
+		return ev, true, nil
+	default:
+	}
+	select {
+	case <-s.closed:
+		return dto.GameEvent{}, false, errors.New("closed")
+	default:
+		return dto.GameEvent{}, false, nil
+	}
+}
+
 func (s *Session) Close() error {
 	s.once.Do(func() { close(s.closed) })
 	return nil

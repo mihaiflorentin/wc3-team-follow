@@ -17,7 +17,20 @@ type FollowConfig struct {
 	JoinHostTeam *bool `json:"joinHostTeam,omitempty"`
 	// Diagnostic selects preview mode: watch friends but never join.
 	Diagnostic *bool `json:"diagnostic,omitempty"`
-	Enabled    *bool `json:"enabled,omitempty"`
+	// Blacklist replaces the whole blacklist, as loaded from this computer.
+	Blacklist *[]BlacklistEntry `json:"blacklist,omitempty"`
+	// BlacklistAdd adds BattleTags to the blacklist, stamped with the time
+	// they were added, and takes them out of the follow group.
+	BlacklistAdd []string `json:"blacklistAdd,omitempty"`
+	// BlacklistRemove takes BattleTags off the blacklist.
+	BlacklistRemove []string `json:"blacklistRemove,omitempty"`
+	// AutoBan switches banning blacklisted players from lobbies the player
+	// hosts on or off, keeping the list.
+	AutoBan *bool `json:"autoBan,omitempty"`
+	// BlacklistManualBans adds players the player bans by hand, in a lobby
+	// they host, to the blacklist.
+	BlacklistManualBans *bool `json:"blacklistManualBans,omitempty"`
+	Enabled             *bool `json:"enabled,omitempty"`
 	// FromMenus confirms the player is in the game menus, outside a lobby,
 	// match or queue. Enabling Follow requires it.
 	FromMenus bool `json:"fromMenus,omitempty"`
@@ -74,6 +87,25 @@ type FollowState struct {
 	// LobbyTags are the BattleTags of the other humans in the player's
 	// current lobby or match, for the Recent players status. Never nil.
 	LobbyTags []string `json:"lobbyTags"`
+	// Blacklist lists the players banned from lobbies the player hosts,
+	// most recently added first. Never nil.
+	Blacklist []BlacklistEntry `json:"blacklist"`
+	// AutoBan reports whether blacklisted players are banned automatically.
+	AutoBan bool `json:"autoBan"`
+	// BlacklistManualBans reports whether players banned by hand join the
+	// blacklist.
+	BlacklistManualBans bool `json:"blacklistManualBans"`
+}
+
+// MaxBlacklist is how many BattleTags the blacklist holds.
+const MaxBlacklist = 500
+
+// BlacklistEntry is one blacklisted player.
+type BlacklistEntry struct {
+	// Tag is the player's BattleTag.
+	Tag string `json:"tag"`
+	// Added is when the player was blacklisted.
+	Added time.Time `json:"added"`
 }
 
 // TeamMember is one player of the game's current team.
@@ -161,6 +193,13 @@ type Preferences struct {
 	MapsFolder string `json:"mapsFolder,omitempty"`
 	// Host is the saved Auto-host setup.
 	Host *HostSettings `json:"host,omitempty"`
+	// Blacklist is the players banned from lobbies the player hosts.
+	Blacklist []BlacklistEntry `json:"blacklist"`
+	// AutoBan bans blacklisted players automatically; on by default.
+	AutoBan bool `json:"autoBan"`
+	// BlacklistManualBans adds players banned by hand to the blacklist; on
+	// by default.
+	BlacklistManualBans bool `json:"blacklistManualBans"`
 }
 
 // HostSettings is how Auto-host creates lobbies. Everything else uses the

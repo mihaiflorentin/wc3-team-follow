@@ -15,7 +15,8 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
-const maxFileSize = 16 * 1024
+// maxFileSize leaves room for a full blacklist (dto.MaxBlacklist).
+const maxFileSize = 256 * 1024
 
 // ErrUnreadable reports a saved file that exists but cannot be used. The
 // file is left untouched.
@@ -39,6 +40,12 @@ type fileShape struct {
 	JoinHostTeam *bool      `json:"joinHostTeam,omitempty"`
 	MapsFolder   string     `json:"mapsFolder,omitempty"`
 	Host         *savedHost `json:"host,omitempty"`
+	// Blacklist is missing in files saved before it existed.
+	Blacklist []dto.BlacklistEntry `json:"blacklist,omitempty"`
+	// AutoBan is written only when off: a file without it is on.
+	AutoBan *bool `json:"autoBan,omitempty"`
+	// BlacklistManualBans is written only when off: a file without it is on.
+	BlacklistManualBans *bool `json:"blacklistManualBans,omitempty"`
 }
 
 // savedHost is the Auto-host setup as saved. Settings saved before Game
@@ -60,7 +67,8 @@ func (h *savedHost) UnmarshalJSON(data []byte) error {
 func (s *Store) Load() (dto.Preferences, error) {
 	info, err := os.Stat(s.file)
 	if errors.Is(err, fs.ErrNotExist) {
-		return dto.Preferences{Tags: []string{}, IncludeTeam: true, JoinHostTeam: true}, nil
+		return dto.Preferences{Tags: []string{}, IncludeTeam: true, JoinHostTeam: true, Blacklist: []dto.BlacklistEntry{}, AutoBan: true,
+			BlacklistManualBans: true}, nil
 	}
 	if err != nil {
 		return dto.Preferences{}, fmt.Errorf("%w: %v", ErrUnreadable, err)
@@ -76,13 +84,18 @@ func (s *Store) Load() (dto.Preferences, error) {
 	if err := json.Unmarshal(content, &saved); err != nil || saved.Tags == nil || saved.IncludeTeam == nil {
 		return dto.Preferences{}, fmt.Errorf("%w: unrecognized content", ErrUnreadable)
 	}
+	blacklist := saved.Blacklist
+	if blacklist == nil {
+		blacklist = []dto.BlacklistEntry{}
+	}
 	return dto.Preferences{Tags: saved.Tags, IncludeTeam: *saved.IncludeTeam, AskPassword: saved.AskPassword,
 		JoinHostTeam: saved.JoinHostTeam == nil || *saved.JoinHostTeam, MapsFolder: saved.MapsFolder,
-		Host: (*dto.HostSettings)(saved.Host)}, nil
+		Host: (*dto.HostSettings)(saved.Host), Blacklist: blacklist, AutoBan: saved.AutoBan == nil || *saved.AutoBan,
+		BlacklistManualBans: saved.BlacklistManualBans == nil || *saved.BlacklistManualBans}, nil
 }
 
-// Save replaces the file atomically. Only the selection, the Maps folder and
-// the Auto-host setup are written.
+// Save replaces the file atomically. Only the selection, the Maps folder,
+// the Auto-host setup and the blacklist are written.
 func (s *Store) Save(prefs dto.Preferences) error {
 	tags := prefs.Tags
 	if tags == nil {
@@ -92,8 +105,16 @@ func (s *Store) Save(prefs dto.Preferences) error {
 	if !prefs.JoinHostTeam {
 		joinHostTeam = &prefs.JoinHostTeam
 	}
+	var autoBan, manualBans *bool
+	if !prefs.AutoBan {
+		autoBan = &prefs.AutoBan
+	}
+	if !prefs.BlacklistManualBans {
+		manualBans = &prefs.BlacklistManualBans
+	}
 	content, err := json.MarshalIndent(fileShape{Tags: tags, IncludeTeam: &prefs.IncludeTeam, AskPassword: prefs.AskPassword, JoinHostTeam: joinHostTeam,
-		MapsFolder: prefs.MapsFolder, Host: (*savedHost)(prefs.Host)}, "", "  ")
+		MapsFolder: prefs.MapsFolder, Host: (*savedHost)(prefs.Host), Blacklist: prefs.Blacklist, AutoBan: autoBan,
+		BlacklistManualBans: manualBans}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode friends: %w", err)
 	}

@@ -118,6 +118,24 @@ func TestJoinHostTeamIsLoadedAndSaved(t *testing.T) {
 	}
 }
 
+func TestBlacklistIsLoadedAndSaved(t *testing.T) {
+	added := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	prefs := mockprefs.New(dto.Preferences{Tags: []string{"Player#1234"}, IncludeTeam: true, JoinHostTeam: true,
+		Blacklist: []dto.BlacklistEntry{{Tag: "Arthas#1123", Added: added}}, AutoBan: false})
+	h := newHarness(t, prefs)
+	if s := h.svc.State(); s.AutoBan || len(s.Blacklist) != 1 || s.Blacklist[0].Tag != "Arthas#1123" {
+		t.Fatalf("the saved blacklist wasn't loaded: %+v %v", s.Blacklist, s.AutoBan)
+	}
+	on := true
+	if _, err := h.svc.Configure(dto.FollowConfig{BlacklistAdd: []string{"Player#1234"}, AutoBan: &on}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := prefs.Load()
+	if !got.AutoBan || len(got.Blacklist) != 2 || got.Blacklist[0].Tag != "Player#1234" || len(got.Tags) != 0 {
+		t.Fatalf("saved %+v", got)
+	}
+}
+
 func TestLoadsSavedFriendsAndStartsOff(t *testing.T) {
 	h := newHarness(t, mockprefs.New(dto.Preferences{Tags: []string{"One#1234", "Two#2345"}, IncludeTeam: false}))
 	s := h.svc.State()

@@ -3,10 +3,12 @@ package settings_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/settings"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
@@ -15,7 +17,7 @@ import (
 func TestSaveAndLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	tags := []string{"One#1234", "Two#2345", "Three#3456"}
-	if err := settings.New(dir).Save(dto.Preferences{Tags: tags, IncludeTeam: false, JoinHostTeam: true}); err != nil {
+	if err := settings.New(dir).Save(dto.Preferences{Tags: tags, IncludeTeam: false, JoinHostTeam: true, AutoBan: true, BlacklistManualBans: true}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := settings.New(dir).Load()
@@ -58,6 +60,59 @@ func TestJoinHostTeamIsOnUnlessSavedOff(t *testing.T) {
 	}
 	if got, err := settings.New(dir).Load(); err != nil || got.JoinHostTeam {
 		t.Fatalf("saved off: loaded %+v, %v", got, err)
+	}
+}
+
+func TestBlacklistAndAutoBanRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	added := time.Date(2026, 10, 28, 9, 30, 0, 0, time.UTC)
+	list := []dto.BlacklistEntry{{Tag: "Arthas#1123", Added: added}, {Tag: "Player#1234", Added: added.Add(-time.Hour)}}
+	if err := settings.New(dir).Save(dto.Preferences{Tags: []string{}, IncludeTeam: true, Blacklist: list, AutoBan: false}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := settings.New(dir).Load()
+	if err != nil || got.AutoBan || len(got.Blacklist) != 2 || got.Blacklist[0].Tag != "Arthas#1123" || !got.Blacklist[0].Added.Equal(added) ||
+		got.Blacklist[1].Tag != "Player#1234" {
+		t.Fatalf("loaded %+v, %v", got, err)
+	}
+}
+
+func TestOlderFileLoadsAnEmptyBlacklistWithAutoBanOn(t *testing.T) {
+	dir := t.TempDir()
+	if got, err := settings.New(dir).Load(); err != nil || !got.AutoBan || got.Blacklist == nil || len(got.Blacklist) != 0 {
+		t.Fatalf("no file: loaded %+v, %v", got, err)
+	}
+	_ = os.MkdirAll(filepath.Join(dir, "settings"), 0o700)
+	_ = os.WriteFile(filepath.Join(dir, "settings", "friends.json"), []byte(`{"tags":[],"includeTeam":true}`), 0o600)
+	if got, err := settings.New(dir).Load(); err != nil || !got.AutoBan || !got.BlacklistManualBans || got.Blacklist == nil || len(got.Blacklist) != 0 {
+		t.Fatalf("older file: loaded %+v, %v", got, err)
+	}
+}
+
+func TestBlacklistManualBansIsOnUnlessSavedOff(t *testing.T) {
+	dir := t.TempDir()
+	if got, err := settings.New(dir).Load(); err != nil || !got.BlacklistManualBans {
+		t.Fatalf("no file: loaded %+v, %v", got, err)
+	}
+	if err := settings.New(dir).Save(dto.Preferences{Tags: []string{}, IncludeTeam: true, AutoBan: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := settings.New(dir).Load(); err != nil || got.BlacklistManualBans {
+		t.Fatalf("saved off: loaded %+v, %v", got, err)
+	}
+}
+
+func TestAFullBlacklistFitsTheFile(t *testing.T) {
+	dir := t.TempDir()
+	list := make([]dto.BlacklistEntry, dto.MaxBlacklist)
+	for i := range list {
+		list[i] = dto.BlacklistEntry{Tag: fmt.Sprintf("LongPlayerName%018d#123456789012", i), Added: time.Now().UTC()}
+	}
+	if err := settings.New(dir).Save(dto.Preferences{Tags: []string{}, IncludeTeam: true, Blacklist: list, AutoBan: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := settings.New(dir).Load(); err != nil || len(got.Blacklist) != dto.MaxBlacklist {
+		t.Fatalf("loaded %d, %v", len(got.Blacklist), err)
 	}
 }
 

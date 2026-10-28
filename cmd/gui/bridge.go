@@ -161,6 +161,29 @@ func (b *Bridge) ClearRecentPlayers() (dto.FollowState, error) {
 	return b.companion.ClearRecentPlayers()
 }
 
+// AddToBlacklist blacklists one or more BattleTags; they also leave the
+// follow group. The page confirms first when adding several.
+func (b *Bridge) AddToBlacklist(tags []string) (dto.FollowState, error) {
+	return b.companion.Configure(dto.FollowConfig{BlacklistAdd: tags})
+}
+
+// RemoveFromBlacklist takes a BattleTag off the blacklist.
+func (b *Bridge) RemoveFromBlacklist(tag string) (dto.FollowState, error) {
+	return b.companion.Configure(dto.FollowConfig{BlacklistRemove: []string{tag}})
+}
+
+// SetAutoBan switches banning blacklisted players on or off, keeping the
+// list.
+func (b *Bridge) SetAutoBan(on bool) (dto.FollowState, error) {
+	return b.companion.Configure(dto.FollowConfig{AutoBan: &on})
+}
+
+// SetBlacklistManualBans switches adding players banned by hand to the
+// blacklist on or off.
+func (b *Bridge) SetBlacklistManualBans(on bool) (dto.FollowState, error) {
+	return b.companion.Configure(dto.FollowConfig{BlacklistManualBans: &on})
+}
+
 // RequestKeyboardPermission asks the system for the permission Game mode's
 // typing needs. The page calls it only when the player clicks to allow
 // typing.

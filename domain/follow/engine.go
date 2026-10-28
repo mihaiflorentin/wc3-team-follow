@@ -155,6 +155,20 @@ type Engine struct {
 	joinHostTeam bool
 	// joined is the lobby Auto-join joined, while the player is in it.
 	joined *joinedLobby
+	// blacklist is who auto-ban keeps out of lobbies the player hosts,
+	// newest first; autoBan switches it on (the default).
+	blacklist []dto.BlacklistEntry
+	autoBan   bool
+	ban       banState
+	// manualBans adds players the player bans by hand to the blacklist (on
+	// by default); blacklistChanged reports such an add for saving.
+	manualBans       bool
+	blacklistChanged bool
+	// banMistakes are warnings about wrong bans, for TakeBanMistakes.
+	banMistakes []string
+	// selfTag is the player's own BattleTag, once the team or a lobby
+	// showed it.
+	selfTag string
 
 	inMatch      bool
 	awaitingMenu bool
@@ -189,6 +203,8 @@ func NewEngine(send Sender, now func() time.Time, verified []string) *Engine {
 		diagnostic:     true,
 		includeTeam:    true,
 		joinHostTeam:   true,
+		autoBan:        true,
+		manualBans:     true,
 		status:         "Waiting for Warcraft III.",
 		friends:        map[string]friendRecord{},
 		roster:         map[string]friendRecord{},
@@ -225,6 +241,7 @@ func (e *Engine) Connected() bool { return e.connected }
 func (e *Engine) Connection(connected bool, version string) {
 	e.connected, e.version = connected, version
 	e.enabled, e.pending, e.password, e.joined = false, nil, nil, nil
+	e.ban = banState{}
 	e.team, e.teamAt = nil, time.Time{}
 	clear(e.friends)
 	clear(e.roster)
@@ -258,10 +275,18 @@ func (e *Engine) selectionChanged() {
 // Configure applies a selection or mode change, or switches Follow on or
 // off. Any selection or mode change switches Follow off.
 func (e *Engine) Configure(cfg dto.FollowConfig) error {
+	if err := e.configureBlacklist(cfg); err != nil {
+		return err
+	}
 	if cfg.Tags != nil {
 		tags, err := NormalizeTags(*cfg.Tags)
 		if err != nil {
 			return err
+		}
+		for _, tag := range tags {
+			if e.blacklisted(tag) {
+				return errors.New(tag + " is on your blacklist. Remove them from it before following them.")
+			}
 		}
 		e.manualTags = tags
 		e.selectionChanged()
@@ -394,6 +419,9 @@ func (e *Engine) Receive(event dto.GameEvent) {
 					continue
 				}
 				e.team = append(e.team, member{battleTag: tag, isSelf: isTrue(x["isSelf"]), isFriend: isTrue(x["isFriend"]), isOwner: isTrue(x["isOwner"])})
+				if isTrue(x["isSelf"]) && tagPattern.MatchString(tag) {
+					e.selfTag = tag
+				}
 			}
 			e.teamAt = e.now()
 		}
@@ -439,10 +467,21 @@ func (e *Engine) Receive(event dto.GameEvent) {
 		}
 		e.pending, e.password = nil, nil
 		e.busy, e.awaitingMenu, e.menuReady = true, false, false
-	case "LobbyCountdown":
-		if e.joined != nil {
-			e.joined.countdown = isTrue(object(p["details"])["countdownActive"])
+		for _, raw := range players {
+			x := object(raw)
+			if name, _ := x["name"].(string); isTrue(x["isSelf"]) && tagPattern.MatchString(strings.TrimSpace(name)) {
+				e.selfTag = strings.TrimSpace(name)
+			}
 		}
+		e.banBlacklisted(p)
+	case "LobbyCountdown":
+		details := object(p["details"])
+		if e.joined != nil {
+			e.joined.countdown = isTrue(details["countdownActive"])
+		}
+		e.ban.locked = isTrue(details["countdownActive"]) && isTrue(details["countdownLocked"])
+	case "ChatMessage":
+		e.confirmBan(p)
 	case "IsGameUIActive":
 		switch p["isActive"] {
 		case "true", true:
@@ -455,11 +494,11 @@ func (e *Engine) Receive(event dto.GameEvent) {
 		e.busy, e.menuReady = true, false
 		e.pause("Follow is on but paused while entering a lobby.")
 	case "PauseUI", "GameFound", "LoadingScreenUpdate":
-		e.joined = nil
+		e.joined, e.ban = nil, banState{}
 		e.inMatch, e.busy, e.menuReady = true, true, false
 		e.pause("Follow is on but paused while the game enters a match.")
 	case "MultiplayerGameLeave", "ExitedGame":
-		e.joined = nil
+		e.joined, e.ban = nil, banState{}
 		if kind == "ExitedGame" {
 			e.inMatch = false
 		}
@@ -847,31 +886,37 @@ func (e *Engine) JoinHostTeam() bool { return e.joinHostTeam }
 // identifiers or passwords.
 func (e *Engine) Snapshot() dto.FollowState {
 	s := dto.FollowState{
-		Connected:     e.connected,
-		Version:       e.version,
-		VerifiedBuild: e.VerifiedBuild(),
-		Enabled:       e.enabled,
-		Diagnostic:    e.diagnostic,
-		ManualTags:    e.ManualTags(),
-		IncludeTeam:   e.includeTeam,
-		AskPassword:   e.askPassword,
-		JoinHostTeam:  e.joinHostTeam,
-		Status:        e.status,
-		Screen:        e.screen,
-		Busy:          e.busy,
-		Queued:        e.queued,
-		InMatch:       e.inMatch,
-		Paused:        e.enabled && (e.busy || e.queued || e.inMatch || e.awaitingMenu),
-		InMenus:       e.connected && e.menusKnown && !e.busy && !e.queued && !e.inMatch && !e.awaitingMenu,
-		JoinPending:   e.pending != nil,
-		Team:          []dto.TeamMember{},
-		Watched:       []dto.WatchedMember{},
-		Friends:       []dto.WatchedMember{},
-		Roster:        []dto.Friend{},
-		Log:           slices.Clone(e.log),
+		Connected:           e.connected,
+		Version:             e.version,
+		VerifiedBuild:       e.VerifiedBuild(),
+		Enabled:             e.enabled,
+		Diagnostic:          e.diagnostic,
+		ManualTags:          e.ManualTags(),
+		IncludeTeam:         e.includeTeam,
+		AskPassword:         e.askPassword,
+		JoinHostTeam:        e.joinHostTeam,
+		Blacklist:           e.Blacklist(),
+		AutoBan:             e.autoBan,
+		BlacklistManualBans: e.manualBans,
+		Status:              e.status,
+		Screen:              e.screen,
+		Busy:                e.busy,
+		Queued:              e.queued,
+		InMatch:             e.inMatch,
+		Paused:              e.enabled && (e.busy || e.queued || e.inMatch || e.awaitingMenu),
+		InMenus:             e.connected && e.menusKnown && !e.busy && !e.queued && !e.inMatch && !e.awaitingMenu,
+		JoinPending:         e.pending != nil,
+		Team:                []dto.TeamMember{},
+		Watched:             []dto.WatchedMember{},
+		Friends:             []dto.WatchedMember{},
+		Roster:              []dto.Friend{},
+		Log:                 slices.Clone(e.log),
 	}
 	if s.ManualTags == nil {
 		s.ManualTags = []string{}
+	}
+	if s.Blacklist == nil {
+		s.Blacklist = []dto.BlacklistEntry{}
 	}
 	if s.Log == nil {
 		s.Log = []dto.LogEntry{}

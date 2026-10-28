@@ -19,6 +19,9 @@ import (
 const (
 	dialTimeout = 5 * time.Second
 	readLimit   = 8 << 20
+	// queued is how many received events wait for Receive or TryReceive
+	// before the reader waits too.
+	queued = 256
 )
 
 // allowed lists every command the companion may send, each one the game's
@@ -46,6 +49,10 @@ var allowed = map[string]bool{
 	// The lobby and match chat box (docs/adr/0006). Only Auto-host's own
 	// commands may be typed, one short line at a time (domain/follow).
 	"SendGameChatMessage": true,
+	// Auto-ban: the Ban item of a lobby slot's name menu (docs/adr/0008).
+	// Only for blacklisted players in a lobby the player hosts
+	// (domain/follow). KickPlayerFromGameLobby is not allowed.
+	"BanPlayerFromGameLobby": true,
 }
 
 // ErrNotAllowed reports a command outside the allowlist.
@@ -71,12 +78,39 @@ func (Dialer) Dial(ctx context.Context, conn dto.GameConnection) (contract.GameS
 		return nil, errors.New("dial game: the menu service refused the connection")
 	}
 	ws.SetReadLimit(readLimit)
-	return &Session{ws: ws}, nil
+	readCtx, stop := context.WithCancel(context.Background())
+	s := &Session{ws: ws, events: make(chan dto.GameEvent, queued), stop: stop}
+	go s.readAll(readCtx)
+	return s, nil
 }
 
-// Session is one open connection to the menu service.
+// Session is one open connection to the menu service. A reader goroutine
+// receives events as they arrive, so TryReceive can return the ones
+// already waiting.
 type Session struct {
-	ws *websocket.Conn
+	ws     *websocket.Conn
+	events chan dto.GameEvent
+	stop   context.CancelFunc
+	// err is why reading ended; set before events is closed.
+	err error
+}
+
+// readAll reads events until the connection ends, then closes events.
+func (s *Session) readAll(ctx context.Context) {
+	defer close(s.events)
+	for {
+		_, body, err := s.ws.Read(ctx)
+		if err != nil {
+			s.err = fmt.Errorf("receive: %w", err)
+			return
+		}
+		select {
+		case s.events <- Decode(body):
+		case <-ctx.Done():
+			s.err = fmt.Errorf("receive: %w", ctx.Err())
+			return
+		}
+	}
 }
 
 type outbound struct {
@@ -106,11 +140,28 @@ func (s *Session) Send(ctx context.Context, message string, payload map[string]a
 // Receive returns the next event. A message that is not a JSON object with
 // a string messageType comes back with Malformed set.
 func (s *Session) Receive(ctx context.Context) (dto.GameEvent, error) {
-	_, body, err := s.ws.Read(ctx)
-	if err != nil {
-		return dto.GameEvent{}, fmt.Errorf("receive: %w", err)
+	select {
+	case ev, ok := <-s.events:
+		if !ok {
+			return dto.GameEvent{}, s.err
+		}
+		return ev, nil
+	case <-ctx.Done():
+		return dto.GameEvent{}, fmt.Errorf("receive: %w", ctx.Err())
 	}
-	return Decode(body), nil
+}
+
+// TryReceive returns the next event already received, without waiting.
+func (s *Session) TryReceive() (dto.GameEvent, bool, error) {
+	select {
+	case ev, ok := <-s.events:
+		if !ok {
+			return dto.GameEvent{}, false, s.err
+		}
+		return ev, true, nil
+	default:
+		return dto.GameEvent{}, false, nil
+	}
 }
 
 // Decode parses one event. Numbers stay json.Number so account
@@ -132,5 +183,6 @@ func Decode(body []byte) dto.GameEvent {
 
 // Close ends the session.
 func (s *Session) Close() error {
+	defer s.stop()
 	return s.ws.Close(websocket.StatusNormalClosure, "")
 }

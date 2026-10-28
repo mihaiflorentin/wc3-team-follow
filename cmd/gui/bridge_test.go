@@ -3,6 +3,7 @@ package gui_test
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/mihaiflorentin/wc3-team-follow/cmd/gui"
@@ -102,6 +103,32 @@ func TestBridgePassesClearRecentPlayersOn(t *testing.T) {
 	}
 	c.Err = errors.New("Recent players couldn't be cleared on this computer. Try again.")
 	if _, err := gui.NewBridge(c, "", "", "").ClearRecentPlayers(); err == nil || err.Error() != c.Err.Error() {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestBridgePassesBlacklistCallsOn(t *testing.T) {
+	c := &mockcompanion.Companion{Current: dto.FollowState{Blacklist: []dto.BlacklistEntry{{Tag: "Arthas#1123"}}}}
+	b := gui.NewBridge(c, "", "", "")
+	if s, err := b.AddToBlacklist([]string{"Arthas#1123"}); err != nil || len(s.Blacklist) != 1 ||
+		!slices.Equal(c.LastConfig.BlacklistAdd, []string{"Arthas#1123"}) {
+		t.Fatalf("add one: %+v, %v", c.LastConfig, err)
+	}
+	if _, err := b.AddToBlacklist([]string{"Player#1234", "Player#5678"}); err != nil || len(c.LastConfig.BlacklistAdd) != 2 {
+		t.Fatalf("add many: %+v, %v", c.LastConfig, err)
+	}
+	if _, err := b.RemoveFromBlacklist("Player#1234"); err != nil || !slices.Equal(c.LastConfig.BlacklistRemove, []string{"Player#1234"}) ||
+		c.LastConfig.BlacklistAdd != nil {
+		t.Fatalf("remove: %+v, %v", c.LastConfig, err)
+	}
+	if _, err := b.SetAutoBan(false); err != nil || c.LastConfig.AutoBan == nil || *c.LastConfig.AutoBan {
+		t.Fatalf("auto-ban: %+v, %v", c.LastConfig, err)
+	}
+	if _, err := b.SetBlacklistManualBans(false); err != nil || c.LastConfig.BlacklistManualBans == nil || *c.LastConfig.BlacklistManualBans {
+		t.Fatalf("manual bans: %+v, %v", c.LastConfig, err)
+	}
+	c.Err = errors.New("You can't blacklist yourself.")
+	if _, err := b.AddToBlacklist([]string{"Self#1111"}); err == nil || err.Error() != c.Err.Error() {
 		t.Fatalf("err = %v", err)
 	}
 }
