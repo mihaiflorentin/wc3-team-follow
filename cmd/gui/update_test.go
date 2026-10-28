@@ -39,17 +39,20 @@ func TestBridgePassesUpdateCallsOn(t *testing.T) {
 	}
 }
 
-func TestUpdateOpensTheOfferedReleasePage(t *testing.T) {
-	c := &mockcompanion.Companion{}
+func TestUpdateInstallsInTheAppAndCancelAndDoneArePassedOn(t *testing.T) {
+	c := &mockcompanion.Companion{Current: dto.FollowState{Update: dto.UpdateState{Phase: dto.UpdateDownloading}}}
 	b, opened := updateBridge(c)
-	if err := b.Update(); err == nil || len(*opened) != 0 {
-		t.Fatalf("opened a page with nothing on offer: %v %v", *opened, err)
+	if s, err := b.Update(); err != nil || c.InstallCalls != 1 || s.Update.Phase != dto.UpdateDownloading || len(*opened) != 0 {
+		t.Fatalf("Update = %+v, %v, opened %v", s.Update, err, *opened)
 	}
-	c.Current.Update = dto.UpdateState{Release: &dto.UpdateRelease{Version: "0.8.0", URL: page + "/tag/v0.8.0"}, ReleasesURL: page}
-	if err := b.Update(); err != nil || len(*opened) != 1 || (*opened)[0] != page+"/tag/v0.8.0" {
-		t.Fatalf("Update = %v, opened %v", err, *opened)
+	if b.CancelUpdate(); c.CancelCalls != 1 {
+		t.Fatal("Cancel not passed on")
 	}
-	if err := b.OpenReleasesPage(); err != nil || (*opened)[1] != page {
+	if b.DismissUpdateNotes(); c.DismissCalls != 1 {
+		t.Fatal("Done not passed on")
+	}
+	c.Current.Update = dto.UpdateState{ReleasesURL: page}
+	if err := b.OpenReleasesPage(); err != nil || len(*opened) != 1 || (*opened)[0] != page {
 		t.Fatalf("OpenReleasesPage = %v, opened %v", err, *opened)
 	}
 }
@@ -58,9 +61,6 @@ func TestTheBridgeOpensOnlyGitHubPages(t *testing.T) {
 	c := &mockcompanion.Companion{Current: dto.FollowState{Update: dto.UpdateState{
 		Release: &dto.UpdateRelease{URL: "javascript:alert(1)"}, ReleasesURL: "http://github.com/releases"}}}
 	b, opened := updateBridge(c)
-	if err := b.Update(); err == nil {
-		t.Fatal("opened a page off GitHub")
-	}
 	if err := b.OpenReleasesPage(); err == nil || len(*opened) != 0 {
 		t.Fatalf("opened %v", *opened)
 	}

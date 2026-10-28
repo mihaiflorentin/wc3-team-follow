@@ -32,6 +32,11 @@ type Companion struct {
 	CheckCalls int
 	LaterCalls int
 	SkipCalls  int
+	// InstallCalls, CancelCalls and DismissCalls count the in-app update
+	// calls.
+	InstallCalls int
+	CancelCalls  int
+	DismissCalls int
 	// NoteCalls counts SetNote calls; LastNoteTag and LastNoteText hold the
 	// last one's arguments.
 	NoteCalls    int
@@ -42,6 +47,21 @@ type Companion struct {
 func (c *Companion) CheckForUpdates() (dto.FollowState, error) {
 	c.CheckCalls++
 	return c.Current, c.Err
+}
+
+func (c *Companion) InstallUpdate() (dto.FollowState, error) {
+	c.InstallCalls++
+	return c.Current, c.Err
+}
+
+func (c *Companion) CancelUpdate() dto.FollowState {
+	c.CancelCalls++
+	return c.Current
+}
+
+func (c *Companion) DismissUpdateNotes() dto.FollowState {
+	c.DismissCalls++
+	return c.Current
 }
 
 func (c *Companion) UpdateLater() dto.FollowState {

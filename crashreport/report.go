@@ -63,6 +63,12 @@ func NotOpenedMessage(logDir string) string {
 	return msg
 }
 
+// UpdatedNotStartedMessage is the dialog text when the updated version
+// couldn't be started after an update.
+func UpdatedNotStartedMessage(err error) string {
+	return "Team Follow was updated, but the new version couldn't be started: " + err.Error() + "\n\nOpen Team Follow again."
+}
+
 // Message is the dialog text for reason.
 func Message(reason, logDir string) string {
 	if r := []rune(reason); len(r) > maxReason {

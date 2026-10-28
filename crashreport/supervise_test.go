@@ -29,6 +29,16 @@ func TestMain(m *testing.M) {
 	case "hang":
 		time.Sleep(30 * time.Second)
 		os.Exit(0)
+	case "restart":
+		fmt.Println("INFO gui.startup")
+		os.Exit(RestartCode)
+	case "relaunched":
+		// Records what an update restart passed to the new instance.
+		_ = os.WriteFile(os.Getenv("CRASHREPORT_OUT"), []byte(os.Getenv(RestartEnv)+"|"+os.Getenv(ChildEnv)), 0o600)
+		os.Exit(0)
+	case "linger":
+		time.Sleep(400 * time.Millisecond)
+		os.Exit(0)
 	case "env":
 		if !Supervised() {
 			os.Exit(7)

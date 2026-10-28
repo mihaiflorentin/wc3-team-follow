@@ -47,6 +47,16 @@ type Companion interface {
 	// SkipUpdate silences the release on offer for good; the next release is
 	// offered again.
 	SkipUpdate() (dto.FollowState, error)
+	// InstallUpdate downloads, verifies and installs the release on offer,
+	// after the player clicked Update. Its steps arrive with later states,
+	// ending in restarting (the window closes and Team Follow starts again
+	// in the new version) or failed (the running version is untouched).
+	InstallUpdate() (dto.FollowState, error)
+	// CancelUpdate stops the update's download.
+	CancelUpdate() dto.FollowState
+	// DismissUpdateNotes hides what the player had to redo after an
+	// update, such as the Linux setcap step.
+	DismissUpdateNotes() dto.FollowState
 	// SetNote saves the player's private note about the player with tag;
 	// empty text deletes it. Notes hold at most dto.MaxNoteLength characters
 	// and stay on this computer.

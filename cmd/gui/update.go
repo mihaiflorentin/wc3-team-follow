@@ -24,15 +24,15 @@ func (b *Bridge) SetCheckUpdates(on bool) (dto.FollowState, error) {
 	return b.companion.Configure(dto.FollowConfig{CheckUpdates: &on})
 }
 
-// Update opens the offered release's page in the browser, where the
-// player downloads it. The in-app update (issue 23) replaces this.
-func (b *Bridge) Update() error {
-	rel := b.companion.State().Update.Release
-	if rel == nil {
-		return errors.New("There is no update to install.")
-	}
-	return b.open(rel.URL)
-}
+// Update downloads, verifies and installs the release on offer, then
+// restarts Team Follow into it; the steps arrive with later states.
+func (b *Bridge) Update() (dto.FollowState, error) { return b.companion.InstallUpdate() }
+
+// CancelUpdate stops the update's download.
+func (b *Bridge) CancelUpdate() dto.FollowState { return b.companion.CancelUpdate() }
+
+// DismissUpdateNotes hides what the player had to redo after an update.
+func (b *Bridge) DismissUpdateNotes() dto.FollowState { return b.companion.DismissUpdateNotes() }
 
 // OpenReleasesPage opens Team Follow's releases page in the browser, for
 // updating by hand.

@@ -40,6 +40,9 @@ type Options struct {
 	// StartupMarker) before the player is told and the stuck child closed;
 	// 0 waits for ever.
 	StartupTimeout time.Duration
+	// Relaunch starts the updated program when the child exits with
+	// RestartCode; nil uses Relaunch(Exe).
+	Relaunch func() error
 }
 
 // Supervise runs the child until it exits, shows a dialog when it stopped
@@ -84,6 +87,19 @@ func Supervise(opts Options) int {
 	<-exited
 	stop()
 	code := cmd.ProcessState.ExitCode()
+	if code == RestartCode && !stuck {
+		// The window installed an update: start the new version, which
+		// waits for this supervisor to exit. Not a crash.
+		relaunch := opts.Relaunch
+		if relaunch == nil {
+			relaunch = func() error { return Relaunch(opts.Exe) }
+		}
+		if err := relaunch(); err != nil {
+			show(UpdatedNotStartedMessage(err))
+			return 1
+		}
+		return 0
+	}
 	if msg, ok := Report(out.String(), code, stuck || stoppedOnRequest(cmd.ProcessState), opts.LogDir); ok {
 		show(msg)
 	}

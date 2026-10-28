@@ -3,6 +3,7 @@ package container
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/mihaiflorentin/wc3-team-follow/domain/companion"
@@ -87,6 +88,9 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 			UpdateInterval:      checkEvery,
 			UpdateRetryInterval: retryEvery,
 			ReleasesURL:         "https://github.com/" + s.config.Updates.Repository + "/releases",
+			System:              runtime.GOOS,
+			Executable:          s.config.App.Executable,
+			Updated:             s.config.App.Updated,
 		}), nil
 	})
 }

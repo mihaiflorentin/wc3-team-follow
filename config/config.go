@@ -27,6 +27,10 @@ type AppConfig struct {
 	// Version is the build's version, set by main from the build info,
 	// never read from config.toml.
 	Version string `mapstructure:"-"`
+	// Executable is this program's path, which an update replaces, and
+	// Updated marks the first start after an update; main sets both.
+	Executable string `mapstructure:"-"`
+	Updated    bool   `mapstructure:"-"`
 }
 
 type LoggingConfig struct {

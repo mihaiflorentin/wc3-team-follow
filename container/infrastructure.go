@@ -51,6 +51,7 @@ func (s *ServiceContainer) Updater() (contract.Updater, error) {
 		}
 		return updater.New(updater.NewClient(timeout), updater.Options{
 			APIURL: cfg.APIURL, Repository: cfg.Repository, Asset: updater.AssetName(runtime.GOOS, runtime.GOARCH),
+			Executable: s.config.App.Executable,
 		}, s.logger), nil
 	})
 }

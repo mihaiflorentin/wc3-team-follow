@@ -28,6 +28,13 @@ type Options struct {
 	// ReleasesURL is the releases page, for updating by hand.
 	ReleasesURL string
 	Now         func() time.Time
+	// System is the operating system (runtime.GOOS), for what the player
+	// redoes after an update; Executable is this program's path, for the
+	// Linux setcap command.
+	System     string
+	Executable string
+	// Updated marks the first start after an update.
+	Updated bool
 }
 
 // Activity is what the player is doing, for the restart warning.
@@ -39,9 +46,9 @@ type Activity struct {
 // Checker decides when to check for a newer release and what to offer.
 // It is not safe for concurrent use; the companion calls it under its lock.
 //
-// The phases are idle, checking and available. The in-app update (issue
-// 23) adds downloading, verifying, installing, restarting and failed after
-// available.
+// The phases are idle, checking and available, then, once the player
+// clicks Update, downloading, verifying, installing and restarting, or
+// failed (install.go).
 type Checker struct {
 	opts      Options
 	current   Version
@@ -59,6 +66,16 @@ type Checker struct {
 	later       bool
 	message     string
 	lastChecked time.Time
+	// offer is the release on offer as the Updater found it, for Download.
+	offer dto.Release
+
+	// install is the in-app update's phase, "" before the player clicks
+	// Update; progress the download's, problem why it failed.
+	install  string
+	progress dto.UpdateProgress
+	problem  string
+	// after is what the player may redo after an update, until dismissed.
+	after *dto.UpdateAfter
 }
 
 // New returns a checker for the running version, with the saved
@@ -70,6 +87,9 @@ func New(opts Options, automatic bool, skipped string) *Checker {
 	if !ok {
 		c.message = msgDevBuild
 	}
+	if ok && opts.Updated {
+		c.after = afterUpdate(opts, current)
+	}
 	return c
 }
 
@@ -78,14 +98,15 @@ func (c *Checker) Supported() bool { return c.supported }
 
 // Due reports whether an automatic check should start now.
 func (c *Checker) Due() bool {
-	return c.supported && c.automatic && !c.checking && !c.opts.Now().Before(c.next)
+	return c.supported && c.automatic && !c.checking && !c.installing() && !c.opts.Now().Before(c.next)
 }
 
 // Begin starts a check, automatic or asked for by the player. It reports
-// false when this build never checks or a check already runs; a player's
-// click during a running check still gets that check's answer.
+// false when this build never checks, an update is being installed or a
+// check already runs; a player's click during a running check still gets
+// that check's answer.
 func (c *Checker) Begin(manual bool) bool {
-	if !c.supported {
+	if !c.supported || c.installing() {
 		return false
 	}
 	if c.checking {
@@ -140,7 +161,9 @@ func (c *Checker) Finish(rel dto.Release, err error) {
 	}
 	if c.release == nil || c.release.Version != offered.String() {
 		c.later = false
+		c.endInstall()
 	}
+	c.offer = rel
 	c.message = ""
 	c.release = &dto.UpdateRelease{
 		Version:   offered.String(),
@@ -152,8 +175,15 @@ func (c *Checker) Finish(rel dto.Release, err error) {
 }
 
 // Later hides the banner for the release on offer until a newer one is
-// found or the player checks again. Nothing is saved.
-func (c *Checker) Later() { c.later = true }
+// found or the player checks again, and dismisses a failed update. Nothing
+// is saved. It does nothing while an update is being installed.
+func (c *Checker) Later() {
+	if c.installing() {
+		return
+	}
+	c.later = true
+	c.endInstall()
+}
 
 // Skip silences the release on offer for good, and returns its version
 // for saving. A newer release is offered again.
@@ -161,6 +191,10 @@ func (c *Checker) Skip() (string, error) {
 	if c.release == nil {
 		return "", errors.New("There is no update to skip.")
 	}
+	if c.installing() {
+		return "", errors.New("The update is already being installed.")
+	}
+	c.endInstall()
 	c.skipped = c.release.Version
 	return c.skipped, nil
 }
@@ -211,6 +245,7 @@ func (c *Checker) State(activity Activity) dto.UpdateState {
 	if c.checking {
 		s.Phase = dto.UpdateChecking
 	}
+	c.installState(&s)
 	return s
 }
 

@@ -42,6 +42,9 @@ type Options struct {
 	Repository string
 	// Asset is this system's release file name (AssetName).
 	Asset string
+	// Executable is the running program's path: the update replaces it,
+	// or on macOS the app bundle around it. "" never installs.
+	Executable string
 }
 
 // GitHub implements contract.Updater with GitHub Releases.

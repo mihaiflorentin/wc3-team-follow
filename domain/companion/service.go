@@ -62,6 +62,12 @@ type Options struct {
 	UpdateRetryInterval time.Duration
 	// ReleasesURL is the releases page, for updating by hand.
 	ReleasesURL string
+	// System (runtime.GOOS) and Executable (this program's path) say what
+	// the player redoes after an update; Updated marks the first start
+	// after one.
+	System     string
+	Executable string
+	Updated    bool
 	// Now reads the clock; nil uses time.Now.
 	Now func() time.Time
 }
@@ -108,8 +114,10 @@ type Service struct {
 	updates *update.Checker
 	// runCtx is Run's context, for checks the player starts; nil until Run.
 	runCtx context.Context
-	// checks tracks running update checks; Run waits for them.
+	// checks tracks running update checks and installs; Run waits for them.
 	checks sync.WaitGroup
+	// cancelInstall stops the running update's download, or is nil.
+	cancelInstall context.CancelFunc
 	// recentSavedAt is when the recent players were last saved.
 	recentSavedAt time.Time
 	// notes are the player's notes, keyed by follow.NoteKey.
@@ -191,7 +199,8 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		checkUpdates, skipped = saved.CheckUpdates, saved.SkippedVersion
 	}
 	s.updates = update.New(update.Options{Version: opts.AppVersion, Interval: opts.UpdateInterval, RetryInterval: opts.UpdateRetryInterval,
-		ReleasesURL: opts.ReleasesURL, Now: opts.Now}, checkUpdates, skipped)
+		ReleasesURL: opts.ReleasesURL, Now: opts.Now, System: opts.System, Executable: opts.Executable, Updated: opts.Updated},
+		checkUpdates, skipped)
 	if err == nil {
 		err = s.engine.Configure(dto.FollowConfig{Tags: &saved.Tags, IncludeTeam: &saved.IncludeTeam, AskPassword: &saved.AskPassword,
 			JoinHostTeam: &saved.JoinHostTeam})
@@ -259,6 +268,7 @@ func (s *Service) Run(ctx context.Context) error {
 	s.mu.Lock()
 	s.runCtx = ctx
 	s.mu.Unlock()
+	s.cleanupUpdate(ctx)
 	s.step(ctx)
 	for {
 		select {

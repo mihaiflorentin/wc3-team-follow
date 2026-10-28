@@ -23,20 +23,48 @@ type Release struct {
 	ChecksumURL string
 }
 
-// Update phases (UpdateState.Phase). The in-app update (issue 23) adds
-// downloading, verifying, installing, restarting and failed.
+// Update phases (UpdateState.Phase). After available, the in-app update
+// goes downloading, verifying, installing and restarting, or ends failed.
 const (
-	UpdateIdle      = "idle"
-	UpdateChecking  = "checking"
-	UpdateAvailable = "available"
+	UpdateIdle        = "idle"
+	UpdateChecking    = "checking"
+	UpdateAvailable   = "available"
+	UpdateDownloading = "downloading"
+	UpdateVerifying   = "verifying"
+	UpdateInstalling  = "installing"
+	UpdateRestarting  = "restarting"
+	UpdateFailed      = "failed"
 )
+
+// UpdateProgress is how far the download of an update is.
+type UpdateProgress struct {
+	// Done and Total are bytes; Total is 0 when the size isn't known.
+	Done  int64 `json:"done"`
+	Total int64 `json:"total"`
+	// Verifying reports that the download finished and its SHA-256 is
+	// being checked.
+	Verifying bool `json:"-"`
+}
+
+// UpdateAfter is what the player may need to do after an update.
+type UpdateAfter struct {
+	// Version is the version now running.
+	Version string `json:"version"`
+	// Setcap is the command that lets Team Follow read the game again on
+	// Linux, where a replaced file loses its capability; "" elsewhere.
+	Setcap string `json:"setcap"`
+	// Accessibility reports that macOS may ask again for the Accessibility
+	// permission Game mode types with.
+	Accessibility bool `json:"accessibility"`
+}
 
 // UpdateState is the update check's part of FollowState (ADR 0009).
 type UpdateState struct {
 	// Supported is false for a build that isn't a clean release version,
 	// such as a development build; it never checks or updates.
 	Supported bool `json:"supported"`
-	// Phase is idle, checking or available.
+	// Phase is idle, checking, available, downloading, verifying,
+	// installing, restarting or failed.
 	Phase string `json:"phase"`
 	// CurrentVersion is the running version, without the leading v of a
 	// release build.
@@ -61,6 +89,17 @@ type UpdateState struct {
 	LastChecked *time.Time `json:"lastChecked,omitempty"`
 	// ReleasesURL is the releases page, for updating by hand.
 	ReleasesURL string `json:"releasesUrl"`
+	// Progress is the download's progress while downloading, or nil.
+	Progress *UpdateProgress `json:"progress"`
+	// Problem says why the update failed, in full sentences, while the
+	// phase is failed; the running version is untouched.
+	Problem string `json:"problem"`
+	// InstallNote says what the player may need to redo after updating on
+	// this system, or "".
+	InstallNote string `json:"installNote"`
+	// After is set on the first start after an update when the player has
+	// a step to take, until they dismiss it; nil otherwise.
+	After *UpdateAfter `json:"after"`
 }
 
 // UpdateRelease is the newer release shown in the banner.

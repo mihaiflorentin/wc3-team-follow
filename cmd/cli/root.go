@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/mihaiflorentin/wc3-team-follow/cmd/gui"
 	"github.com/mihaiflorentin/wc3-team-follow/container"
 )
 
@@ -35,6 +36,10 @@ func NewRootCmd(c *container.ServiceContainer) *cobra.Command {
 // BuildInfo returns the version, commit and build date injected at build
 // time, for the start-up log line.
 func BuildInfo() (string, string, string) { return version, commit, date }
+
+// ErrRestart is returned by Execute when the window closed for an update;
+// main then starts the new version.
+var ErrRestart = gui.ErrRestart
 
 // Execute runs the command tree built from c.
 func Execute(c *container.ServiceContainer) error {
