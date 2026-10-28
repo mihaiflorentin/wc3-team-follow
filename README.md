@@ -42,7 +42,7 @@ Team Follow watches them straight away: their portraits show who is online, away
 
 ### Auto-join
 
-Turn on **Auto-join** from any of the game's menus. Team Follow then leaves your team and joins the first friend in your group who opens a lobby, exactly as the game's own Join Friend does. Under it, **Ask for lobby passwords** decides whether Team Follow asks you for a password when a lobby has one, or skips that lobby. It pauses while you're in a lobby, a match, a score screen or a queue, and resumes as soon as you're back on a menu, including straight from the score screen after a match. Change your group while it's on and it carries on with the new group.
+Turn on **Auto-join** from any of the game's menus. Team Follow then leaves your team and joins the first friend in your group who opens a lobby, exactly as the game's own Join Friend does. Under it, **Ask for lobby passwords** decides whether Team Follow asks you for a password when a lobby has one, or skips that lobby. **Join the host's team** (on by default) moves you into an open slot on the host's team when you land on the other one. It pauses while you're in a lobby, a match, a score screen or a queue, and resumes as soon as you're back on a menu, including straight from the score screen after a match. Change your group while it's on and it carries on with the new group.
 
 ### Lobby passwords
 
@@ -59,8 +59,16 @@ For the player who hosts. In **Set up**, choose the map, the lobby name, public 
 Turn Auto-host on and Team Follow creates the lobby, then waits for you to press Start in Warcraft III. After each match it creates the next one. Three optional switches:
 
 - **Start when full** starts the game once every slot is taken *and* everyone you follow is in. If someone leaves during the countdown it cancels the start, and starts again once the lobby is full again.
-- **Same team** moves everyone you follow onto your team, with the host's own team control.
+- **Same team** brings everyone you follow onto your team:
+  - First, with the host's own team control.
+  - Friends who run Team Follow then move themselves into an open slot on your team.
+  - Otherwise Team Follow types the game's `!swap` command in the lobby chat, trading the friend with a player on your team who isn't in your group. It never swaps the map's computers, and it stops after three swaps that don't work.
 - **Auto-invite** invites the people you follow who are in Warcraft III but not in your lobby, for friends who don't run Team Follow.
+
+**Game mode** types a command such as `-ar` in the match chat a few seconds after the match starts, once per match, for maps like Legion TD or Castle Fight that are set up by chat. Leave the command empty to turn it off.
+- It types with keystrokes, and only while Warcraft III is the window in front. It checks before every key and stops if the focus moves.
+- On macOS it needs the Accessibility permission, which the setup asks for.
+- It works on Windows and macOS; Linux support is still to come.
 
 ![A hosted lobby is open: 3 of 6 slots taken, waiting for two friends, moving one to your team](docs/screenshots/auto-host.png)
 
@@ -90,7 +98,7 @@ When the system blocks Team Follow from reading the game (Linux and macOS each n
 
 Team Follow talks only to the game's own local menu service on `127.0.0.1`. To connect, it reads the game's local menu session identifier from the game process. It never writes to the game, injects code or looks for account credentials, and the session identifier is never logged, shown or saved.
 
-It sends only an allowlist of commands, each one the game's own menu sends for the same purpose: Join Friend's commands for Auto-join, and Create Game's create button, the host's Start/Cancel and team controls and the friends list's Invite to game for Auto-host. Nothing starts a match unless the host turned on Start when full.
+It sends only an allowlist of commands, each one the game's own menu sends for the same purpose: Join Friend's commands for Auto-join, and Create Game's create button, the host's Start/Cancel and team controls, the friends list's Invite to game and the lobby chat box (for `!swap`) for Auto-host. Nothing starts a match unless the host turned on Start when full. The only keystrokes it ever sends are the Game mode command you entered, into the Warcraft III window while it is in front ([ADR 0007](docs/adr/0007-typing-in-the-match-chat-with-keystrokes.md)).
 
 Joining and hosting are enabled only on game builds that have been checked by hand (`[follow] verified_builds` in `config/config.toml`). On other builds Team Follow still watches, but Auto-join and Auto-host stay off.
 
