@@ -533,6 +533,23 @@ func TestHostListsAreNeverNil(t *testing.T) {
 	}
 }
 
+func TestAFullLobbyWaitingForTeamsNamesWhoIsOrAreOff(t *testing.T) {
+	one := sameTeamHost(t, true)
+	one.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0}, seat{name: "Stranger#5555", team: 0},
+		seat{name: "Friend#1234", team: 1}, seat{name: "Computer (Normal)", team: 1, computer: true}))
+	if n := notes(one, "won't start until Friend#1234 is on your team."); n != 1 {
+		t.Fatalf("notes = %d, log = %+v", n, one.state().Log)
+	}
+
+	two := sameTeamHost(t, true)
+	_ = two.engine.Configure(dto.FollowConfig{Tags: &[]string{"Jaina#2214"}})
+	two.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0}, seat{name: "Stranger#5555", team: 0},
+		seat{name: "Friend#1234", team: 1}, seat{name: "Jaina#2214", team: 1}))
+	if n := notes(two, "won't start until Friend#1234 and Jaina#2214 are on your team."); n != 1 {
+		t.Fatalf("notes = %d, log = %+v", n, two.state().Log)
+	}
+}
+
 func TestAFullLobbyWaitingForTheGroupSaysSoOnce(t *testing.T) {
 	f := newFixture(t)
 	_ = f.engine.Configure(dto.FollowConfig{Tags: &[]string{"Jaina#2214", "Thrall#1820"}})

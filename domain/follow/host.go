@@ -451,7 +451,11 @@ func (e *Engine) lobbyUpdate(p map[string]any) {
 		if len(h.missing) > 0 {
 			e.Note("The lobby is full, but it won't start until " + joinTags(h.missing) + " joined. You can still press Start yourself.")
 		} else {
-			e.Note("The lobby is full, but it won't start until " + joinTags(h.offTeam) + " are on your team. You can still press Start yourself.")
+			verb := " are"
+			if len(h.offTeam) == 1 {
+				verb = " is"
+			}
+			e.Note("The lobby is full, but it won't start until " + joinTags(h.offTeam) + verb + " on your team. You can still press Start yourself.")
 		}
 	}
 	starting := h.countdown || h.startSent

@@ -1036,7 +1036,7 @@ function demoBridge() {
     'host-lobby': {host: {enabled: true, phase: 'lobby', settings: {...hostDemo, startWhenFull: true, sameTeam: true}, players: 3, slots: 6, full: false, missing: ['Jaina#2214', 'Thrall#1820'], offTeam: ['Uther#5521']},
       log: [{time: at(1), message: 'Your lobby “LTD with friends” is open. It starts once it’s full and everyone you follow is in.'}, {time: at(0), message: 'Moving Uther#5521 to your team.'}]},
     'host-swap': {host: {enabled: true, phase: 'lobby', settings: {...hostDemo, startWhenFull: true, sameTeam: true}, players: 6, slots: 6, full: true, missing: [], offTeam: ['Uther#5521']},
-      log: [{time: at(1), message: 'The lobby is full, but it won’t start until Uther#5521 are on your team. You can still press Start yourself.'}, {time: at(0), message: 'Asked the game to swap Uther#5521 with Player#5678.'}]},
+      log: [{time: at(1), message: 'The lobby is full, but it won’t start until Uther#5521 is on your team. You can still press Start yourself.'}, {time: at(0), message: 'Asked the game to swap Uther#5521 with Player#5678.'}]},
     'join-team': {enabled: true, paused: true, busy: true, inMenus: false, status: 'Moving you to Illidan#6602’s team.',
       log: [{time: at(1), message: 'Joined Illidan#6602’s lobby. Follow stays on and is paused here.'}, {time: at(0), message: 'Moving you to Illidan#6602’s team.'}]},
     'game-mode': {host: {enabled: true, phase: 'match', settings: {...hostDemo, startWhenFull: true, gameMode: '-ar'}, players: 6, slots: 6, full: true, missing: [], offTeam: []},
