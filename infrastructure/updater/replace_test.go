@@ -113,7 +113,7 @@ func TestMacOSRefusesATranslocatedApp(t *testing.T) {
 		t.Fatal("found a bundle around a plain program")
 	}
 	tgt, err := locateBundle("/Applications/Warcraft Team Follow.app/Contents/MacOS/wc3-team-follow")
-	if err != nil || tgt.path != "/Applications/Warcraft Team Follow.app" || tgt.dir != "/Applications" {
+	if err != nil || tgt.path != filepath.FromSlash("/Applications/Warcraft Team Follow.app") || tgt.dir != filepath.FromSlash("/Applications") {
 		t.Fatalf("target = %+v, %v", tgt, err)
 	}
 }
