@@ -111,7 +111,8 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 
 	saved, err := s.prefs.Load()
 	if err == nil {
-		err = s.engine.Configure(dto.FollowConfig{Tags: &saved.Tags, IncludeTeam: &saved.IncludeTeam, AskPassword: &saved.AskPassword})
+		err = s.engine.Configure(dto.FollowConfig{Tags: &saved.Tags, IncludeTeam: &saved.IncludeTeam, AskPassword: &saved.AskPassword,
+			JoinHostTeam: &saved.JoinHostTeam})
 	}
 	if err == nil && saved.Host != nil {
 		err = s.engine.ConfigureHost(dto.HostConfig{Settings: saved.Host})
@@ -358,7 +359,7 @@ func (s *Service) Configure(cfg dto.FollowConfig) (dto.FollowState, error) {
 	s.mu.Lock()
 	err := s.engine.Configure(cfg)
 	s.logger.Info("follow.configure", configAttrs(cfg, err)...)
-	if err == nil && (cfg.Tags != nil || cfg.IncludeTeam != nil || cfg.AskPassword != nil) {
+	if err == nil && (cfg.Tags != nil || cfg.IncludeTeam != nil || cfg.AskPassword != nil || cfg.JoinHostTeam != nil) {
 		if saveErr := s.save(); saveErr != nil {
 			s.logger.Error("companion.preferences_save", slog.Any("error", saveErr))
 			s.prefsError = saveFailed
@@ -382,6 +383,9 @@ func configAttrs(cfg dto.FollowConfig, err error) []any {
 	}
 	if cfg.AskPassword != nil {
 		attrs = append(attrs, slog.Bool("ask_password", *cfg.AskPassword))
+	}
+	if cfg.JoinHostTeam != nil {
+		attrs = append(attrs, slog.Bool("join_host_team", *cfg.JoinHostTeam))
 	}
 	if cfg.IncludeTeam != nil {
 		attrs = append(attrs, slog.Bool("include_team", *cfg.IncludeTeam))
@@ -457,7 +461,8 @@ func (s *Service) save() error {
 	host := s.engine.HostSettings()
 	return s.prefs.Save(dto.Preferences{
 		Tags: s.engine.ManualTags(), IncludeTeam: s.engine.IncludeTeam(), AskPassword: s.engine.AskPassword(),
-		MapsFolder: s.mapsFolder, Host: &host,
+		JoinHostTeam: s.engine.JoinHostTeam(),
+		MapsFolder:   s.mapsFolder, Host: &host,
 	})
 }
 

@@ -32,11 +32,13 @@ func New(dir string) contract.PreferenceStore {
 }
 
 type fileShape struct {
-	Tags        []string          `json:"tags"`
-	IncludeTeam *bool             `json:"includeTeam"`
-	AskPassword bool              `json:"askPassword,omitempty"`
-	MapsFolder  string            `json:"mapsFolder,omitempty"`
-	Host        *dto.HostSettings `json:"host,omitempty"`
+	Tags        []string `json:"tags"`
+	IncludeTeam *bool    `json:"includeTeam"`
+	AskPassword bool     `json:"askPassword,omitempty"`
+	// JoinHostTeam is written only when off: a file without it is on.
+	JoinHostTeam *bool             `json:"joinHostTeam,omitempty"`
+	MapsFolder   string            `json:"mapsFolder,omitempty"`
+	Host         *dto.HostSettings `json:"host,omitempty"`
 }
 
 // Load returns the saved selection, or every tag empty and the team
@@ -44,7 +46,7 @@ type fileShape struct {
 func (s *Store) Load() (dto.Preferences, error) {
 	info, err := os.Stat(s.file)
 	if errors.Is(err, fs.ErrNotExist) {
-		return dto.Preferences{Tags: []string{}, IncludeTeam: true}, nil
+		return dto.Preferences{Tags: []string{}, IncludeTeam: true, JoinHostTeam: true}, nil
 	}
 	if err != nil {
 		return dto.Preferences{}, fmt.Errorf("%w: %v", ErrUnreadable, err)
@@ -61,7 +63,8 @@ func (s *Store) Load() (dto.Preferences, error) {
 	if err := decoder.Decode(&saved); err != nil || saved.Tags == nil || saved.IncludeTeam == nil {
 		return dto.Preferences{}, fmt.Errorf("%w: unrecognized content", ErrUnreadable)
 	}
-	return dto.Preferences{Tags: saved.Tags, IncludeTeam: *saved.IncludeTeam, AskPassword: saved.AskPassword, MapsFolder: saved.MapsFolder, Host: saved.Host}, nil
+	return dto.Preferences{Tags: saved.Tags, IncludeTeam: *saved.IncludeTeam, AskPassword: saved.AskPassword,
+		JoinHostTeam: saved.JoinHostTeam == nil || *saved.JoinHostTeam, MapsFolder: saved.MapsFolder, Host: saved.Host}, nil
 }
 
 // Save replaces the file atomically. Only the selection, the Maps folder and
@@ -71,7 +74,12 @@ func (s *Store) Save(prefs dto.Preferences) error {
 	if tags == nil {
 		tags = []string{}
 	}
-	content, err := json.MarshalIndent(fileShape{Tags: tags, IncludeTeam: &prefs.IncludeTeam, AskPassword: prefs.AskPassword, MapsFolder: prefs.MapsFolder, Host: prefs.Host}, "", "  ")
+	var joinHostTeam *bool
+	if !prefs.JoinHostTeam {
+		joinHostTeam = &prefs.JoinHostTeam
+	}
+	content, err := json.MarshalIndent(fileShape{Tags: tags, IncludeTeam: &prefs.IncludeTeam, AskPassword: prefs.AskPassword, JoinHostTeam: joinHostTeam,
+		MapsFolder: prefs.MapsFolder, Host: prefs.Host}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode friends: %w", err)
 	}

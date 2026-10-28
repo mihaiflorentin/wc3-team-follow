@@ -15,14 +15,14 @@ import (
 func TestSaveAndLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	tags := []string{"One#1234", "Two#2345", "Three#3456"}
-	if err := settings.New(dir).Save(dto.Preferences{Tags: tags, IncludeTeam: false}); err != nil {
+	if err := settings.New(dir).Save(dto.Preferences{Tags: tags, IncludeTeam: false, JoinHostTeam: true}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := settings.New(dir).Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(got.Tags, tags) || got.IncludeTeam {
+	if !slices.Equal(got.Tags, tags) || got.IncludeTeam || !got.JoinHostTeam {
 		t.Fatalf("loaded %+v", got)
 	}
 	var raw map[string]any
@@ -39,6 +39,25 @@ func TestAskPasswordIsSaved(t *testing.T) {
 	}
 	if got, err := settings.New(dir).Load(); err != nil || !got.AskPassword {
 		t.Fatalf("loaded %+v, %v", got, err)
+	}
+}
+
+func TestJoinHostTeamIsOnUnlessSavedOff(t *testing.T) {
+	dir := t.TempDir()
+	if got, err := settings.New(dir).Load(); err != nil || !got.JoinHostTeam {
+		t.Fatalf("no file: loaded %+v, %v", got, err)
+	}
+	// A file saved before the option existed has no joinHostTeam.
+	_ = os.MkdirAll(filepath.Join(dir, "settings"), 0o700)
+	_ = os.WriteFile(filepath.Join(dir, "settings", "friends.json"), []byte(`{"tags":[],"includeTeam":true}`), 0o600)
+	if got, err := settings.New(dir).Load(); err != nil || !got.JoinHostTeam {
+		t.Fatalf("older file: loaded %+v, %v", got, err)
+	}
+	if err := settings.New(dir).Save(dto.Preferences{Tags: []string{}, IncludeTeam: true, JoinHostTeam: false}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := settings.New(dir).Load(); err != nil || got.JoinHostTeam {
+		t.Fatalf("saved off: loaded %+v, %v", got, err)
 	}
 }
 

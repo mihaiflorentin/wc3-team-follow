@@ -386,33 +386,12 @@ type lobbyPlayer struct {
 // countdown locks.
 func (e *Engine) lobbyUpdate(p map[string]any) {
 	h := &e.host
-	raw, ok := list(p["players"])
-	if !ok {
+	if _, ok := list(p["players"]); !ok {
 		return
 	}
 	h.lobby = p
-	var players []lobbyPlayer
-	var openTeams []any
-	open := 0
-	var self *lobbyPlayer
-	for _, r := range raw {
-		slot := object(r)
-		if isTrue(slot["isObserver"]) {
-			continue
-		}
-		name, _ := slot["name"].(string)
-		pl := lobbyPlayer{slot: slot["slot"], name: name, team: slot["team"], canMove: isTrue(slot["teamChangeEnabled"]),
-			self: isTrue(slot["isSelf"]), occupied: numberIs(slot["slotStatus"], slotOccupied),
-			computer: numberIs(slot["slotType"], slotComputer)}
-		if numberIs(slot["slotStatus"], slotOpen) {
-			open++
-			openTeams = append(openTeams, slot["team"])
-		}
-		players = append(players, pl)
-		if pl.self {
-			self = &players[len(players)-1]
-		}
-	}
+	players, openTeams, self := readLobby(p)
+	open := len(openTeams)
 	h.players, h.slots = 0, open
 	for _, pl := range players {
 		if pl.occupied {
@@ -481,6 +460,33 @@ func (e *Engine) lobbyUpdate(p map[string]any) {
 			e.Note("The lobby changed, so the start was cancelled. It starts again once it's full and everyone's in.")
 		}
 	}
+}
+
+// readLobby reads a GameLobbySetup's playable slots (observers are left
+// out), the team of each open slot, and the player's own slot (nil when
+// the player has none).
+func readLobby(p map[string]any) (players []lobbyPlayer, openTeams []any, self *lobbyPlayer) {
+	raw, _ := list(p["players"])
+	for _, r := range raw {
+		slot := object(r)
+		if isTrue(slot["isObserver"]) {
+			continue
+		}
+		name, _ := slot["name"].(string)
+		players = append(players, lobbyPlayer{slot: slot["slot"], name: name, team: slot["team"], canMove: isTrue(slot["teamChangeEnabled"]),
+			self: isTrue(slot["isSelf"]), occupied: numberIs(slot["slotStatus"], slotOccupied),
+			computer: numberIs(slot["slotType"], slotComputer)})
+		if numberIs(slot["slotStatus"], slotOpen) {
+			openTeams = append(openTeams, slot["team"])
+		}
+	}
+	for i := range players {
+		if players[i].self {
+			self = &players[i]
+			break
+		}
+	}
+	return players, openTeams, self
 }
 
 // inviteMissing invites, once per lobby, each group member who isn't in the

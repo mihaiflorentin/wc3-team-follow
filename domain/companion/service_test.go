@@ -79,6 +79,21 @@ func sentMessages(s *mockgame.Session) []string {
 	return out
 }
 
+func TestJoinHostTeamIsLoadedAndSaved(t *testing.T) {
+	prefs := mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true, JoinHostTeam: false})
+	h := newHarness(t, prefs)
+	if h.svc.State().JoinHostTeam {
+		t.Fatal("the saved choice wasn't loaded")
+	}
+	on := true
+	if _, err := h.svc.Configure(dto.FollowConfig{JoinHostTeam: &on}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := prefs.Load(); !got.JoinHostTeam || !h.svc.State().JoinHostTeam {
+		t.Fatalf("saved %+v", got)
+	}
+}
+
 func TestLoadsSavedFriendsAndStartsOff(t *testing.T) {
 	h := newHarness(t, mockprefs.New(dto.Preferences{Tags: []string{"One#1234", "Two#2345"}, IncludeTeam: false}))
 	s := h.svc.State()

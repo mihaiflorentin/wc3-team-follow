@@ -1047,3 +1047,76 @@ func TestAutoJoinNeverTypesInTheGameChat(t *testing.T) {
 		t.Fatalf("%d chat messages sent", n)
 	}
 }
+
+// joinedLobby is the lobby Auto-join joined: Friend#1234 hosts it on team
+// 0 with an open slot, and the player sits on team 1.
+func joinedLobby(host string, selfCanMove bool) map[string]any {
+	return map[string]any{"lobbyName": "Castle Fight", "isHost": false, "playerHost": host, "players": []any{
+		map[string]any{"slot": 0, "slotStatus": 2, "slotType": 0, "name": "Friend#1234", "team": 0},
+		map[string]any{"slot": 1, "slotStatus": 0, "slotType": 0, "name": "", "team": 0},
+		map[string]any{"slot": 2, "slotStatus": 2, "slotType": 0, "name": "Self#1111", "team": 1, "isSelf": true, "teamChangeEnabled": selfCanMove},
+		map[string]any{"slot": 3, "slotStatus": 2, "slotType": 1, "name": "Computer (Normal)", "team": 1},
+	}}
+}
+
+func TestAutoJoinMovesThePlayerToTheHostsTeam(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(false)
+	f.presence(nil)
+	f.receive("GameLobbySetup", joinedLobby("Friend#1234", true))
+	c, ok := f.lastCommand(follow.CmdSetTeam)
+	if !ok || c.payload["slot"] != 2 || c.payload["team"] != 0 || notes(f, "Moving you to Friend#1234's team.") != 1 {
+		t.Fatalf("SetTeam = %+v, %v, log %+v", c, ok, f.state().Log)
+	}
+	// A refused move is tried at most twice.
+	for range 3 {
+		f.receive("GameLobbySetup", joinedLobby("Friend#1234", true))
+	}
+	if n := f.count(follow.CmdSetTeam); n != 2 {
+		t.Fatalf("SetTeam sent %d times", n)
+	}
+	if n := f.count(follow.CmdSendGameChatMessage); n != 0 {
+		t.Fatalf("%d chat messages sent", n)
+	}
+}
+
+func TestAutoJoinSaysOnceWhenTheHostsLobbyLocksTeams(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(false)
+	f.presence(nil)
+	f.receive("GameLobbySetup", joinedLobby("Friend#1234", false))
+	f.receive("GameLobbySetup", joinedLobby("Friend#1234", false))
+	if f.count(follow.CmdSetTeam) != 0 || notes(f, "Friend#1234's lobby doesn't let players change teams") != 1 {
+		t.Fatalf("setTeam=%d log=%+v", f.count(follow.CmdSetTeam), f.state().Log)
+	}
+}
+
+func TestAutoJoinStaysPutWhenSomeoneElseHostsOrTheOptionIsOff(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(false)
+	f.presence(nil)
+	f.receive("GameLobbySetup", joinedLobby("Player#5678", true))
+	if n := f.count(follow.CmdSetTeam); n != 0 {
+		t.Fatalf("moved in a lobby the member doesn't host: %d", n)
+	}
+
+	off := newFixture(t)
+	if err := off.engine.Configure(dto.FollowConfig{JoinHostTeam: ptr(false)}); err != nil {
+		t.Fatal(err)
+	}
+	if off.state().JoinHostTeam {
+		t.Fatal("the option is still on")
+	}
+	off.mustArm(false)
+	off.presence(nil)
+	off.receive("GameLobbySetup", joinedLobby("Friend#1234", true))
+	if n := off.count(follow.CmdSetTeam); n != 0 {
+		t.Fatalf("moved with the option off: %d", n)
+	}
+}
+
+func TestJoinHostTeamStartsOn(t *testing.T) {
+	if !newFixture(t).state().JoinHostTeam {
+		t.Fatal("Join the host's team starts off")
+	}
+}

@@ -150,6 +150,11 @@ type Engine struct {
 	// (the default), such a lobby is skipped.
 	askPassword bool
 	password    *passwordRequest
+	// joinHostTeam moves the player to the host's team in a lobby Auto-join
+	// joined; on by default.
+	joinHostTeam bool
+	// joined is the lobby Auto-join joined, while the player is in it.
+	joined *joinedLobby
 
 	inMatch      bool
 	awaitingMenu bool
@@ -181,6 +186,7 @@ func NewEngine(send Sender, now func() time.Time, verified []string) *Engine {
 		verified:       slices.Clone(verified),
 		diagnostic:     true,
 		includeTeam:    true,
+		joinHostTeam:   true,
 		status:         "Waiting for Warcraft III.",
 		friends:        map[string]friendRecord{},
 		roster:         map[string]friendRecord{},
@@ -215,7 +221,7 @@ func (e *Engine) Connected() bool { return e.connected }
 // off; the friend selection and mode are kept.
 func (e *Engine) Connection(connected bool, version string) {
 	e.connected, e.version = connected, version
-	e.enabled, e.pending, e.password = false, nil, nil
+	e.enabled, e.pending, e.password, e.joined = false, nil, nil, nil
 	e.team, e.teamAt = nil, time.Time{}
 	clear(e.friends)
 	clear(e.roster)
@@ -267,6 +273,9 @@ func (e *Engine) Configure(cfg dto.FollowConfig) error {
 			e.password = nil
 			e.Note("Lobby passwords are off. Waiting for a new lobby.")
 		}
+	}
+	if cfg.JoinHostTeam != nil {
+		e.joinHostTeam = *cfg.JoinHostTeam
 	}
 	if cfg.Diagnostic != nil && *cfg.Diagnostic != e.diagnostic {
 		e.disarm()
@@ -418,8 +427,10 @@ func (e *Engine) Receive(event dto.GameEvent) {
 		if e.lastJoin != nil && inSlot && (e.lastJoin.Lobby == "" || name == e.lastJoin.Lobby) {
 			if !e.lastJoin.Confirmed {
 				e.lastJoin.Confirmed = true
+				e.joined = &joinedLobby{friend: e.lastJoin.Friend, moves: map[string]int{}}
 				e.Note("Joined " + e.lastJoin.Friend + "'s lobby. Follow stays on and is paused here.")
 			}
+			e.joinHostsTeam(p)
 		} else if e.pending != nil {
 			e.Note("A lobby update arrived after the join request. Check the lobby in Warcraft III.")
 		}
@@ -437,9 +448,11 @@ func (e *Engine) Receive(event dto.GameEvent) {
 		e.busy, e.menuReady = true, false
 		e.pause("Follow is on but paused while entering a lobby.")
 	case "PauseUI", "GameFound", "LoadingScreenUpdate":
+		e.joined = nil
 		e.inMatch, e.busy, e.menuReady = true, true, false
 		e.pause("Follow is on but paused while the game enters a match.")
 	case "MultiplayerGameLeave", "ExitedGame":
+		e.joined = nil
 		if kind == "ExitedGame" {
 			e.inMatch = false
 		}
@@ -819,6 +832,10 @@ func (e *Engine) IncludeTeam() bool { return e.includeTeam }
 // AskPassword reports whether a lobby that wants a password may ask for it.
 func (e *Engine) AskPassword() bool { return e.askPassword }
 
+// JoinHostTeam reports whether Auto-join moves the player to the host's
+// team.
+func (e *Engine) JoinHostTeam() bool { return e.joinHostTeam }
+
 // Snapshot returns the state for the interface. It never includes account
 // identifiers or passwords.
 func (e *Engine) Snapshot() dto.FollowState {
@@ -831,6 +848,7 @@ func (e *Engine) Snapshot() dto.FollowState {
 		ManualTags:    e.ManualTags(),
 		IncludeTeam:   e.includeTeam,
 		AskPassword:   e.askPassword,
+		JoinHostTeam:  e.joinHostTeam,
 		Status:        e.status,
 		Screen:        e.screen,
 		Busy:          e.busy,
