@@ -88,6 +88,21 @@ func TestTypeAsksForPermissionOnlyWithTheFlag(t *testing.T) {
 	}
 }
 
+func TestTypeResolvesEverythingBeforeAskingForPermission(t *testing.T) {
+	k := &mockkeyboard.Keyboard{Current: dto.KeyboardStatus{Supported: true, Reason: "Allow it."}}
+	cmd := typeCmd(func() (contract.GameDiscovery, error) { return nil, errors.New("resolve game discovery: broken") },
+		func() (contract.GameKeyboard, error) { return k, nil })
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"--delay", "0s", "--ask-permission", "--", "-ar"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "broken") {
+		t.Fatalf("err = %v", err)
+	}
+	if k.Requests != 0 {
+		t.Fatalf("asked for permission %d times before every dependency resolved", k.Requests)
+	}
+}
+
 func TestTypeReportsGameAndKeyboardErrors(t *testing.T) {
 	d := &mockgame.Discovery{Err: errors.New("Warcraft III isn't running.")}
 	if _, err := runType(t, d, readyKeyboard(), "--", "-ar"); err == nil || !strings.Contains(err.Error(), "isn't running") {

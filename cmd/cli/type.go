@@ -36,11 +36,15 @@ func typeCmd(resolve func() (contract.GameDiscovery, error), resolveKeyboard fun
 			"Put -- before text that starts with a dash: wc3-team-follow type -- -ar",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			line, err := follow.ChatLine(args[0])
+			keyboard, err := resolveKeyboard()
 			if err != nil {
 				return fmt.Errorf("type: %w", err)
 			}
-			keyboard, err := resolveKeyboard()
+			discovery, err := resolve()
+			if err != nil {
+				return fmt.Errorf("type: %w", err)
+			}
+			line, err := follow.ChatLine(args[0])
 			if err != nil {
 				return fmt.Errorf("type: %w", err)
 			}
@@ -53,10 +57,6 @@ func typeCmd(resolve func() (contract.GameDiscovery, error), resolveKeyboard fun
 				if err := keyboard.RequestPermission(ctx); err != nil {
 					return fmt.Errorf("type: %w", err)
 				}
-			}
-			discovery, err := resolve()
-			if err != nil {
-				return fmt.Errorf("type: %w", err)
 			}
 			conn, err := discovery.Discover(ctx)
 			if err != nil {
