@@ -23,7 +23,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `infrastructure/keyboard/` | Types one line in the match chat with keystrokes (`contract.GameKeyboard`, ADR 0007): the sequence and its checks in `keyboard.go`, `SendInput` in `platform_windows.go`, `CGEventPost` in `platform_darwin.go`, not supported elsewhere yet. |
 | `infrastructure/settings/` | `friends.json` and `recent-players.json` (`RecentPlayers`) in the per-user data folder. |
 | `mock/` | Hand-written test doubles, one package per contract group. |
-| `packaging/darwin/` | `Info.plist` and entitlements for the macOS app bundle. |
+| `packaging/` | App icon sources and renders (`icon/`), the Windows resource description (`windows/winres.json`), the macOS `Info.plist` and entitlements (`darwin/`), and the Linux `.desktop` entry (`linux/`). |
 | `docs/` | Living documentation; architectural decisions go in `docs/adr/`. |
 
 ## Project settings

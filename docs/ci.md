@@ -27,9 +27,9 @@ Build matrix:
 
 | File | Runner | Why there |
 | --- | --- | --- |
-| `wc3-team-follow-windows-amd64.zip` | ubuntu-latest | Windows needs no cgo, so it cross-compiles (`-H windowsgui`). |
-| `wc3-team-follow-linux-amd64.tar.gz` | ubuntu-22.04 | cgo and WebKitGTK 4.1; the oldest supported Ubuntu keeps the glibc requirement low. |
-| `wc3-team-follow-macos-arm64.zip` | macos-latest (Apple silicon) | cgo and Cocoa; `make package-darwin-arm64` builds the `.app`, ad-hoc signs it with `packaging/darwin/entitlements.plist` and zips it with `ditto`. |
+| `wc3-team-follow-windows-amd64.zip` | ubuntu-latest | Windows needs no cgo, so it cross-compiles (`-H windowsgui`). `make winres` first compiles the icon, a DPI-aware manifest and the version (from the tag) into `rsrc_windows_amd64.syso` with `go-winres`, which `go build` links into the `.exe`. |
+| `wc3-team-follow-linux-amd64.tar.gz` | ubuntu-22.04 | cgo and WebKitGTK 4.1; the oldest supported Ubuntu keeps the glibc requirement low. The tarball holds `wc3-team-follow`, its icon and a `.desktop` entry. |
+| `wc3-team-follow-macos-arm64.zip` | macos-latest (Apple silicon) | cgo and Cocoa; `make package-darwin-arm64` builds the `.app` with `AppIcon.icns`, ad-hoc signs it with `packaging/darwin/entitlements.plist` and zips it with `ditto`. |
 
 Jobs run in order (`needs:`), so a failing test on any OS publishes nothing.
 

@@ -50,17 +50,26 @@ Team Follow runs natively on Linux and works with Warcraft III: Reforged started
 2. Unpack and run:
 
    ```bash
-   tar -xzf wc3-team-follow-linux-amd64.tar.gz
-   ./wc3-team-follow-linux-amd64
+   mkdir -p ~/Apps/wc3-team-follow
+   tar -xzf wc3-team-follow-linux-amd64.tar.gz -C ~/Apps/wc3-team-follow
+   ~/Apps/wc3-team-follow/wc3-team-follow
    ```
 
 3. Allow it to read the game's menu session. Most distributions (Ubuntu, Fedora, Arch with Yama) only let a program read another program's memory if it started that program. Give Team Follow that one permission:
 
    ```bash
-   sudo setcap cap_sys_ptrace=ep ./wc3-team-follow-linux-amd64
+   sudo setcap cap_sys_ptrace=ep ~/Apps/wc3-team-follow/wc3-team-follow
    ```
 
    Team Follow shows this command, with the right path, when it needs it. Run it again after replacing the file with a new version. Alternatively, `sudo sysctl kernel.yama.ptrace_scope=0` relaxes the rule for every program until the next reboot.
+
+4. Optional: to find it in your app launcher with its icon, copy the icon and the desktop entry from the tarball:
+
+   ```bash
+   cd ~/Apps/wc3-team-follow
+   install -Dm644 wc3-team-follow.png ~/.local/share/icons/hicolor/512x512/apps/wc3-team-follow.png
+   sed "s#^Exec=.*#Exec=$PWD/wc3-team-follow#" wc3-team-follow.desktop > ~/.local/share/applications/wc3-team-follow.desktop
+   ```
 
 Notes for Wine and Proton:
 

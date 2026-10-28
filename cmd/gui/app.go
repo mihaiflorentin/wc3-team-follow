@@ -14,6 +14,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -26,6 +27,13 @@ var frontend embed.FS
 
 // instanceID names the single-instance lock.
 const instanceID = "a6c1d2a4-wc3-team-follow"
+
+// appIcon is the window icon on Linux and the About box icon on macOS.
+// Windows takes its icon from the .exe's resources (make winres) and macOS
+// its Dock icon from the app bundle.
+//
+//go:embed icon.png
+var appIcon []byte
 
 // StateEvent is the event the page listens to for new state.
 const StateEvent = "state"
@@ -122,7 +130,11 @@ func Run(deps Deps, opts Options) error {
 		},
 		Mac: &mac.Options{
 			Appearance: mac.NSAppearanceNameDarkAqua,
-			About:      &mac.AboutInfo{Title: opts.Title, Message: "Version " + opts.AppVersion},
+			About:      &mac.AboutInfo{Title: opts.Title, Message: "Version " + opts.AppVersion, Icon: appIcon},
+		},
+		Linux: &linux.Options{
+			Icon:        appIcon,
+			ProgramName: "wc3-team-follow",
 		},
 		// The WebView2 profile lives in the app's local data folder: the
 		// default, roaming AppData, is often redirected to OneDrive or a
