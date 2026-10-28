@@ -54,6 +54,19 @@ The game's Ban names a slot, not a player, so Team Follow reads everything the g
 
 ![Recent players while choosing whom to blacklist: two players ticked with red crosses, one already blacklisted, and the Blacklist 2 players bar](docs/screenshots/recent-blacklist.png)
 
+### Player menu
+
+Right-click any player in Friends, Recent players or Blacklist, or a portrait in your group, to act on them in one step:
+- **Copy BattleTag** puts their full BattleTag on the clipboard, ready to paste in the game or a chat.
+- **Add to group** or **Remove from group** changes who you follow, like ticking them in the list.
+- **Add to blacklist** or **Remove from blacklist**; blacklisting someone you follow takes them out of your group.
+
+The menu shows only the actions that apply, and a short line confirms each one. From the keyboard, Shift+F10 or the Menu key opens it on the focused row; the arrow keys move, Enter chooses, and Esc closes it. Nothing is sent to the game.
+
+![The player menu on a recent player in your group: Copy BattleTag, Remove from group, and Add to blacklist, which also takes them out of your group](docs/screenshots/player-menu.png)
+
+![The player menu on a blacklisted player, at a narrow window width: Copy BattleTag and Remove from blacklist](docs/screenshots/player-menu-blacklist.png)
+
 Team Follow watches them straight away: their portraits show who is online, away or in Warcraft III, and Activity notes when one of them opens a lobby. Watching never joins anything.
 
 ![Watching a group of five friends: one has a lobby open, Auto-join is off](docs/screenshots/watching.png)

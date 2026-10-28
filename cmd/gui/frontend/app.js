@@ -128,6 +128,21 @@ function nameCell(tag, banned) {
   return wrap;
 }
 
+// lockBox makes a checkbox unavailable without disabling it, so it stays
+// focusable and the player menu still opens on its row from the keyboard.
+function lockBox(box, locked) {
+  box.setAttribute('aria-disabled', String(locked));
+  if (locked) box.addEventListener('click', event => event.preventDefault());
+}
+
+// markPlayer makes row a player row: right-click, Shift+F10 or the Menu key
+// on it opens the player menu for tag, and focus returns to target.
+function markPlayer(row, target, tag) {
+  row.dataset.player = tag;
+  target.dataset.tag = tag;
+  target.setAttribute('aria-keyshortcuts', 'Shift+F10');
+}
+
 function hasTargets(s) {
   return (s.includeTeam && s.team.some(m => !m.isSelf)) || s.manualTags.length > 0;
 }
@@ -271,16 +286,34 @@ function renderSteps(s) {
   steps.querySelector('[data-step="people"] .step-text').textContent = n ? `${plural(n, 'friend', 'friends')} chosen` : 'Choose friends to follow';
 }
 
+let partySignature = '';
+
+// renderParty draws the group bar. Each chip is a button that opens the
+// player menu; it is redrawn only when the group changes, so focus stays.
 function renderParty(s) {
   const list = $('party');
-  list.replaceChildren();
   const members = group(s);
-  for (const m of members) {
-    const li = el('li');
-    li.dataset.status = m.status;
-    li.title = m.lobby ? `${m.tag}: lobby “${m.lobby}”` : m.tag;
-    li.append(avatar(m.tag, {badge: m.status === 'open'}), el('span', 'tag', nameOf(m.tag)));
-    list.append(li);
+  const signature = JSON.stringify(members);
+  if (signature !== partySignature) {
+    partySignature = signature;
+    const focused = list.contains(document.activeElement) ? document.activeElement.dataset.tag : '';
+    list.replaceChildren();
+    for (const m of members) {
+      const li = el('li');
+      li.dataset.status = m.status;
+      const chip = el('button', 'chip');
+      chip.type = 'button';
+      chip.title = m.lobby ? `${m.tag}: lobby “${m.lobby}”` : m.tag;
+      chip.setAttribute('aria-label', m.lobby ? `${m.tag}, lobby ${m.lobby}` : m.tag);
+      chip.setAttribute('aria-haspopup', 'menu');
+      chip.setAttribute('aria-expanded', 'false');
+      markPlayer(chip, chip, m.tag);
+      chip.onclick = () => openPlayerMenu(m.tag, chip);
+      chip.append(avatar(m.tag, {badge: m.status === 'open'}), el('span', 'tag', nameOf(m.tag)));
+      li.append(chip);
+      list.append(li);
+    }
+    if (focused) list.querySelector(`[data-tag="${CSS.escape(focused)}"]`)?.focus();
   }
   const open = members.filter(m => m.status === 'open').length;
   $('party-note').textContent = !members.length ? ''
@@ -336,9 +369,11 @@ function pickRow(f, full) {
   box.checked = f.selected;
   box.dataset.tag = f.battleTag;
   const banned = isBlacklisted(state, f.battleTag);
-  box.disabled = (!f.selected && full) || banned;
+  const locked = (!f.selected && full) || banned;
+  lockBox(box, locked);
   box.setAttribute('aria-label', banned ? `${f.battleTag} is blacklisted` : `Follow ${f.battleTag}`);
-  label.dataset.disabled = String(box.disabled);
+  label.dataset.disabled = String(locked);
+  markPlayer(label, box, f.battleTag);
   box.onchange = () => {
     const tags = box.checked
       ? [...state.manualTags, f.battleTag]
@@ -491,7 +526,7 @@ function recentRow(s, p, full) {
     // Choosing whom to blacklist: the follow group stays as it is.
     const picked = banPick.has(key(p.tag));
     box.checked = picked;
-    box.disabled = banned;
+    lockBox(box, banned);
     box.setAttribute('aria-label', banned ? `${p.tag} is blacklisted` : `Blacklist ${p.tag}`);
     label.dataset.selected = 'false';
     label.dataset.picked = String(picked);
@@ -504,7 +539,7 @@ function recentRow(s, p, full) {
     };
   } else {
     box.checked = chosen;
-    box.disabled = (!chosen && full) || banned;
+    lockBox(box, (!chosen && full) || banned);
     box.setAttribute('aria-label', banned ? `${p.tag} is blacklisted` : `Follow ${p.tag}`);
     label.dataset.selected = String(chosen);
     box.onchange = () => {
@@ -514,7 +549,8 @@ function recentRow(s, p, full) {
       changeGroup({tags});
     };
   }
-  label.dataset.disabled = String(box.disabled);
+  label.dataset.disabled = box.getAttribute('aria-disabled');
+  markPlayer(label, box, p.tag);
   const name = nameCell(p.tag, banned);
   const meta = el('span', 'meta');
   const map = el('span', 'map');
@@ -605,7 +641,7 @@ function enterBanMode() {
   banConfirm = false;
   banPick.clear();
   renderRecent(state);
-  ($('recent').querySelector('input:not(:disabled)') ?? $('ban-cancel')).focus();
+  ($('recent').querySelector('input:not([aria-disabled="true"])') ?? $('ban-cancel')).focus();
 }
 
 function leaveBanMode({focus = false} = {}) {
@@ -684,6 +720,7 @@ function blacklistRow(entry) {
   const name = el('span', 'name', entry.tag);
   name.title = entry.tag;
   row.append(avatar(entry.tag, {banned: true}), name, added, remove);
+  markPlayer(row, remove, entry.tag);
   li.append(row);
   return li;
 }
@@ -815,6 +852,268 @@ function renderLog(s) {
     list.append(li);
   }
 }
+
+/* Player menu ------------------------------------------------------------
+   One menu for every player row (Friends, Recent players, Blacklist) and
+   group chip. Right-click, Shift+F10 or the Menu key opens it; the arrow
+   keys, Home and End move, Enter or Space chooses, and Esc or Tab closes
+   it and puts focus back on the row. Its items come in groups split by a
+   line, so notes can add a group of their own in front. */
+
+// playerMenuGroups lists the actions that apply to tag right now. Each item
+// is {label, icon, run, danger, disabled, hint}.
+function playerMenuGroups(s, tag) {
+  const k = key(tag);
+  const self = s.team.some(m => m.isSelf && key(m.battleTag) === k);
+  const chosen = s.manualTags.some(t => key(t) === k);
+  // Members of the game team are followed through it, not through a choice
+  // made here, so there is nothing to add or remove for them.
+  const viaTeam = s.includeTeam && s.team.some(m => !m.isSelf && key(m.battleTag) === k);
+  const banned = isBlacklisted(s, tag);
+  const full = s.manualTags.length >= MAX_TAGS;
+
+  const general = [{label: 'Copy BattleTag', icon: 'copy', run: () => copyTag(tag)}];
+  if (chosen) {
+    general.push({label: 'Remove from group', icon: 'user-minus', run: () => changeMenuGroup(tag, false)});
+  } else if (!self && !viaTeam && !banned) {
+    general.push({label: 'Add to group', icon: 'user-plus', run: () => changeMenuGroup(tag, true),
+      disabled: full, hint: full ? `Your group is full (${MAX_TAGS})` : ''});
+  }
+  const groups = [general];
+  if (banned) groups.push([{label: 'Remove from blacklist', icon: 'unban', run: () => unblacklist(tag)}]);
+  else if (!self) groups.push([{label: 'Add to blacklist', icon: 'ban', danger: true, run: () => blacklist(tag), hint: chosen ? 'Also leaves your group' : ''}]);
+  return groups;
+}
+
+async function changeMenuGroup(tag, add) {
+  const tags = add ? [...state.manualTags, tag] : state.manualTags.filter(t => key(t) !== key(tag));
+  if (await changeGroup({tags})) toast(add ? `Added ${tag} to your group` : `Removed ${tag} from your group`);
+}
+
+async function blacklist(tag) {
+  banPick.delete(key(tag));
+  if (await act(() => bridge.AddToBlacklist([tag]))) toast(`Blacklisted ${tag}`);
+}
+
+async function unblacklist(tag) {
+  if (await act(() => bridge.RemoveFromBlacklist(tag))) toast(`Removed ${tag} from the blacklist`);
+}
+
+// copyTag puts tag on the clipboard: the app's own clipboard in the window,
+// the browser's in the demo page.
+async function copyTag(tag) {
+  let ok = false;
+  try {
+    if (window.runtime?.ClipboardSetText) ok = (await window.runtime.ClipboardSetText(tag)) !== false;
+    else if (navigator.clipboard) ok = (await navigator.clipboard.writeText(tag), true);
+  } catch { ok = false; }
+  if (ok) toast(`Copied ${tag}`);
+  else $('error').textContent = `Couldn’t copy ${tag} to the clipboard.`;
+}
+
+let toastTimer = 0;
+
+// toast confirms an action in a short line at the bottom of the window;
+// the hidden status line beside it is what screen readers read out.
+function toast(text) {
+  const node = $('toast');
+  node.replaceChildren(icon('check'), el('span', '', text));
+  $('announce').textContent = '';
+  setTimeout(() => { $('announce').textContent = text; }, 50);
+  node.dataset.show = 'true';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { node.dataset.show = 'false'; }, 2400);
+}
+
+const menu = {tag: '', origin: null, scope: null, order: [], keyboardAt: 0};
+
+const menuItems = () => [...$('player-menu').querySelectorAll('[role="menuitem"]')];
+
+// openPlayerMenu opens the menu for tag. origin is the element focus goes
+// back to; at is the pointer position, or null to place it by origin.
+function openPlayerMenu(tag, origin, at = null) {
+  if (!state) return;
+  closePlayerMenu();
+  const banned = isBlacklisted(state, tag);
+  const chosen = state.manualTags.some(t => key(t) === key(tag));
+  const box = $('player-menu');
+
+  // The head repeats who the menu is for; the menu's label says it too.
+  const head = el('div', 'menu-head');
+  head.setAttribute('aria-hidden', 'true');
+  const [name, number] = tag.split('#');
+  const who = el('span', 'menu-who');
+  const line = el('span', 'menu-name', name);
+  if (number) line.append(el('span', 'menu-number', `#${number}`));
+  who.append(line);
+  const standing = banned ? 'Blacklisted' : chosen ? 'In your group' : '';
+  if (standing) who.append(el('span', `menu-standing ${banned ? 'banned' : 'chosen'}`, standing));
+  head.append(avatar(tag, {banned}), who);
+
+  const list = el('ul');
+  list.setAttribute('role', 'menu');
+  list.setAttribute('aria-label', `Actions for ${tag}`);
+  for (const items of playerMenuGroups(state, tag)) {
+    if (!items.length) continue;
+    if (list.children.length) {
+      const sep = el('li', 'menu-sep');
+      sep.setAttribute('role', 'separator');
+      list.append(sep);
+    }
+    for (const item of items) {
+      const li = el('li', item.danger ? 'menu-item danger' : 'menu-item');
+      li.setAttribute('role', 'menuitem');
+      li.tabIndex = -1;
+      if (item.disabled) li.setAttribute('aria-disabled', 'true');
+      const text = el('span', 'menu-text', item.label);
+      if (item.hint) text.append(el('small', '', item.hint));
+      li.append(icon(item.icon), text);
+      li.onclick = () => chooseItem(li, item);
+      li.onmousemove = () => { if (document.activeElement !== li) li.focus(); };
+      list.append(li);
+    }
+  }
+  list.onkeydown = menuKeys;
+  box.replaceChildren(head, list);
+
+  menu.tag = tag;
+  menu.origin = origin;
+  menu.scope = origin?.closest('ul') ?? null;
+  menu.order = menu.scope ? [...menu.scope.querySelectorAll('[data-tag]')].map(n => n.dataset.tag) : [];
+  if (origin?.hasAttribute('aria-expanded')) origin.setAttribute('aria-expanded', 'true');
+  box.hidden = false;
+  placeMenu(box, origin, at);
+  menuItems()[0]?.focus();
+}
+
+// placeMenu keeps the menu inside the window: below and right of the point
+// when there is room, flipped above or to the left when not.
+function placeMenu(box, origin, at) {
+  const margin = 8;
+  let x, y, above;
+  if (at) {
+    ({x, y} = at);
+    above = y;
+  } else {
+    const r = (origin.closest('[data-player]') ?? origin).getBoundingClientRect();
+    x = r.left + Math.min(40, r.width / 2);
+    y = r.bottom + 4;
+    above = r.top - 4;
+  }
+  const w = box.offsetWidth;
+  const h = box.offsetHeight;
+  let left = x;
+  let top = y;
+  let fromX = 'left';
+  let fromY = 'top';
+  if (left + w > innerWidth - margin) {
+    left = Math.max(x - w, margin);
+    fromX = 'right';
+  }
+  if (top + h > innerHeight - margin) {
+    top = above - h >= margin ? above - h : innerHeight - margin - h;
+    fromY = 'bottom';
+  }
+  box.style.left = `${Math.max(margin, Math.min(left, innerWidth - margin - w))}px`;
+  box.style.top = `${Math.max(margin, Math.min(top, innerHeight - margin - h))}px`;
+  box.style.transformOrigin = `${fromY} ${fromX}`;
+}
+
+// closePlayerMenu closes the menu; with focus, focus goes back to the row.
+function closePlayerMenu({focus = false} = {}) {
+  const box = $('player-menu');
+  if (box.hidden) return;
+  box.hidden = true;
+  box.replaceChildren();
+  if (menu.origin?.hasAttribute('aria-expanded')) menu.origin.setAttribute('aria-expanded', 'false');
+  if (focus) focusPlayer();
+}
+
+// focusPlayer focuses the row the menu was opened on. When a list redrew,
+// it finds the row again by BattleTag; when the row is gone, its neighbour,
+// else the selected tab.
+function focusPlayer() {
+  const {origin, scope, order, tag} = menu;
+  if (origin?.isConnected && origin.getClientRects().length) return origin.focus();
+  const find = t => (scope?.isConnected ? scope.querySelector(`[data-tag="${CSS.escape(t)}"]`) : null);
+  const i = Math.max(order.indexOf(tag), 0);
+  const target = find(tag) ?? order.slice(i + 1).map(find).find(Boolean) ?? order.slice(0, i).reverse().map(find).find(Boolean);
+  (target ?? $(`tab-${tab}`)).focus();
+}
+
+// chooseItem runs an item: the menu closes and focus returns to the row,
+// and again once the lists have redrawn after the action.
+async function chooseItem(li, item) {
+  if (li.getAttribute('aria-disabled') === 'true') return;
+  closePlayerMenu({focus: true});
+  await item.run();
+  const active = document.activeElement;
+  if (!active || active === document.body || !menu.origin?.isConnected) focusPlayer();
+}
+
+function menuKeys(event) {
+  const items = menuItems();
+  const i = items.indexOf(document.activeElement);
+  const move = n => {
+    event.preventDefault();
+    items[(n + items.length) % items.length]?.focus();
+  };
+  switch (event.key) {
+    case 'ArrowDown': return move(i + 1);
+    case 'ArrowUp': return move(i - 1);
+    case 'Home': return move(0);
+    case 'End': return move(items.length - 1);
+    case 'Enter':
+    case ' ':
+      event.preventDefault();
+      return items[i]?.click();
+    case 'Escape':
+    case 'Tab':
+      event.preventDefault();
+      event.stopPropagation();
+      return closePlayerMenu({focus: true});
+  }
+  // A letter moves to the next item that starts with it.
+  if (event.key.length === 1 && /\S/.test(event.key)) {
+    const letter = event.key.toLowerCase();
+    const next = [...items.slice(i + 1), ...items.slice(0, i + 1)].find(li => li.textContent.trim().toLowerCase().startsWith(letter));
+    if (next) {
+      event.preventDefault();
+      next.focus();
+    }
+  }
+}
+
+document.addEventListener('keydown', event => {
+  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+  const row = document.activeElement?.closest?.('[data-player]');
+  if (!row) return;
+  event.preventDefault();
+  menu.keyboardAt = Date.now();
+  openPlayerMenu(row.dataset.player, document.activeElement);
+});
+
+document.addEventListener('contextmenu', event => {
+  if ($('player-menu').contains(event.target)) return event.preventDefault();
+  // Shift+F10 and the Menu key send this event too, after the keydown that
+  // already opened the menu.
+  if (Date.now() - menu.keyboardAt < 600) return event.preventDefault();
+  const row = event.target.closest?.('[data-player]');
+  if (!row) return;
+  event.preventDefault();
+  const target = row.matches('[data-tag]') ? row : row.querySelector('[data-tag]') ?? row;
+  const fromKeyboard = event.clientX === 0 && event.clientY === 0;
+  openPlayerMenu(row.dataset.player, target, fromKeyboard ? null : {x: event.clientX, y: event.clientY});
+});
+
+document.addEventListener('pointerdown', event => {
+  if (!$('player-menu').contains(event.target)) closePlayerMenu();
+}, true);
+document.addEventListener('scroll', event => {
+  if (!$('player-menu').contains(event.target)) closePlayerMenu();
+}, true);
+window.addEventListener('resize', () => closePlayerMenu());
+window.addEventListener('blur', () => closePlayerMenu());
 
 /* Events --------------------------------------------------------------- */
 
@@ -973,7 +1272,9 @@ boot();
 // demoOpen opens a dialog in the demo page, for screenshots:
 // ?open=host-setup|maps|maps-search|report|close-games. The recent scenes
 // open the Recent players tab (recent-select and recent-select-confirm in
-// its blacklist selection), the blacklist scenes the Blacklist tab.
+// its blacklist selection), the blacklist scenes the Blacklist tab, and the
+// menu scenes the player menu on a recent player, a blacklisted player or a
+// group chip.
 async function demoOpen(what) {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   switch (what) {
@@ -1029,6 +1330,24 @@ async function demoOpen(what) {
     case 'blacklist-off':
       selectTab('blacklist');
       break;
+    // The player menu, opened from the keyboard on a row or chip.
+    case 'menu-recent':
+    case 'menu-blacklist':
+    case 'menu-group': {
+      const [list, tag] = {
+        'menu-recent': ['recent', 'Kelthuzad#6644'],
+        'menu-blacklist': ['blacklist', 'Deathwing#6666'],
+        'menu-group': ['party', 'Thrall#1820'],
+      }[what];
+      if (list !== 'party') selectTab(list);
+      await wait(50);
+      const target = $(list).querySelector(`[data-tag="${CSS.escape(tag)}"]`);
+      if (!target) break;
+      target.closest('[data-player]').scrollIntoView({block: 'center'});
+      await wait(50);
+      openPlayerMenu(tag, target);
+      break;
+    }
   }
 }
 
@@ -1412,7 +1731,8 @@ $('maps-choose').onclick = () => browser.selected && choose(browser.selected);
    the design in a browser. Pick a scene with ?scene=watching|first|live|
    paused|password|waiting|many|linux|unverified|host-waiting|host-lobby|
    game-mode|keyboard-ask|keyboard-linux|recent|recent-empty|recent-clear|
-   recent-select|recent-select-confirm|blacklist|blacklist-empty|blacklist-off;
+   recent-select|recent-select-confirm|blacklist|blacklist-empty|blacklist-off|
+   menu-recent|menu-blacklist|menu-group;
    add &open=host-setup to see the Game mode group. */
 function demoBridge() {
   const scene = new URLSearchParams(location.search).get('scene') || 'watching';
@@ -1529,6 +1849,9 @@ function demoBridge() {
       {time: at(1), message: 'Banned Garrosh#7781 (on your blacklist).'}, {time: at(0), message: 'Added Mannoroth#1404 to your blacklist (you banned them).'}]},
     'blacklist-empty': {blacklist: []},
     'blacklist-off': {autoBan: false},
+    'menu-recent': {manualTags: ['Arthas#1123', 'Jaina#2214', 'Kelthuzad#6644']},
+    'menu-blacklist': {},
+    'menu-group': {},
   };
   Object.assign(s, scenes[scene] || {});
   if (s.enabled) watch();
