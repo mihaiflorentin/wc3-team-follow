@@ -21,4 +21,5 @@ Ports (`port/contract`) and DTOs (`port/dto`) are the only types that cross laye
 5. `Diagnostics.LogFolder` is filled by the window's bridge, so a report says where the logs are.
 6. `FollowState.GameCount` (`gameCount`) is how many copies of the game discovery found while not connected, when more than one; otherwise 0. The window shows Close all Warcraft III in its headline when it is above 1.
 7. `FollowState.Roster` carries friends' BattleTags and status for the picker. It never carries account ids, and `Diagnostics` never carries the roster.
-8. Secrets never enter a DTO that leaves the process. `GameConnection.Session` exists only between discovery and the dialer, and the companion clears it. `FollowState` and `Diagnostics` carry no account ids, passwords or session.
+8. `joinHostTeam` (Join the host's team) is in `FollowConfig`, `FollowState` and `Preferences`. It starts on. `friends.json` stores it only when off (`"joinHostTeam": false`), so a file saved before the option existed loads with it on.
+9. Secrets never enter a DTO that leaves the process. `GameConnection.Session` exists only between discovery and the dialer, and the companion clears it. `FollowState` and `Diagnostics` carry no account ids, passwords or session.
