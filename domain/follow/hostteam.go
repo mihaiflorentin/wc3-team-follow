@@ -14,17 +14,21 @@ type joinedLobby struct {
 	moves map[string]int
 	// noted is set once the player was told the lobby locks teams.
 	noted bool
+	// countdown mirrors LobbyCountdown's details.countdownActive: no move
+	// is asked for while the lobby counts down to the match.
+	countdown bool
 }
 
-// joinHostsTeam moves the player's own slot to the host's team in a lobby
+// moveToHostTeam moves the player's own slot to the host's team in a lobby
 // Auto-join joined, when the group member it followed hosts it and their
 // team has an open slot. Every player may move their own slot, as the
 // lobby's team header does (GlueManager.js); the game's !swap can't use
 // an open slot, so this is how a member reaches the host's team there.
-// Only the player's own slot moves, at most maxMoves times per team.
-func (e *Engine) joinHostsTeam(p map[string]any) {
+// Only the player's own slot moves, at most maxMoves times per team, and
+// never while the lobby counts down.
+func (e *Engine) moveToHostTeam(p map[string]any) {
 	j := e.joined
-	if j == nil || !e.joinHostTeam || e.host.enabled || isTrue(p["isHost"]) || isTrue(p["countdownActive"]) {
+	if j == nil || !e.joinHostTeam || e.host.enabled || j.countdown || isTrue(p["isHost"]) {
 		return
 	}
 	hostName, _ := p["playerHost"].(string)

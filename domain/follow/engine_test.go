@@ -1080,6 +1080,25 @@ func TestAutoJoinMovesThePlayerToTheHostsTeam(t *testing.T) {
 	}
 }
 
+func TestAutoJoinNeverMovesThePlayerWhileTheCountdownRuns(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(false)
+	f.presence(nil)
+	f.receive("GameLobbySetup", joinedLobby("Friend#1234", false))
+	// The game reports the countdown in LobbyCountdown's details, never in
+	// GameLobbySetup.
+	f.receive("LobbyCountdown", map[string]any{"details": map[string]any{"countdownActive": true}})
+	f.receive("GameLobbySetup", joinedLobby("Friend#1234", true))
+	if n := f.count(follow.CmdSetTeam); n != 0 {
+		t.Fatalf("moved during the countdown: %d", n)
+	}
+	f.receive("LobbyCountdown", map[string]any{"details": map[string]any{"countdownActive": false}})
+	f.receive("GameLobbySetup", joinedLobby("Friend#1234", true))
+	if n := f.count(follow.CmdSetTeam); n != 1 {
+		t.Fatalf("did not move once the countdown stopped: %d", n)
+	}
+}
+
 func TestAutoJoinSaysOnceWhenTheHostsLobbyLocksTeams(t *testing.T) {
 	f := newFixture(t)
 	f.mustArm(false)

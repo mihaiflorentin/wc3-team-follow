@@ -433,12 +433,16 @@ func (e *Engine) Receive(event dto.GameEvent) {
 				e.joined = &joinedLobby{friend: e.lastJoin.Friend, moves: map[string]int{}}
 				e.Note("Joined " + e.lastJoin.Friend + "'s lobby. Follow stays on and is paused here.")
 			}
-			e.joinHostsTeam(p)
+			e.moveToHostTeam(p)
 		} else if e.pending != nil {
 			e.Note("A lobby update arrived after the join request. Check the lobby in Warcraft III.")
 		}
 		e.pending, e.password = nil, nil
 		e.busy, e.awaitingMenu, e.menuReady = true, false, false
+	case "LobbyCountdown":
+		if e.joined != nil {
+			e.joined.countdown = isTrue(object(p["details"])["countdownActive"])
+		}
 	case "IsGameUIActive":
 		switch p["isActive"] {
 		case "true", true:
