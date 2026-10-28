@@ -17,6 +17,7 @@
   --offline: #6f807d;   /* offline */
   --preview: #8fd3ea;   /* preview mode */
   --danger: #ef6f61;    /* errors, password prompts */
+  --update: #86aef7;    /* a newer Team Follow */
 
   --display: "Bahnschrift", "DIN Alternate", "Avenir Next Condensed", "Roboto Condensed", "DejaVu Sans Condensed", system-ui, sans-serif;
   --ui: system-ui, -apple-system, "Segoe UI", "Cantarell", "Noto Sans", sans-serif;
@@ -1094,4 +1095,140 @@ select {
 
 @media (max-width: 520px) {
   .game-mode-row { grid-template-columns: 1fr; gap: 0; }
+}
+
+/* Update banner ---------------------------------------------------------
+   A newer Team Follow: one strip above the beacon, with the beacon's inset
+   bar in the update colour. It never covers anything, so a match goes on. */
+
+.update {
+  margin-bottom: 14px;
+  padding: 14px 18px 12px;
+  border-radius: 12px;
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--update) 13%, transparent), transparent 60%),
+    var(--spruce-raised);
+  box-shadow: inset 4px 0 0 var(--update);
+}
+.update-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.update-mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  flex: none;
+  color: var(--update);
+  background: color-mix(in srgb, var(--update) 18%, transparent);
+}
+.update-mark .icon { width: 20px; height: 20px; }
+.update-text { flex: 1 1 260px; min-width: 0; }
+.update-title { display: block; font: 600 var(--step-1)/1.2 var(--display); font-stretch: 85%; }
+.update-sub { margin: 3px 0 0; color: var(--lichen); font-size: 12.5px; }
+.update-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.update-actions .primary { background: var(--update); }
+.update-actions .primary .icon { width: 14px; height: 14px; }
+.update-actions .link { margin-left: 6px; }
+
+.update-warning {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--away) 14%, transparent);
+  font-size: 13px;
+}
+.update-warning .icon { color: var(--away); margin-top: 2px; }
+
+.update-notes { margin-top: 10px; }
+.update-notes > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 0;
+  color: var(--bone);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.update-notes > summary::-webkit-details-marker { display: none; }
+.update-notes .chev, .change .icon { width: 13px; height: 13px; align-self: center; color: var(--lichen); transition: transform .15s; }
+.update-notes[open] > summary .chev, .change[open] > summary .icon { transform: rotate(90deg); }
+.update-teaser { color: var(--lichen); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.update-notes[open] .update-teaser { display: none; }
+
+/* The changelog: plain text from GitHub, grouped by version. Long ones
+   scroll inside the banner instead of pushing the window down. */
+.changes {
+  max-height: min(320px, 45vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-top: 8px;
+  padding: 4px 14px 8px;
+  border-radius: 10px;
+  background: var(--spruce-deep);
+  user-select: text;
+}
+.changes:focus-visible { outline-offset: -2px; }
+.change { padding: 6px 0; }
+.change + .change { border-top: 1px solid color-mix(in srgb, var(--spruce-line) 60%, transparent); }
+.change > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.change > summary::-webkit-details-marker { display: none; }
+.change-version { font: 600 var(--step-1)/1.2 var(--display); font-stretch: 85%; font-variant-numeric: tabular-nums; }
+.change-date { color: var(--lichen); font-size: 12px; }
+.change-group { margin: 6px 0 4px 23px; }
+.change-group h4 { margin: 8px 0 4px; color: var(--lichen); font-size: 12.5px; font-weight: 600; }
+.change-group ul { margin: 0; padding: 0; list-style: none; max-width: 72ch; }
+.change-group li { position: relative; padding: 3px 0 3px 16px; font-size: 13px; line-height: 1.5; }
+.change-group li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: .8em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--spruce-line);
+}
+.change-group li strong { color: var(--bone); font-weight: 650; }
+.change-group li code, .notes-text code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--spruce-raised);
+  font: 12px ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace;
+}
+.notes-text { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; color: var(--bone); }
+
+/* Updates section ------------------------------------------------------- */
+
+.updates h2 .icon { color: var(--update); }
+.updates-status { margin: 0 0 10px; font-size: 13px; color: var(--lichen); }
+.updates-status[data-tone="available"] { color: var(--update); font-weight: 600; }
+.updates-status[data-tone="problem"] { color: var(--danger); }
+.updates-status:empty { display: none; }
+.updates .row { margin-bottom: 10px; }
+.updates-releases { margin-left: auto; }
+#updates-go { background: var(--update); }
+.updates-auto { background: var(--spruce); }
+.updates-auto:has(input:disabled) { cursor: not-allowed; opacity: .6; }
+.updates-auto input:disabled { cursor: not-allowed; }
+
+@media (max-width: 560px) {
+  .update { padding: 12px 14px; }
+  .update-mark { display: none; }
+  .update-actions { width: 100%; }
+  .update-actions .link { margin-left: auto; }
+  .change-group { margin-left: 0; }
 }

@@ -13,6 +13,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Players you ban yourself in a lobby you host are added to the blacklist automatically (English game client). A switch turns this off.
 - Blacklisted players are marked in Recent players and Friends, and are taken out of your follow group.
 
+- **Update check.** Team Follow tells you when a new version is out, with what changed since your version. Choose **Update** to open the download page, **Later** to hide the banner for now, or **Skip this version**. It warns you first when you're in a lobby or a match, or Auto-join or Auto-host is on.
+- An **Updates** section shows your version, with **Check for updates** and a switch to turn automatic checks off.
+
 ### Changed
 
 - Before each ban, Team Follow reads every lobby update the game has already sent. It bans only the slot the blacklisted player holds at that moment, and warns you by name if the game reports a different player as banned.

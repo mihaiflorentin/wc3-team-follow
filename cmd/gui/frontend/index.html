@@ -36,6 +36,7 @@
   <symbol id="i-up" viewBox="0 0 24 24"><path d="m7 14 5-5 5 5"/></symbol>
   <symbol id="i-down" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
   <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
+  <symbol id="i-update" viewBox="0 0 24 24"><path d="M12 15.5V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M4.5 14v4.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V14"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.01"/></symbol>
 </svg>
 
@@ -44,6 +45,26 @@
     <span class="brand"><svg class="icon"><use href="#i-mark"/></svg>Team Follow</span>
     <span id="connection" class="connection" role="status"><span class="dot"></span><span id="connection-text">Starting…</span></span>
   </header>
+
+  <section id="update-banner" class="update" aria-labelledby="update-title" hidden>
+    <div class="update-head">
+      <span class="update-mark" aria-hidden="true"><svg class="icon"><use href="#i-update"/></svg></span>
+      <div class="update-text">
+        <h2 id="update-title" class="update-title"></h2>
+        <p id="update-sub" class="update-sub"></p>
+      </div>
+      <div class="update-actions">
+        <button type="button" id="update-go" class="primary small" aria-describedby="update-sub"><svg class="icon"><use href="#i-update"/></svg>Update</button>
+        <button type="button" id="update-later" class="ghost small">Later</button>
+        <button type="button" id="update-skip" class="link">Skip this version</button>
+      </div>
+    </div>
+    <p id="update-warning" class="update-warning" hidden><svg class="icon"><use href="#i-alert"/></svg><span id="update-warning-text"></span></p>
+    <details id="update-notes" class="update-notes">
+      <summary><svg class="icon chev"><use href="#i-chevron"/></svg><span id="update-notes-label">What’s new</span><span id="update-teaser" class="update-teaser"></span></summary>
+      <div id="update-changes" class="changes" tabindex="0" aria-label="What’s new"></div>
+    </details>
+  </section>
 
   <section id="beacon" class="beacon" data-tone="off" aria-labelledby="status">
     <div class="beacon-main">
@@ -217,6 +238,20 @@
           <button type="button" id="report" class="link">Report a problem</button>
         </div>
         <ol id="log" class="log"></ol>
+      </section>
+
+      <section class="panel updates" aria-labelledby="updates-title">
+        <div class="panel-head">
+          <h2 id="updates-title"><svg class="icon"><use href="#i-update"/></svg>Updates</h2>
+          <span id="updates-version" class="count"></span>
+        </div>
+        <p id="updates-status" class="updates-status" role="status"></p>
+        <div class="row">
+          <button type="button" id="updates-check" class="ghost small"><svg class="icon"><use href="#i-refresh"/></svg><span>Check for updates</span></button>
+          <button type="button" id="updates-go" class="primary small" hidden></button>
+          <button type="button" id="updates-releases" class="link updates-releases">Releases page</button>
+        </div>
+        <label class="option-row updates-auto"><span><strong>Check automatically</strong><small>When Team Follow starts and every few hours. Nothing is downloaded until you choose Update.</small></span><input type="checkbox" id="updates-auto" role="switch"></label>
       </section>
     </aside>
   </main>

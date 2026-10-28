@@ -147,7 +147,7 @@ func (c *Checker) Finish(rel dto.Release, err error) {
 		URL:       rel.PageURL,
 		Published: rel.Published,
 		Changes:   ChangesBetween(ParseChangelog(rel.Changelog), c.current, offered),
-		Notes:     rel.Notes,
+		Notes:     PlainNotes(rel.Notes),
 	}
 }
 

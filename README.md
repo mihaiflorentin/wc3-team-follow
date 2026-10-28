@@ -106,6 +106,12 @@ When the system blocks Team Follow from reading the game (Linux and macOS each n
 
 ![Linux setup: Team Follow shows the setcap command needed to read the game, with a Copy button](docs/screenshots/linux-setup.png)
 
+### Updates
+
+Team Follow checks GitHub for a new version when it starts and every few hours. When one is out, a banner shows the version and what changed since yours, with **Update**, **Later** and **Skip this version**; it warns you first if updating would interrupt a lobby, a match, Auto-join or Auto-host. Nothing is downloaded until you choose Update, which opens the release's download page. The **Updates** section beside Activity shows your version and has **Check for updates** and a **Check automatically** switch.
+
+![An update banner: Team Follow 0.9.0 is available, with Update, Later and Skip this version, and What's new listing the changes since your version](docs/screenshots/update.png)
+
 ### Report a problem
 
 **Report a problem** shows a diagnostic report to copy and opens the folder with Team Follow's log files. The report has no names or BattleTags; the logs include BattleTags and lobby names but never passwords or the game's session. See [docs/install.md](docs/install.md#reporting-a-problem).
@@ -117,6 +123,8 @@ When the system blocks Team Follow from reading the game (Linux and macOS each n
 Team Follow talks only to the game's own local menu service on `127.0.0.1`. To connect, it reads the game's local menu session identifier from the game process. It never writes to the game, injects code or looks for account credentials, and the session identifier is never logged, shown or saved.
 
 It sends only an allowlist of commands, each one the game's own menu sends for the same purpose: Join Friend's commands for Auto-join, and Create Game's create button, the host's Start/Cancel and team controls, the friends list's Invite to game and the lobby chat box (for `!swap`) for Auto-host. Nothing starts a match unless the host turned on Start when full. The only keystrokes it ever sends are the Game mode command you entered, into the Warcraft III window while it is in front ([ADR 0007](docs/adr/0007-typing-in-the-match-chat-with-keystrokes.md)).
+
+Checking for updates asks GitHub's public API (`api.github.com`) over HTTPS for the latest stable release and its changelog. It sends nothing about you or the game, and you can turn automatic checks off ([ADR 0009](docs/adr/0009-self-update.md)).
 
 Joining and hosting are enabled only on game builds that have been checked by hand (`[follow] verified_builds` in `config/config.toml`). On other builds Team Follow still watches, but Auto-join and Auto-host stay off.
 

@@ -289,7 +289,7 @@ func TestTheOfferCarriesTheChangelogSinceTheRunningVersion(t *testing.T) {
 	for name, changelog := range map[string]string{"missing": "", "no matching section": "## [0.6.0]\n### Added\n- Old.\n"} {
 		rel.Changelog = changelog
 		s = check(t, newChecker(newClock(), "v0.7.0", true, ""), false, rel, nil)
-		if len(s.Release.Changes) != 0 || s.Release.Changes == nil || s.Release.Notes != rel.Notes {
+		if len(s.Release.Changes) != 0 || s.Release.Changes == nil || s.Release.Notes != "What's Changed\n• <b>Raw</b> notes by @someone" {
 			t.Errorf("%s: release = %+v", name, s.Release)
 		}
 	}

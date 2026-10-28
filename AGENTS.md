@@ -14,14 +14,16 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `config/` | `config.toml` (embedded into the binary) and `NewConfig`. |
 | `logging/` | `Setup` (console + rotated log file + crash file), `New` (console only) and the log handlers. Cross-cutting: every layer may receive a `*slog.Logger`. |
 | `domain/follow/` | The follow state machine (port of 0.4's `team-follow.cjs`), Auto-host (`host.go`), the recent players recorder (`recent.go`) and the blacklist with auto-ban (`blacklist.go`, `ban.go`). Pure. |
-| `domain/companion/` | `contract.Companion`: discovery loop, game session, saving friends and recent players, publishing state. |
+| `domain/companion/` | `contract.Companion`: discovery loop, game session, saving friends and recent players, running update checks, publishing state. |
+| `domain/update/` | The update check's decisions (ADR 0009): when to check, version comparison, Later and Skip, the restart warning, and the changelog parser (`changelog.go`). Pure. |
 | `port/contract/` | Interfaces (ports) that domain and adapters meet at. Interfaces only, no structs. |
 | `port/dto/` | Plain data shapes, `package dto`, no subfolders. |
 | `infrastructure/discovery/` | Finds the game, menu port, session and version, and the Maps folders (`MapsLocator`, with Wine path translation). `Processes` closes the game's own processes when the player asks (`contract.GameProcesses`). `platform_<os>.go` per OS; portable parsing beside it. |
 | `infrastructure/maps/` | Lists and searches maps in a Maps folder (`MapLibrary`). |
 | `infrastructure/gamesocket/` | Loopback websocket to the game with the command allowlist; a reader goroutine queues events so `TryReceive` can return the ones already waiting. |
 | `infrastructure/keyboard/` | Types one line in the match chat with keystrokes (`contract.GameKeyboard`, ADR 0007): the sequence and its checks in `keyboard.go`, `SendInput` in `platform_windows.go`, `CGEventPost` in `platform_darwin.go`, not supported elsewhere yet. |
-| `infrastructure/settings/` | `friends.json` (friends, Auto-host setup, blacklist) and `recent-players.json` (`RecentPlayers`) in the per-user data folder. |
+| `infrastructure/updater/` | Finds the newest stable release and its CHANGELOG.md through GitHub's REST API (`contract.Updater`, ADR 0009); HTTPS to GitHub's hosts only. |
+| `infrastructure/settings/` | `friends.json` (friends, Auto-host setup, blacklist, update settings) and `recent-players.json` (`RecentPlayers`) in the per-user data folder. |
 | `mock/` | Hand-written test doubles, one package per contract group. |
 | `packaging/` | App icon sources and renders (`icon/`), the Windows resource description (`windows/winres.json`), the macOS `Info.plist` and entitlements (`darwin/`), and the Linux `.desktop` entry (`linux/`). |
 | `docs/` | Living documentation; architectural decisions go in `docs/adr/`. |
@@ -31,6 +33,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 - Release targets: `windows/amd64` (cross-compiled, no cgo, `-H windowsgui`), `darwin/arm64` (cgo, `.app` bundle, ad-hoc signed with `com.apple.security.cs.debugger`, macOS 13+), `linux/amd64` (cgo, WebKitGTK 4.1, tag `webkit2_41`). Builds need `-tags desktop,production`; use the `Makefile`.
 - `[follow] verified_builds` gates live joining (`3.0.1.24371`). Never add a build without a live test.
 - `[logging] default` is `color`, `level` is `debug`; the log file (`file = true`) is JSON at `debug`, 5 MB × 3 rotations.
+- `[updates]` checks `mihaiflorentin/wc3-team-follow` on `https://api.github.com` every `6h` (retry `30m`, timeout `20s`); `main.go` sets `cfg.App.Version` from the build info.
 - Per-user data: `%LOCALAPPDATA%\WarcraftTeamFollow` (Windows), `~/Library/Application Support/WarcraftTeamFollow` (macOS), `$XDG_CONFIG_HOME/WarcraftTeamFollow` (Linux). `WF_DATA_DIR` overrides it. On Windows the WebView2 profile is its `webview` subfolder.
 - `LICENSE`: MIT, copyright 2026 Mihai Mihaila.
 
@@ -45,6 +48,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 - Keystrokes (ADR 0007) go only through `contract.GameKeyboard` (`infrastructure/keyboard`), only to the discovered game process and only while it is the window in front, checked before every key; the moment it isn't, or the context ends, typing stops and the error says the chat box may hold part of the line. Never bring the game forward, activate a window or steal focus. Only Enter and printable ASCII characters (no hotkeys, orders or Esc), one line of at most 100 characters, refused whole rather than cut short. Only Auto-host's own Game mode command, as host, after the player entered one and switched it on (off by default); the `type` command is the one manual exception. Keystrokes write no memory and inject no code. Linux isn't supported yet; never add uinput or portal input, which can't check the target.
 - Nothing starts a match unless the host switched on Start when full; Auto-host otherwise only creates the lobby.
 - Follow always starts off; nothing re-enables it automatically after a disconnect.
+- Update checks (ADR 0009) go only through `contract.Updater` (`infrastructure/updater`): plain GETs to `api.github.com` and the release hosts it links (`github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com`), over HTTPS only, redirects included, carrying no token, cookie or anything about the player. Only clean `vX.Y.Z` builds check; never offer a pre-release such as `edge`. Changelog and release notes reach the page only as plain-text spans set with `textContent`, never as HTML. Nothing is downloaded or changed without the player's click on Update; the bridge opens only `https://github.com/` pages from the companion's state.
 - Recent players (`follow.Recent`) only read the lobby events the game already sends; recording sends nothing. The list (BattleTags, map, last seen) stays in `recent-players.json` on this computer, never in `Diagnostics` or the log (only `recent.saved` with a count).
 
 ## Dependency rules
@@ -151,6 +155,7 @@ Architectural decisions are recorded as ADRs in `docs/adr/`, one numbered file p
 - `0006`: typing in the game chat.
 - `0007`: typing in the match chat with keystrokes.
 - `0008`: banning blacklisted players from lobbies the player hosts.
+- `0009`: self-update: checking GitHub Releases and asking the player.
 
 ## Agent skills
 

@@ -148,6 +148,17 @@ func TestParseChangelogIgnoresMalformedInput(t *testing.T) {
 	}
 }
 
+func TestPlainNotesDropsMarkdownMarks(t *testing.T) {
+	in := "## What's Changed\r\n* **Fix** Auto-join by @someone in [#12](https://github.com/x/y/pull/12)\n- Use `say`\n\n\n\n<b>Raw</b>\nFull Changelog: v0.7.0...v0.7.1"
+	want := "What's Changed\n• Fix Auto-join by @someone in #12\n• Use say\n\n<b>Raw</b>\nFull Changelog: v0.7.0...v0.7.1"
+	if got := update.PlainNotes(in); got != want {
+		t.Fatalf("PlainNotes =\n%q\nwant\n%q", got, want)
+	}
+	if got := update.PlainNotes(strings.Repeat("x", 10000)); len(got) > 4000 {
+		t.Fatalf("kept %d characters", len(got))
+	}
+}
+
 func TestParseChangelogLimitsHugeInput(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("## [0.8.0]\n### Added\n")

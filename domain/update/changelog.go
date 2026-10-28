@@ -205,6 +205,55 @@ func linkText(s string) string {
 	return b.String()
 }
 
+// maxNotes bounds the release notes shown when there is no changelog.
+const maxNotes = 4000
+
+// PlainNotes turns a release's Markdown description into plain text for
+// the window: heading marks go, list items become bullets, bold and code
+// marks and link targets are dropped, and blank runs shrink to one line.
+// Anything else, HTML included, stays literal text.
+func PlainNotes(md string) string {
+	md = strings.ToValidUTF8(md, "")
+	var lines []string
+	blank := false
+	for line := range strings.SplitSeq(md, "\n") {
+		line = strings.TrimRight(line, "\r \t")
+		if strings.HasPrefix(line, "#") {
+			line = strings.TrimSpace(strings.TrimLeft(line, "#"))
+		}
+		if strings.HasPrefix(line, "* ") || strings.HasPrefix(line, "- ") {
+			line = "• " + strings.TrimSpace(line[2:])
+		}
+		var text strings.Builder
+		for _, span := range inline(line) {
+			text.WriteString(span.Text)
+		}
+		line = text.String()
+		if line == "" {
+			if blank || len(lines) == 0 {
+				continue
+			}
+			blank = true
+		} else {
+			blank = false
+		}
+		lines = append(lines, line)
+	}
+	return clipTo(strings.TrimSpace(strings.Join(lines, "\n")), maxNotes)
+}
+
+// clipTo shortens s to n bytes, on a character boundary.
+func clipTo(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	s = s[:n]
+	for !utf8.ValidString(s) {
+		s = s[:len(s)-1]
+	}
+	return s
+}
+
 // ChangesBetween returns the sections newer than current, up to and
 // including offered, newest first. It never returns nil.
 func ChangesBetween(sections []dto.ChangelogSection, current, offered Version) []dto.ChangelogSection {

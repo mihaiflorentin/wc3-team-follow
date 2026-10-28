@@ -18,6 +18,8 @@ Warcraft Team Follow is a hexagonal (ports and adapters) desktop app. The core (
                                                            │ contract.PreferenceStore      │
                                                            │ contract.RecentPlayers        │
                                                            │   infrastructure/settings     │
+                                                           │ contract.Updater              │
+                                                           │   infrastructure/updater      │
                                                            └──────────────────────────────┘
 ```
 
@@ -27,11 +29,13 @@ Warcraft Team Follow is a hexagonal (ports and adapters) desktop app. The core (
 | Driving adapters | `cmd/cli/`, `cmd/gui/` | Commands; the window and its `Bridge` |
 | Core | `domain/companion` | Discovery loop, the one game session, saving friends and recent players, publishing state |
 | | `domain/follow` | The follow state machine (`docs/follow-behaviour.md`) |
+| | `domain/update` | When to check for a newer release and what to offer (`docs/adr/0009-self-update.md`) |
 | Ports | `port/contract`, `port/dto` | Interfaces and plain data |
 | Driven adapters | `infrastructure/discovery` | Finds the game, its menu port and session, per OS; closes the game's processes when the player asks |
 | | `infrastructure/gamesocket` | Loopback websocket with the command allowlist |
 | | `infrastructure/keyboard` | Types one line in the match chat with keystrokes, only while the game is in front (Windows, macOS) |
 | | `infrastructure/settings` | `friends.json` and `recent-players.json` in the per-user data folder |
+| | `infrastructure/updater` | The newest stable release and its changelog from GitHub's REST API, over HTTPS |
 
 ## Startup
 
@@ -47,7 +51,8 @@ The page calls the Go side as `window.go.gui.Bridge.*`: `State`, `Configure`, `S
 
 - `engine.Tick()` for timeouts and resume;
 - every `[follow] refresh_interval`, while connected, `TeamGetInfo` and `FriendsGetFriends`;
-- while disconnected, every `[follow] discovery_interval`, discovery and dial in the background.
+- while disconnected, every `[follow] discovery_interval`, discovery and dial in the background;
+- when `update.Checker.Due` (start-up, then every `[updates] check_interval` with Check automatically on), `Updater.Latest` in the background.
 
 A reader goroutine feeds each game event to the engine. One mutex serialises the engine; state is published to subscribers after every change. A discovery error becomes `FollowState.ConnectionHint` when it is a sentence for players (discovery's errors start with a capital letter), or a generic hint otherwise. When the error implements `contract.GameCounter` (several copies running), its count becomes `FollowState.GameCount`.
 
