@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Add players by BattleTag in the Blacklist tab, or pick several at once in Recent players with **Select to blacklist**.
 - Players you ban yourself in a lobby you host are added to the blacklist automatically (English game client). A switch turns this off.
 - Blacklisted players are marked in Recent players and Friends, and are taken out of your follow group.
+- **Player menu.** Right-click any player name, or press Shift+F10 or the Menu key, to copy their BattleTag, add or remove them from your group, or add or remove them from the blacklist.
 
 ### Changed
 
