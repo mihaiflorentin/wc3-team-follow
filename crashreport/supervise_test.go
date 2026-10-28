@@ -36,6 +36,25 @@ func TestMain(m *testing.M) {
 		// Records what an update restart passed to the new instance.
 		_ = os.WriteFile(os.Getenv("CRASHREPORT_OUT"), []byte(os.Getenv(RestartEnv)+"|"+os.Getenv(ChildEnv)), 0o600)
 		os.Exit(0)
+	case "flaky":
+		// Fails on the first run only, as a window whose web view data
+		// folder is still held by the old one's browser would.
+		marker := os.Getenv("CRASHREPORT_OUT")
+		f, _ := os.OpenFile(marker, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		_, _ = f.WriteString("run\n")
+		_ = f.Close()
+		if data, _ := os.ReadFile(marker); strings.Count(string(data), "run") == 1 {
+			fmt.Fprintln(os.Stderr, "[WebView2 Error] 0x8007139f")
+			os.Exit(1)
+		}
+		fmt.Println("INFO gui.startup")
+		os.Exit(0)
+	case "always-fails":
+		f, _ := os.OpenFile(os.Getenv("CRASHREPORT_OUT"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		_, _ = f.WriteString("run\n")
+		_ = f.Close()
+		fmt.Fprintln(os.Stderr, "[WebView2 Error] 0x8007139f")
+		os.Exit(1)
 	case "linger":
 		time.Sleep(400 * time.Millisecond)
 		os.Exit(0)

@@ -93,6 +93,30 @@ func WaitForPrevious(timeout time.Duration) {
 // Updated reports whether this start follows an update.
 func Updated() bool { return os.Getenv(UpdatedEnv) != "" }
 
+// WebviewWait is how long the first start after an update waits for the
+// old window's web view to let go of its data folder.
+const WebviewWait = 15 * time.Second
+
+// WaitUntilFree checks free every poll until it reports true or timeout
+// has passed, and returns how long it waited and whether it got free. It
+// waits for the WebView2 data folder after an update (WebviewFree): the
+// old window's browser processes can outlive it, and WebView2 lets only one
+// browser use a data folder at a time.
+func WaitUntilFree(free func() bool, timeout, poll time.Duration) (time.Duration, bool) {
+	if free() {
+		return 0, true
+	}
+	start := time.Now()
+	deadline := start.Add(timeout)
+	for time.Now().Before(deadline) {
+		time.Sleep(min(poll, time.Until(deadline)))
+		if free() {
+			return time.Since(start), true
+		}
+	}
+	return time.Since(start), false
+}
+
 // WaitForExit waits until the process pid has exited, at most timeout, and
 // reports whether it did.
 func WaitForExit(pid int, timeout time.Duration) bool {

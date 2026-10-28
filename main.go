@@ -36,10 +36,18 @@ func main() {
 	if window && crashreport.Supervises && !crashreport.Supervised() {
 		if exeErr == nil {
 			dir := logDir()
-			os.Exit(crashreport.Supervise(crashreport.Options{
+			opts := crashreport.Options{
 				Exe: exe, Console: os.Stdout, LogDir: dir, Show: crashreport.Show,
 				CrashFile: crashFile(dir), StartupTimeout: time.Minute,
-			}))
+			}
+			if crashreport.Updated() {
+				// Right after an update the old window's web view may still
+				// hold its data folder: a window that fails at once gets one
+				// more try, after waiting for the folder (ADR 0009).
+				opts.RetryWithin = retryWithin
+				opts.BeforeRetry = func() { waitForWebview(webviewDir()) }
+			}
+			os.Exit(crashreport.Supervise(opts))
 		}
 	}
 	if err := run(exe); err != nil {
@@ -54,8 +62,37 @@ func main() {
 	}
 }
 
-// restartWait is how long a new version waits for the old one to exit.
-const restartWait = 30 * time.Second
+// restartWait is how long a new version waits for the old one to exit;
+// retryWithin is how soon a window that fails after an update is retried.
+const (
+	restartWait = 30 * time.Second
+	retryWithin = 10 * time.Second
+)
+
+// webviewDir is the WebView2 data folder (Windows), or "" when the data
+// folder is unknown. cmd/cli hands the same folder to the window.
+func webviewDir() string {
+	cfg, err := config.NewConfig()
+	if err != nil {
+		return ""
+	}
+	dataDir, err := config.DataDir(cfg.Storage)
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dataDir, "webview")
+}
+
+// waitForWebview waits, on Windows, until no WebView2 browser holds dir:
+// the old window's browser processes can outlive it, and a second browser
+// on the same data folder fails to start. It returns how long it waited
+// and whether the folder got free.
+func waitForWebview(dir string) (time.Duration, bool) {
+	if dir == "" || runtime.GOOS != "windows" {
+		return 0, true
+	}
+	return crashreport.WaitUntilFree(func() bool { return crashreport.WebviewFree(dir) }, crashreport.WebviewWait, 200*time.Millisecond)
+}
 
 // restart starts the updated version after the window closed for an update
 // and returns the exit code. A supervised window exits with RestartCode and
@@ -122,6 +159,10 @@ func run(exe string) (err error) {
 	cfg.App.Executable, cfg.App.Updated = exe, crashreport.Updated()
 	if real, err := filepath.EvalSymlinks(exe); err == nil {
 		cfg.App.Executable = real
+	}
+	if len(os.Args) < 2 && cfg.App.Updated && runtime.GOOS == "windows" {
+		waited, free := waitForWebview(webviewDir())
+		logger.Info("app.webview_wait", slog.Duration("waited", waited), slog.Bool("free", free))
 	}
 	// What's new reads the changelog built into the app.
 	cfg.App.Changelog = changelog

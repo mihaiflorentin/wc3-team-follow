@@ -43,22 +43,88 @@ type Options struct {
 	// Relaunch starts the updated program when the child exits with
 	// RestartCode; nil uses Relaunch(Exe).
 	Relaunch func() error
+	// RetryWithin, when set, starts a child that crashed within that time
+	// once more, after BeforeRetry, before the crash is reported. main sets
+	// it for the first start after an update (ADR 0009).
+	RetryWithin time.Duration
+	BeforeRetry func()
 }
 
 // Supervise runs the child until it exits, shows a dialog when it stopped
 // because of an error, and returns its exit code.
 func Supervise(opts Options) int {
-	cmd := exec.Command(opts.Exe, opts.Args...)
-	cmd.Env = append(os.Environ(), ChildEnv+"=1")
-	out := &tail{console: opts.Console, started: make(chan struct{})}
-	cmd.Stdout, cmd.Stderr = out, out
 	show := func(message string) {
 		record(opts.CrashFile, message)
 		opts.Show(Title, message)
 	}
-	if err := cmd.Start(); err != nil {
+	run, err := runChild(opts, show)
+	if err != nil {
 		show(Message("The window couldn't start: "+err.Error(), opts.LogDir))
 		return 1
+	}
+	// Right after an update the old window's web view can still hold its
+	// data folder for a moment (Windows), so a window that fails early is
+	// started once more before it counts as a crash.
+	if opts.RetryWithin > 0 && run.failed(opts) && run.ran < opts.RetryWithin {
+		if opts.BeforeRetry != nil {
+			opts.BeforeRetry()
+		}
+		if run, err = runChild(opts, show); err != nil {
+			show(Message("The window couldn't start: "+err.Error(), opts.LogDir))
+			return 1
+		}
+	}
+	if run.code == RestartCode && !run.stuck {
+		// The window installed an update: start the new version, which
+		// waits for this supervisor to exit. Not a crash.
+		relaunch := opts.Relaunch
+		if relaunch == nil {
+			relaunch = func() error { return Relaunch(opts.Exe) }
+		}
+		if err := relaunch(); err != nil {
+			show(UpdatedNotStartedMessage(err))
+			return 1
+		}
+		return 0
+	}
+	if msg, ok := Report(run.output, run.code, run.quiet, opts.LogDir); ok {
+		show(msg)
+	}
+	if run.code < 0 {
+		return 1
+	}
+	return run.code
+}
+
+// childRun is how one run of the child ended.
+type childRun struct {
+	code   int
+	output string
+	// quiet marks a stop the player asked for, or a stuck window already
+	// reported; stuck a window that never started.
+	quiet, stuck bool
+	// ran is how long the child ran.
+	ran time.Duration
+}
+
+// failed reports whether the run ended in a crash that would get a dialog.
+func (r childRun) failed(opts Options) bool {
+	if r.code == RestartCode || r.stuck {
+		return false
+	}
+	_, ok := Report(r.output, r.code, r.quiet, opts.LogDir)
+	return ok
+}
+
+// runChild starts the child and waits for it to exit.
+func runChild(opts Options, show func(string)) (childRun, error) {
+	cmd := exec.Command(opts.Exe, opts.Args...)
+	cmd.Env = append(os.Environ(), ChildEnv+"=1")
+	out := &tail{console: opts.Console, started: make(chan struct{})}
+	cmd.Stdout, cmd.Stderr = out, out
+	began := time.Now()
+	if err := cmd.Start(); err != nil {
+		return childRun{}, err
 	}
 	stop := forwardSignals(cmd.Process)
 	exited := make(chan struct{})
@@ -86,27 +152,13 @@ func Supervise(opts Options) int {
 	}
 	<-exited
 	stop()
-	code := cmd.ProcessState.ExitCode()
-	if code == RestartCode && !stuck {
-		// The window installed an update: start the new version, which
-		// waits for this supervisor to exit. Not a crash.
-		relaunch := opts.Relaunch
-		if relaunch == nil {
-			relaunch = func() error { return Relaunch(opts.Exe) }
-		}
-		if err := relaunch(); err != nil {
-			show(UpdatedNotStartedMessage(err))
-			return 1
-		}
-		return 0
-	}
-	if msg, ok := Report(out.String(), code, stuck || stoppedOnRequest(cmd.ProcessState), opts.LogDir); ok {
-		show(msg)
-	}
-	if code < 0 {
-		code = 1
-	}
-	return code
+	return childRun{
+		code:   cmd.ProcessState.ExitCode(),
+		output: out.String(),
+		quiet:  stuck || stoppedOnRequest(cmd.ProcessState),
+		stuck:  stuck,
+		ran:    time.Since(began),
+	}, nil
 }
 
 // record appends a dialog's text to the crash file, if there is one.

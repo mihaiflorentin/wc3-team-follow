@@ -17,7 +17,7 @@ On Windows the release is a GUI program with no console, and players start it fr
 - Wails' own messages go to the log as `gui.wails` at debug level, release builds included, so a report shows how far the window got.
 - The supervisor passes interrupt, terminate and hang-up on to the window process (Linux).
 - macOS has no supervisor: starting the bundle's binary again as a child would show a second Dock icon. The window process shows the dialog itself (osascript) when `run` returns an error or the main goroutine panics.
-- An update (ADR 0009) ends the window with exit code `RestartCode` (75). The supervisor shows no dialog for it: it starts the program again from the same path, now the new version, as a detached instance with `WF_RESTART_AFTER=<its pid>`, and exits. The new instance waits for that process to exit before it supervises or opens its window, so it never meets the old single-instance lock. If the new version can't be started, the supervisor says so in a dialog.
+- An update (ADR 0009) ends the window with exit code `RestartCode` (75). The supervisor shows no dialog for it: it starts the program again from the same path, now the new version, as a detached instance with `WF_RESTART_AFTER=<its pid>`, and exits. The new instance waits for that process to exit before it supervises or opens its window, so it never meets the old single-instance lock. If the new version can't be started, the supervisor says so in a dialog. On that first start after an update, a window that crashes within 10 s is started once more, after waiting for the WebView2 data folder to be free, before the crash dialog shows (ADR 0009).
 - Commands (`discover`, …) are never supervised: they print to the terminal that started them.
 
 ## Consequences
