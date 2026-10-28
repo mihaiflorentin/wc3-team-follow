@@ -15,14 +15,15 @@ func TestRecentPlayersRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	seen := time.Date(2026, 10, 28, 20, 15, 0, 0, time.UTC)
 	players := []dto.RecentPlayer{
-		{Tag: "Arthas#1123", Map: "Castle Fight", LastSeen: seen},
+		{Tag: "Arthas#1123", Map: "Castle Fight", LastSeen: seen, FirstSeen: seen.Add(-72 * time.Hour), Lobbies: 7},
 		{Tag: "Jaina#2214", Map: "Legion TD", LastSeen: seen.Add(-time.Hour)},
 	}
 	if err := settings.NewRecentPlayers(dir).Save(players); err != nil {
 		t.Fatal(err)
 	}
 	got, err := settings.NewRecentPlayers(dir).Load()
-	if err != nil || len(got) != 2 || got[0].Tag != "Arthas#1123" || got[1].Map != "Legion TD" || !got[0].LastSeen.Equal(seen) {
+	if err != nil || len(got) != 2 || got[0].Tag != "Arthas#1123" || got[1].Map != "Legion TD" || !got[0].LastSeen.Equal(seen) ||
+		!got[0].FirstSeen.Equal(seen.Add(-72*time.Hour)) || got[0].Lobbies != 7 {
 		t.Fatalf("loaded %+v, %v", got, err)
 	}
 	entries, _ := os.ReadDir(filepath.Join(dir, "settings"))

@@ -279,3 +279,78 @@ func TestRecentPlayersNameTheMap(t *testing.T) {
 		})
 	}
 }
+
+func TestRecentPlayersFirstSeenStaysAndLobbiesCountOncePerLobby(t *testing.T) {
+	h := newHarness(t, mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}))
+	h.connected(t)
+	cf := lobby(castleFight, "CF", slot("Player#1234", human, occupied, true, false), slot("Arthas#1123", human, occupied, false, false))
+	h.session.Push(cf)
+	waitFor(t, "recorded", func() bool { return len(h.svc.State().Recent) == 1 })
+	first := h.recentFor(t, "Arthas#1123")
+	if first.Lobbies != 1 || first.FirstSeen.IsZero() || !first.FirstSeen.Equal(first.LastSeen) {
+		t.Fatalf("after the first lobby update Arthas = %+v; want 1 lobby, first seen = last seen", first)
+	}
+
+	// Many updates of the same lobby, and time passing, count no new lobby.
+	for range 5 {
+		h.skew.Add(int64(time.Minute))
+		h.session.Push(cf)
+	}
+	waitFor(t, "refreshed", func() bool {
+		return h.recentFor(t, "Arthas#1123").LastSeen.Sub(first.LastSeen) >= 5*time.Minute
+	})
+	if p := h.recentFor(t, "Arthas#1123"); p.Lobbies != 1 || !p.FirstSeen.Equal(first.FirstSeen) {
+		t.Fatalf("after updates of the same lobby Arthas = %+v; want 1 lobby, first seen kept", p)
+	}
+
+	// The lobby ends and a new one starts with him in it.
+	h.session.Push(dto.GameEvent{MessageType: "MultiplayerGameLeave"})
+	waitFor(t, "left", func() bool { return len(h.svc.State().LobbyTags) == 0 })
+	h.skew.Add(int64(time.Hour))
+	h.session.Push(lobby(castleFight, "CF again", slot("Player#1234", human, occupied, true, false), slot("Arthas#1123", human, occupied, false, false)))
+	waitFor(t, "second lobby", func() bool { return h.recentFor(t, "Arthas#1123").Lobbies == 2 })
+	if p := h.recentFor(t, "Arthas#1123"); !p.FirstSeen.Equal(first.FirstSeen) || p.LastSeen.Sub(first.LastSeen) < time.Hour {
+		t.Fatalf("in the second lobby Arthas = %+v", p)
+	}
+}
+
+func TestRecentPlayersLobbiesCountAJoinOnceAndADifferentLobby(t *testing.T) {
+	h := newHarness(t, mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}))
+	h.connected(t)
+	me := slot("Player#1234", human, occupied, true, false)
+	arthas := slot("Arthas#1123", human, occupied, false, false)
+	jaina := slot("Jaina#2214", human, occupied, false, false)
+	h.session.Push(lobby(castleFight, "CF", me, arthas))
+	waitFor(t, "recorded", func() bool { return len(h.svc.State().Recent) == 1 })
+
+	// Jaina joins, leaves and joins the same lobby again: one lobby.
+	h.session.Push(lobby(castleFight, "CF", me, arthas, jaina))
+	h.session.Push(lobby(castleFight, "CF", me, arthas))
+	h.session.Push(lobby(castleFight, "CF", me, arthas, jaina))
+	waitFor(t, "Jaina back", func() bool { return len(h.svc.State().LobbyTags) == 2 })
+	if p := h.recentFor(t, "Jaina#2214"); p.Lobbies != 1 {
+		t.Fatalf("Jaina = %+v; rejoining the same lobby counts once", p)
+	}
+
+	// A different lobby without leaving first counts again.
+	h.session.Push(lobby(castleFight, "Legion TD night", me, arthas))
+	waitFor(t, "new lobby", func() bool { return h.recentFor(t, "Arthas#1123").Lobbies == 2 })
+	if p := h.recentFor(t, "Jaina#2214"); p.Lobbies != 1 {
+		t.Fatalf("Jaina = %+v; she isn't in the new lobby", p)
+	}
+}
+
+func TestRecentPlayersSavedBeforeFirstSeenLoadWithOneLobby(t *testing.T) {
+	seen := time.Now().Add(-48 * time.Hour).Round(0)
+	store := mockrecent.New(dto.RecentPlayer{Tag: "Arthas#1123", Map: "Castle Fight", LastSeen: seen})
+	h := newHarnessWith(t, mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}), store)
+	if p := h.recentFor(t, "Arthas#1123"); p.Lobbies != 1 || !p.FirstSeen.Equal(seen) || !p.LastSeen.Equal(seen) {
+		t.Fatalf("old entry loaded as %+v; want first seen = last seen and 1 lobby", p)
+	}
+	h.connected(t)
+	h.session.Push(lobby(castleFight, "CF", slot("Arthas#1123", human, occupied, false, false)))
+	waitFor(t, "second lobby", func() bool { return h.recentFor(t, "Arthas#1123").Lobbies == 2 })
+	if p := h.recentFor(t, "Arthas#1123"); !p.FirstSeen.Equal(seen) {
+		t.Fatalf("first seen moved to %v", p.FirstSeen)
+	}
+}

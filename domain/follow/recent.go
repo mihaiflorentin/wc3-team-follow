@@ -24,11 +24,19 @@ var colorCode = regexp.MustCompile(`(?i)\|c[0-9a-f]{8}|\|r`)
 // clock. Lobby updates stop once a match loads, so the last lobby's
 // players stay present, and Tick keeps refreshing their last-seen time,
 // until the score screen, a menu screen, leaving or a disconnect.
+//
+// A player's lobby count grows once per lobby: when a lobby starts with
+// them in it, or when they join it, never on later updates of the same
+// lobby. A lobby ends with End, or when an update names a different lobby.
 type Recent struct {
 	now     func() time.Time
 	players []dto.RecentPlayer
 	present []string
 	mapName string
+	// lobbyName names the current lobby; counted holds the tag keys whose
+	// lobby count already includes it.
+	lobbyName string
+	counted   map[string]bool
 	// changed is set when a player or map was added or changed, touched
 	// when only last-seen times moved, since the list was last saved.
 	changed, touched bool
@@ -37,6 +45,15 @@ type Recent struct {
 // NewRecent returns a recorder holding the saved list.
 func NewRecent(now func() time.Time, saved []dto.RecentPlayer) *Recent {
 	r := &Recent{now: now, players: slices.Clone(saved)}
+	for i, p := range r.players {
+		// Lists saved before first-seen and lobby counts existed.
+		if p.FirstSeen.IsZero() || p.FirstSeen.After(p.LastSeen) {
+			r.players[i].FirstSeen = p.LastSeen
+		}
+		if p.Lobbies < 1 {
+			r.players[i].Lobbies = 1
+		}
+	}
 	r.order()
 	return r
 }
@@ -46,6 +63,12 @@ func (r *Recent) Receive(event dto.GameEvent) {
 	p := event.Payload
 	switch event.MessageType {
 	case "GameLobbySetup":
+		name, _ := p["lobbyName"].(string)
+		name = strings.TrimSpace(name)
+		if name != r.lobbyName && name != "" && r.lobbyName != "" {
+			r.counted = nil
+		}
+		r.lobbyName = name
 		r.present, r.mapName = lobbyOthers(p), lobbyMap(p)
 		r.touch()
 	case "MultiplayerGameLeave", "ExitedGame", "LoggedOut":
@@ -68,13 +91,13 @@ func (r *Recent) End() {
 	if len(r.present) > 0 {
 		r.changed = true
 	}
-	r.present, r.mapName = nil, ""
+	r.present, r.mapName, r.lobbyName, r.counted = nil, "", "", nil
 }
 
 // Clear forgets every player, including who is present now; the next
 // lobby update records them again.
 func (r *Recent) Clear() {
-	r.players, r.present, r.mapName = nil, nil, ""
+	r.players, r.present, r.mapName, r.lobbyName, r.counted = nil, nil, "", "", nil
 	r.changed, r.touched = false, false
 }
 
@@ -109,17 +132,28 @@ func (r *Recent) touch() {
 		return
 	}
 	now := r.now()
+	if r.counted == nil {
+		r.counted = map[string]bool{}
+	}
 	for _, tag := range r.present {
-		i := slices.IndexFunc(r.players, func(p dto.RecentPlayer) bool { return tagKey(p.Tag) == tagKey(tag) })
+		key := tagKey(tag)
+		newLobby := !r.counted[key]
+		r.counted[key] = true
+		i := slices.IndexFunc(r.players, func(p dto.RecentPlayer) bool { return tagKey(p.Tag) == key })
 		if i < 0 {
-			r.players = append(r.players, dto.RecentPlayer{Tag: tag, Map: r.mapName, LastSeen: now})
+			r.players = append(r.players, dto.RecentPlayer{Tag: tag, Map: r.mapName, LastSeen: now, FirstSeen: now, Lobbies: 1})
 			r.changed = true
 			continue
 		}
-		if r.players[i].Map != r.mapName || r.players[i].Tag != tag {
+		p := r.players[i]
+		if p.Map != r.mapName || p.Tag != tag || newLobby {
 			r.changed = true
 		}
-		r.players[i] = dto.RecentPlayer{Tag: tag, Map: r.mapName, LastSeen: now}
+		p.Tag, p.Map, p.LastSeen = tag, r.mapName, now
+		if newLobby {
+			p.Lobbies++
+		}
+		r.players[i] = p
 	}
 	r.touched = true
 	r.order()

@@ -14,4 +14,11 @@ type RecentPlayer struct {
 	Map string `json:"map"`
 	// LastSeen is the last moment they were in a lobby or match together.
 	LastSeen time.Time `json:"lastSeen"`
+	// FirstSeen is the first moment they were in a lobby or match together.
+	// Lists saved before it existed load with FirstSeen = LastSeen.
+	FirstSeen time.Time `json:"firstSeen"`
+	// Lobbies is how many distinct lobbies they shared with the player,
+	// counted once per lobby, when it starts with them in it or they join.
+	// Lists saved before it existed load with 1.
+	Lobbies int `json:"lobbies"`
 }
