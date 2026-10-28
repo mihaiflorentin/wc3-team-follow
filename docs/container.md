@@ -41,7 +41,7 @@ Every accessor is a method returning `(T, error)`, where `T` is a `port/contract
 | `PreferenceStore()` | `settings.New(dir)` in `settings.DataDir(cfg.Storage)`; a missing `[storage]` is an error |
 | `RecentPlayers()` | `settings.NewRecentPlayers(dir)` in the same data folder; a missing `[storage]` is an error |
 | `PlayerNotes()` | `settings.NewPlayerNotes(dir)` in the same data folder; a missing `[storage]` is an error |
-| `Companion()` | `companion.New(Ports{discovery, dialer, prefs, maps locator, map library, processes, keyboard, recent players}, logger, options from [follow])`; a missing `[follow]` or a bad duration is an error |
+| `Companion()` | `companion.New(Ports{discovery, dialer, prefs, maps locator, map library, processes, keyboard, recent players, updater, player notes}, logger, options from [follow] and [updates])`; a missing `[follow]` or `[updates]`, or a bad duration, is an error |
 
 The domain accessor shows the pattern: read and validate config, resolve collaborators, wrap their errors, pass them to the constructor.
 

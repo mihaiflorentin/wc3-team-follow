@@ -64,7 +64,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 
 - `main.go` calls `config.NewConfig()`, `logging.New(cfg.Logging, os.Stdout)`, `container.New(cfg, logger)` and `cli.Execute(c)`, then `c.Close()`. Nothing else builds a container.
 - Each command receives the container through its constructor and resolves what it needs before doing any work. The root command resolves `gui.Deps` in `guiDeps` and builds `gui.Options` from `[window]`. `discover` takes a resolve function, so tests run it with mocks.
-- Every collaborator arrives as a constructor parameter and is stored in a field: `companion.New(companion.Ports{Discovery, Dialer, Prefs, Maps, Library, Processes, Keyboard, Recent, Notes}, logger, opts)`. No globals, no `init()`, no config lookups inside domain code or the window.
+- Every collaborator arrives as a constructor parameter and is stored in a field: `companion.New(companion.Ports{Discovery, Dialer, Prefs, Maps, Library, Processes, Keyboard, Recent, Updater, Notes}, logger, opts)`. No globals, no `init()`, no config lookups inside domain code or the window.
 - Container accessors are lazy singletons returning `(T, error)`. A missing config section is an error, and a failed build is retried on the next call. Adapters that hold connections register `s.onClose`.
 
 To add a dependency (an outbound adapter or a domain service):
