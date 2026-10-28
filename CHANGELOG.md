@@ -1,0 +1,91 @@
+# Changelog
+
+What changed in each version of Warcraft Team Follow, newest first. Team Follow shows these entries before you update and again on the first start after an update, so they are written for players.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+### Added
+
+- **Blacklist.** A third tab in the People panel keeps players out of lobbies you host. When a blacklisted player joins a lobby you host, Team Follow bans them with the game's own Ban, whether you created the lobby by hand or with Auto-host.
+- Add players by BattleTag in the Blacklist tab, or pick several at once in Recent players with **Select to blacklist**.
+- Players you ban yourself in a lobby you host are added to the blacklist automatically (English game client). A switch turns this off.
+- Blacklisted players are marked in Recent players and Friends, and are taken out of your follow group.
+
+### Changed
+
+- Before each ban, Team Follow reads every lobby update the game has already sent. It bans only the slot the blacklisted player holds at that moment, and warns you by name if the game reports a different player as banned.
+
+## [0.7.0] - 2026-10-28
+
+### Added
+
+- **Recent players.** The People panel has Friends and Recent players tabs. Recent players lists everyone you were in a lobby or match with: their BattleTag, status, the last map you played together and when you last saw them. Tick a player to add them to your follow group, or use **Clear all** to empty the list.
+- The Friends tab shows how many friends are online.
+
+## [0.6.1] - 2026-10-28
+
+### Added
+
+- App icon for the Windows, macOS and Linux builds. The Linux download now includes an icon and a `.desktop` entry.
+
+## [0.6.0] - 2026-10-28
+
+### Added
+
+- **Game mode.** Auto-host can type a command such as `-ar` in the match chat a few seconds after the match starts, using keystrokes, only while Warcraft III is the window in front. Windows and macOS; Linux comes later.
+- **Same team** can now use the game's `!swap` lobby command to bring a friend onto your team, by trading places with a player who isn't in your group.
+- **Join the host's team** (Auto-join): moves you into an open slot on the host's team when you land on the other one.
+- A `type` command for checking keystroke typing by hand.
+
+### Changed
+
+- The window is simpler: the Your team card is gone, and Ask for lobby passwords lives inside the Auto-join card.
+
+## [0.5.4] - 2026-10-27
+
+### Added
+
+- **Close all Warcraft III** in the window closes every running copy of the game, after you confirm.
+
+### Fixed
+
+- Auto-join loads the custom game list before joining, so it finds lobbies more reliably.
+
+## [0.5.3] - 2026-10-27
+
+### Added
+
+- An error dialog when the window fails to open, instead of closing silently.
+
+### Fixed
+
+- On Windows, the window's browser data now lives in Team Follow's own folder, not in roaming AppData.
+- Auto-join skips lobbies with a password unless you choose to be asked for it, and Auto-host brings you to your group's team.
+
+## [0.5.1] - 2026-10-27
+
+### Fixed
+
+- Auto-host opens lobbies correctly when the game runs under Wine or Proton on Linux.
+- Team Follow reconnects after you sign out of Battle.net and back in.
+
+## [0.5.0] - 2026-10-27
+
+### Added
+
+- **Auto-host:** creates your lobby on your chosen map and waits for your group. Start when full, Same team and Auto-invite are optional.
+- **Map browser:** finds your Maps folder automatically, including under Wine and Proton, with sorting and a search across folders.
+- **Auto-join from any game menu,** including straight from the score screen after a match.
+- A friends picker, watching before joining, and log files for reporting problems.
+- Warcraft Team Follow rebuilt in Go, with one app for Windows, macOS and Linux.
+
+[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.6.1...v0.7.0
+[0.6.1]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.5.4...v0.6.0
+[0.5.4]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.5.3...v0.5.4
+[0.5.3]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.5.1...v0.5.3
+[0.5.1]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/mihaiflorentin/wc3-team-follow/releases/tag/v0.5.0

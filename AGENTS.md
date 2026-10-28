@@ -124,6 +124,16 @@ To add a dependency (an outbound adapter or a domain service):
 
 Before finishing a change, run `make fmt`, `go vet ./...` and `go test ./...`.
 
+## Changelog
+
+`CHANGELOG.md` is for players: Team Follow shows its entries in the update prompt and again on the first start after an update. Keep it current with every change.
+
+- Every change a player can notice adds a line under `## [Unreleased]` in the same commit, in the right group: `Added`, `Changed`, `Fixed`, `Removed` or `Security`. Internal work (refactors, tests, CI, docs for developers) gets no entry.
+- Write for players: what they can now do or what changed for them, in plain words and full sentences. No commit hashes, issue numbers, package names or protocol commands. Bold the feature name when an entry introduces a feature.
+- Never put a real BattleTag in it; use samples such as Player#1234.
+- Before tagging a release, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (the tag without the `v`, today's date), add a new empty `## [Unreleased]` above it, and update the compare links at the bottom. The release tag's version must have a matching section, or the release has no notes.
+- Never rewrite a released version's entries, except to fix a mistake.
+
 ## CI
 
 - GitHub Actions: `.github/workflows/release.yml` tests on Windows, macOS and Linux, builds the three release files on suitable runners, and publishes a GitHub Release. A Release Tag (`X.Y.Z`, optional `v`, classified by `scripts/release-tag.sh`) publishes a versioned release; a push to `master` replaces the rolling `edge` pre-release.
