@@ -25,3 +25,15 @@ type MapsFolder struct {
 	// Source says how it was found, for the player.
 	Source string `json:"source"`
 }
+
+// KeyboardStatus says whether Team Follow can type in the match chat on
+// this computer (ADR 0007).
+type KeyboardStatus struct {
+	// Supported is false on systems without a keystroke method yet.
+	Supported bool `json:"supported"`
+	// Permitted is true when the system permission typing needs is granted.
+	Permitted bool `json:"permitted"`
+	// Reason explains, in a sentence for the player, why typing can't
+	// happen; empty when Supported and Permitted.
+	Reason string `json:"reason"`
+}
