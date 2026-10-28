@@ -78,5 +78,9 @@ python3 -m http.server 8000 --directory cmd/gui/frontend
 | `password.png` | `?scene=password` |
 | `linux-setup.png` | `?scene=linux` |
 | `report.png` | `?scene=live&open=report` |
+| `player-tooltip.png` | `?scene=tooltip` (cropped to the People panel) |
+| `player-tooltip-narrow.png` | `?scene=tooltip-blacklist` at 420 px wide (cropped) |
+
+`?scene=tooltip-focus` shows the tooltip on a group chip focused from the keyboard.
 
 The demo page only uses sample friends and maps; keep it that way, since the images are public.

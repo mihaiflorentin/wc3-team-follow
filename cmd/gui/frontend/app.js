@@ -102,7 +102,6 @@ function presence(text, lobby) {
   if (lobby) {
     node.firstChild.appendData(':');
     node.append(el('span', 'lobby', lobby));
-    node.title = lobby;
   }
   return node;
 }
@@ -124,7 +123,6 @@ function noteMark() {
   const mark = el('span', 'note-mark');
   mark.setAttribute('role', 'img');
   mark.setAttribute('aria-label', 'Has a note');
-  mark.title = 'You have a note about this player';
   mark.append(icon('note'));
   return mark;
 }
@@ -134,12 +132,10 @@ function noteMark() {
 function nameCell(tag, banned, noted = false) {
   const wrap = el('span', 'name-wrap');
   const name = el('span', 'name', tag);
-  name.title = tag;
   wrap.append(name);
   if (noted) wrap.append(noteMark());
   if (banned) {
     const badge = el('span', 'ban-badge');
-    badge.title = 'Blacklisted';
     badge.append(icon('ban'), el('span', 'ban-badge-text', 'Blacklisted'));
     wrap.append(badge);
   }
@@ -268,6 +264,7 @@ function render(s) {
   renderRecent(s);
   renderBlacklist(s);
   renderLog(s);
+  refreshTip();
 }
 
 function renderCommand(s) {
@@ -321,7 +318,6 @@ function renderParty(s) {
       li.dataset.status = m.status;
       const chip = el('button', 'chip');
       chip.type = 'button';
-      chip.title = m.lobby ? `${m.tag}: lobby “${m.lobby}”` : m.tag;
       chip.setAttribute('aria-label', m.lobby ? `${m.tag}, lobby ${m.lobby}` : m.tag);
       chip.setAttribute('aria-haspopup', 'menu');
       chip.setAttribute('aria-expanded', 'false');
@@ -573,10 +569,8 @@ function recentRow(s, p, full) {
   const meta = el('span', 'meta');
   const map = el('span', 'map');
   map.append(icon('map'), document.createTextNode(p.map || 'Unknown map'));
-  map.title = p.map;
   const seen = el('time', '', lastSeen(p.lastSeen, st.status === 'lobby'));
   seen.dateTime = p.lastSeen;
-  seen.title = new Date(p.lastSeen).toLocaleString();
   meta.append(map, seen);
   label.append(box, avatar(p.tag, {badge: st.status === 'open', banned}), name, presence(st.label, st.lobby), meta);
   li.append(label);
@@ -721,7 +715,6 @@ function blacklistRow(s, entry) {
   row.dataset.status = 'banned';
   const added = el('time', 'added', addedOn(entry.added));
   added.dateTime = entry.added;
-  added.title = new Date(entry.added).toLocaleString();
   const remove = el('button', 'ghost small remove');
   remove.type = 'button';
   remove.dataset.tag = entry.tag;
@@ -956,6 +949,7 @@ function openPlayerMenu(tag, origin, at = null) {
   if (!state) return;
   closePlayerMenu();
   closeNote({focus: false});
+  hideTip();
   const banned = isBlacklisted(state, tag);
   const chosen = state.manualTags.some(t => key(t) === key(tag));
   const box = $('player-menu');
@@ -1165,6 +1159,7 @@ function openNote(tag, mode, origin = menu.tag === tag ? menu.origin : null) {
   if (mode === 'view' && !note) mode = 'edit';
   if (origin) anchorTo(tag, origin);
   Object.assign(notePop, {tag, mode, saving: false, warned: false});
+  hideTip();
 
   const box = $('note-popover');
   const [name, number] = tag.split('#');
@@ -1306,6 +1301,209 @@ document.addEventListener('pointerdown', event => {
   if (!noteDirty()) closeNote({focus: false});
 }, true);
 window.addEventListener('resize', placeNote);
+
+/* Player tooltip ---------------------------------------------------------
+   One tooltip for every player row and group chip: what Team Follow knows
+   about the player. Hovering shows it after TIP_DELAY; once one is up,
+   moving to the next row shows that one at once. Keyboard focus shows it
+   right away and links it with aria-describedby. Esc hides it without
+   moving focus. It stays inside the window and never shows while the
+   player menu or note popover is open, so it can't cover them. Everything
+   in it is plain text. */
+
+const TIP_DELAY = 500;
+const TIP_GRACE = 150;
+const TIP_WARM = 300;
+
+const tip = {tag: '', row: null, rowTop: 0, target: null, via: '', timer: 0, hideTimer: 0, warmUntil: 0, dismissed: null};
+
+const tipOpen = () => !$('player-tip').hidden;
+const popupOpen = () => !$('player-menu').hidden || !$('note-popover').hidden;
+
+// dayOf says which day iso was: "Today", "Yesterday" or a date; '' when
+// it isn't a real date.
+function dayOf(iso, now = new Date()) {
+  const then = new Date(iso);
+  if (!iso || Number.isNaN(then.getTime()) || then.getFullYear() < 2000) return '';
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (then >= midnight) return 'Today';
+  if (then >= new Date(midnight - 86400000)) return 'Yesterday';
+  const opts = {day: 'numeric', month: 'short'};
+  if (then.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
+  return then.toLocaleDateString([], opts);
+}
+
+// playerFacts gathers what Team Follow knows about tag, in the tooltip's
+// order: note, status, standing, history. Unknown facts are left out.
+function playerFacts(s, tag) {
+  const k = key(tag);
+  const st = recentStatus(s, tag);
+  const status = st.label ? (st.lobby ? `${st.label}: ${st.lobby}` : st.label) : '';
+  const standing = [];
+  if (s.manualTags.some(t => key(t) === k)) standing.push({kind: 'group', text: 'In your follow group'});
+  else if (s.includeTeam && s.team.some(m => !m.isSelf && key(m.battleTag) === k)) standing.push({kind: 'group', text: 'In your follow group, from your game team'});
+  if (s.roster.some(f => key(f.battleTag) === k)) standing.push({kind: 'friend', text: 'Battle.net friend'});
+  const ban = (s.blacklist ?? []).find(b => key(b.tag) === k);
+  if (ban) {
+    const since = dayOf(ban.added);
+    standing.push({kind: 'banned', text: since ? `Blacklisted since ${['Today', 'Yesterday'].includes(since) ? since.toLowerCase() : since}` : 'Blacklisted'});
+  }
+  const history = [];
+  const p = (s.recent ?? []).find(r => key(r.tag) === k);
+  if (p) {
+    const first = dayOf(p.firstSeen);
+    if (first) history.push(['First seen', first]);
+    if (dayOf(p.lastSeen)) history.push(['Last seen', lastSeen(p.lastSeen, st.status === 'lobby')]);
+    if (p.map) history.push(['Last map', p.map]);
+    if (p.lobbies > 0) history.push(['Lobbies shared', String(p.lobbies)]);
+  }
+  return {note: noteOf(s, tag)?.text ?? '', status, statusKey: st.status, standing, history};
+}
+
+function fillTip(tag) {
+  const f = playerFacts(state, tag);
+  const parts = [];
+  if (f.note) {
+    const note = el('div', 'tip-note');
+    note.append(icon('note'), el('p', '', f.note));
+    parts.push(note);
+  }
+  const head = el('div', 'tip-head');
+  head.dataset.status = f.statusKey;
+  const [name, number] = tag.split('#');
+  const line = el('span', 'menu-name', name);
+  if (number) line.append(el('span', 'menu-number', `#${number}`));
+  const who = el('span', 'menu-who');
+  who.append(line);
+  if (f.status) who.append(el('span', 'tip-status', f.status));
+  head.append(avatar(tag, {banned: isBlacklisted(state, tag)}), who);
+  parts.push(head);
+  if (f.standing.length) {
+    const list = el('ul', 'tip-standing');
+    for (const item of f.standing) {
+      const li = el('li', item.kind);
+      li.append(icon({group: 'users', friend: 'check', banned: 'ban'}[item.kind]), el('span', '', item.text));
+      list.append(li);
+    }
+    parts.push(list);
+  }
+  if (f.history.length) {
+    const dl = el('dl', 'tip-history');
+    for (const [label, value] of f.history) dl.append(el('dt', '', label), el('dd', '', value));
+    parts.push(dl);
+  }
+  $('player-tip').replaceChildren(...parts);
+}
+
+// placeTip puts the tooltip below its row, or above it when there's no
+// room, always inside the window.
+function placeTip() {
+  const box = $('player-tip');
+  const margin = 8;
+  const r = tip.row.getBoundingClientRect();
+  tip.rowTop = r.top;
+  const w = box.offsetWidth;
+  const h = box.offsetHeight;
+  const left = Math.max(margin, Math.min(r.left + Math.min(28, r.width / 4), innerWidth - margin - w));
+  let top = r.bottom + 6;
+  let from = 'top';
+  if (top + h > innerHeight - margin) {
+    top = r.top - 6 - h >= margin ? r.top - 6 - h : innerHeight - margin - h;
+    from = 'bottom';
+  }
+  box.style.left = `${left}px`;
+  box.style.top = `${Math.max(margin, top)}px`;
+  box.style.transformOrigin = `${from} left`;
+}
+
+// showTip shows the tooltip for row, a player row or chip; target is its
+// focusable control. via is 'hover' or 'focus'.
+function showTip(row, target, via) {
+  clearTimeout(tip.timer);
+  clearTimeout(tip.hideTimer);
+  if (!state || !row.isConnected || popupOpen() || tip.dismissed === row) return;
+  if (tip.target && tip.target !== target) tip.target.removeAttribute('aria-describedby');
+  Object.assign(tip, {tag: row.dataset.player, row, target, via});
+  fillTip(tip.tag);
+  target?.setAttribute('aria-describedby', 'player-tip');
+  $('player-tip').hidden = false;
+  placeTip();
+}
+
+function hideTip() {
+  clearTimeout(tip.timer);
+  clearTimeout(tip.hideTimer);
+  if (!tipOpen()) return;
+  $('player-tip').hidden = true;
+  tip.target?.removeAttribute('aria-describedby');
+  tip.warmUntil = Date.now() + TIP_WARM;
+  Object.assign(tip, {tag: '', row: null, target: null, via: ''});
+}
+
+// refreshTip keeps an open tooltip current as the state changes; a row
+// that was redrawn away takes its tooltip with it.
+function refreshTip() {
+  if (!tipOpen()) return;
+  if (!tip.row?.isConnected) return hideTip();
+  fillTip(tip.tag);
+  placeTip();
+}
+
+const tipTarget = row => (row.matches('[data-tag]') ? row : row.querySelector('[data-tag]'));
+
+document.addEventListener('pointerover', event => {
+  if (event.pointerType === 'touch') return;
+  if ($('player-tip').contains(event.target)) return clearTimeout(tip.hideTimer);
+  const row = event.target.closest?.('[data-player]');
+  if (!row || row === tip.row) return clearTimeout(tip.hideTimer);
+  clearTimeout(tip.timer);
+  const warm = tipOpen() || Date.now() < tip.warmUntil;
+  tip.timer = setTimeout(() => showTip(row, tipTarget(row), 'hover'), warm ? 0 : TIP_DELAY);
+});
+
+document.addEventListener('pointerout', event => {
+  const to = event.relatedTarget;
+  const row = event.target.closest?.('[data-player]');
+  const fromTip = $('player-tip').contains(event.target);
+  if (!row && !fromTip) return;
+  if (to && ((row && row.contains(to)) || $('player-tip').contains(to) || tip.row?.contains(to))) return;
+  clearTimeout(tip.timer);
+  if (row && row === tip.dismissed) tip.dismissed = null;
+  if (tip.via === 'hover') tip.hideTimer = setTimeout(hideTip, TIP_GRACE);
+});
+
+document.addEventListener('focusin', event => {
+  const row = event.target.closest?.('[data-player]');
+  if (!row || event.target !== tipTarget(row) || !event.target.matches(':focus-visible')) return;
+  tip.dismissed = null;
+  showTip(row, event.target, 'focus');
+});
+
+document.addEventListener('focusout', event => {
+  if (tip.via === 'focus' && event.target === tip.target) hideTip();
+});
+
+// Esc hides the tooltip first; the next Esc goes to whatever is behind it.
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !tipOpen()) return;
+  event.preventDefault();
+  event.stopPropagation();
+  tip.dismissed = tip.row;
+  hideTip();
+}, true);
+
+document.addEventListener('pointerdown', event => {
+  if (!$('player-tip').contains(event.target)) hideTip();
+}, true);
+// Scrolling hides a hover tooltip once its row has moved; one shown by
+// keyboard focus, often scrolled into view by that focus, moves with it.
+document.addEventListener('scroll', () => {
+  if (!tipOpen() || tip.row.getBoundingClientRect().top === tip.rowTop) return;
+  if (tip.via === 'focus' && tip.row.isConnected) placeTip();
+  else hideTip();
+}, true);
+window.addEventListener('resize', () => hideTip());
+window.addEventListener('blur', () => hideTip());
 
 /* Events --------------------------------------------------------------- */
 
@@ -1467,6 +1665,9 @@ boot();
 // its blacklist selection), the blacklist scenes the Blacklist tab, the
 // menu scenes the player menu on a recent player, a blacklisted player, a
 // group chip or a player with a note, and the note scenes the note popover.
+// The tooltip scenes show the player tooltip: on hover over a recent player
+// with every field (tooltip), a blacklisted one (tooltip-blacklist), and on
+// keyboard focus on a group chip (tooltip-focus).
 async function demoOpen(what) {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   switch (what) {
@@ -1552,6 +1753,27 @@ async function demoOpen(what) {
       await wait(50);
       $('recent').scrollIntoView({block: 'center'});
       break;
+    case 'tooltip':
+    case 'tooltip-blacklist': {
+      const tag = what === 'tooltip' ? 'Arthas#1123' : 'Garrosh#7781';
+      selectTab('recent');
+      await wait(50);
+      const row = $('recent').querySelector(`[data-player="${CSS.escape(tag)}"]`);
+      if (!row) break;
+      row.scrollIntoView({block: 'center'});
+      await wait(100);
+      showTip(row, tipTarget(row), 'hover');
+      break;
+    }
+    case 'tooltip-focus': {
+      await wait(50);
+      const chip = $('party').querySelector('[data-tag="Jaina#2214"]');
+      if (!chip) break;
+      // Focus as the keyboard would, so :focus-visible matches.
+      chip.focus({focusVisible: true});
+      if (!tipOpen()) showTip(chip, chip, 'focus');
+      break;
+    }
     case 'menu-note':
     case 'note-add':
     case 'note-edit':
@@ -1961,7 +2183,8 @@ $('maps-choose').onclick = () => browser.selected && choose(browser.selected);
    game-mode|keyboard-ask|keyboard-linux|recent|recent-empty|recent-clear|
    recent-select|recent-select-confirm|blacklist|blacklist-empty|blacklist-off|
    menu-recent|menu-blacklist|menu-group|notes|notes-search|menu-note|
-   note-add|note-edit|note-long|note-view;
+   note-add|note-edit|note-long|note-view|tooltip|tooltip-blacklist|
+   tooltip-focus;
    add &open=host-setup to see the Game mode group. */
 function demoBridge() {
   const scene = new URLSearchParams(location.search).get('scene') || 'watching';
@@ -2007,7 +2230,8 @@ function demoBridge() {
     ['Zuljin#3087', 'Legion TD Mega 4.2', 60 * 24 * 12],
     ['Vereesa#9920', 'Element TD 5.5', 60 * 24 * 40],
     ['Rokhan#1500', '(4)Twisted Meadows', 60 * 24 * 41],
-  ].map(([tag, map, mins]) => ({tag, map, lastSeen: at(mins)}));
+  ].map(([tag, map, mins], i) => ({tag, map, lastSeen: at(mins), firstSeen: at(mins + 60 * 24 * [0, 0, 64, 21, 0, 9, 2, 30, 0, 5, 0, 0][i]),
+    lobbies: [1, 1, 37, 4, 1, 12, 2, 6, 1, 3, 1, 1][i]}));
   // Blacklist: sample BattleTags only. Garrosh is also a recent player.
   const blacklist = [
     ['Garrosh#7781', 60 * 26],
@@ -2096,6 +2320,9 @@ function demoBridge() {
     'note-edit': {},
     'note-long': {},
     'note-view': {},
+    tooltip: {},
+    'tooltip-blacklist': {},
+    'tooltip-focus': {},
   };
   Object.assign(s, scenes[scene] || {});
   if (s.enabled) watch();

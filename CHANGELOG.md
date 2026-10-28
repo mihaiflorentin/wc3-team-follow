@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Blacklisted players are marked in Recent players and Friends, and are taken out of your follow group.
 - **Player menu.** Right-click any player name, or press Shift+F10 or the Menu key, to copy their BattleTag, add or remove them from your group, or add or remove them from the blacklist.
 - **Player notes.** Write a private note about any player from the player menu with **Add note**, then edit or read it in full later. Notes hold up to 500 characters, are kept on this computer only, and clearing the text deletes one. Players with a note show a note icon, and the search box finds note text too.
+- **Player tooltips.** Rest the pointer on a player, or move the keyboard focus to one, to see your note, their status, whether they're in your group, a friend or blacklisted, and your history together: when you first and last saw them, the last map and how many lobbies you've shared. Players recorded before this version start their lobby count at 1.
 
 ### Changed
 

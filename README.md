@@ -78,6 +78,14 @@ Keep a private note about anyone you play with: who carries in Legion TD, who le
 
 ![A note that's too long at a narrow window width: the count says it is 80 over the 500-character limit and Save is unavailable](docs/screenshots/note-popover-narrow.png)
 
+### Player tooltips
+
+Rest the pointer on any player in Friends, Recent players or Blacklist, or on a portrait in your group, to see what Team Follow knows about them: your note first, then their full BattleTag and status, whether they're in your group, a Battle.net friend or blacklisted (and since when), and your history together: when you first and last saw them, the last map you played and how many lobbies you've shared. Anything Team Follow doesn't know is left out. From the keyboard, the tooltip shows as soon as a player is focused; Esc hides it.
+
+![The tooltip on a recent player in your group: their note, Lobby open, In your follow group, Battle.net friend, first seen 25 Aug, last seen 3 min ago, last map Castle Fight and 37 lobbies shared](docs/screenshots/player-tooltip.png)
+
+![The tooltip on a blacklisted player at a narrow window width: their note, Not a friend, Blacklisted since yesterday, and your history together](docs/screenshots/player-tooltip-narrow.png)
+
 Team Follow watches them straight away: their portraits show who is online, away or in Warcraft III, and Activity notes when one of them opens a lobby. Watching never joins anything.
 
 ![Watching a group of five friends: one has a lobby open, Auto-join is off](docs/screenshots/watching.png)

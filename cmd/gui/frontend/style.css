@@ -1279,3 +1279,79 @@ select {
 .note-actions .icon { width: 14px; height: 14px; }
 .ghost.quiet-danger { background: transparent; color: var(--danger); padding-left: 6px; }
 .ghost.quiet-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+
+/* Player tooltip ------------------------------------------------------
+   A smaller, quieter cousin of the player menu's sheet. The note leads, set
+   on the window's own ground like a slip tucked into the card; then the
+   player as the menu names them, with the status in its list colour; then
+   where they stand with you, and your history together as a short ledger.
+   It only informs, so nothing in it looks pressable. */
+
+.player-tip {
+  position: fixed;
+  z-index: 45;
+  top: 0;
+  left: 0;
+  width: max-content;
+  min-width: 200px;
+  max-width: min(296px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: hidden;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--spruce-raised);
+  box-shadow: 0 0 0 1px var(--spruce-line), 0 12px 28px rgba(6, 12, 12, .5);
+  font-size: 12.5px;
+  line-height: 1.4;
+  animation: tip-in .12s ease-out;
+}
+@keyframes tip-in {
+  from { opacity: 0; transform: translateY(-2px); }
+}
+
+.tip-note {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: var(--spruce);
+  box-shadow: inset 2px 0 0 var(--lichen);
+}
+.tip-note .icon { flex: none; width: 13px; height: 13px; margin-top: 2px; color: var(--lichen); }
+.tip-note p {
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tip-head { display: flex; align-items: center; gap: 10px; padding: 6px 6px 4px; }
+.tip-head .avatar { width: 28px; height: 28px; font-size: 11px; box-shadow: 0 0 0 2px var(--spruce-raised); }
+.tip-head .menu-name { font-size: 14.5px; white-space: normal; overflow-wrap: anywhere; }
+.tip-status { color: var(--lichen); font-size: 12px; overflow-wrap: anywhere; }
+.tip-head[data-status="open"] .tip-status { color: var(--open); }
+.tip-head[data-status="game"] .tip-status { color: var(--game); }
+.tip-head[data-status="online"] .tip-status { color: var(--online); }
+.tip-head[data-status="away"] .tip-status { color: var(--away); }
+.tip-head[data-status="lobby"] .tip-status { color: var(--bone); }
+
+.tip-standing { list-style: none; margin: 2px 0 0; padding: 0 6px 4px; }
+.tip-standing li { display: flex; align-items: center; gap: 7px; padding: 1px 0; }
+.tip-standing .icon { flex: none; width: 13px; height: 13px; color: var(--lichen); }
+.tip-standing .group, .tip-standing .group .icon { color: var(--open); }
+.tip-standing .banned, .tip-standing .banned .icon { color: var(--danger); }
+
+.tip-history {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 14px;
+  margin: 4px 0 0;
+  padding: 7px 6px 3px;
+  border-top: 1px solid var(--spruce-line);
+}
+.tip-history dt { color: var(--lichen); }
+.tip-history dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
