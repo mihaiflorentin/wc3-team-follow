@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/mihaiflorentin/wc3-team-follow/domain/update"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
@@ -59,6 +60,47 @@ func (s *Service) CheckForUpdates() (dto.FollowState, error) {
 	s.mu.Unlock()
 	s.notify()
 	return state, err
+}
+
+// startWhatsNew decides What's new from the built-in changelog and the
+// last version run, and saves the running version. With settings that
+// couldn't be loaded it shows nothing and saves nothing, so the file is
+// left for the player to fix. It runs from New.
+func (s *Service) startWhatsNew(saved dto.Preferences, loaded bool) {
+	changelog := update.ParseChangelog(s.opts.Changelog)
+	if !loaded {
+		s.whatsNew = update.NewWhatsNew(changelog, "", "", false)
+		return
+	}
+	s.whatsNew = update.NewWhatsNew(changelog, s.opts.AppVersion, saved.LastVersion, saved.Stored)
+	if view := s.whatsNew.View(); view != nil && view.Show {
+		s.logger.Info("update.whats_new", slog.String("version", view.Version), slog.String("since", view.Since),
+			slog.Int("sections", len(view.Changes)))
+	}
+	if !s.whatsNew.NeedsSave() {
+		return
+	}
+	if err := s.save(); err != nil {
+		s.logger.Warn("companion.preferences_save", slog.Any("error", err))
+	}
+}
+
+// DismissWhatsNew closes What's new until the next update.
+func (s *Service) DismissWhatsNew() dto.FollowState {
+	s.mu.Lock()
+	s.whatsNew.Dismiss()
+	state := s.snapshot()
+	s.mu.Unlock()
+	s.notify()
+	return state
+}
+
+// Changelog is every released version in the built-in changelog, newest
+// first.
+func (s *Service) Changelog() []dto.ChangelogSection {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.whatsNew.Changelog()
 }
 
 // UpdateLater hides the banner until a newer release is found or the

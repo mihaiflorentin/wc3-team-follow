@@ -57,6 +57,11 @@ type Companion interface {
 	// DismissUpdateNotes hides what the player had to redo after an
 	// update, such as the Linux setcap step.
 	DismissUpdateNotes() dto.FollowState
+	// DismissWhatsNew closes What's new until the next update.
+	DismissWhatsNew() dto.FollowState
+	// Changelog is every released version in the changelog built into the
+	// app, newest first.
+	Changelog() []dto.ChangelogSection
 	// SetNote saves the player's private note about the player with tag;
 	// empty text deletes it. Notes hold at most dto.MaxNoteLength characters
 	// and stay on this computer.

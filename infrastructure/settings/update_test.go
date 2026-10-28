@@ -32,6 +32,24 @@ func TestUpdateSettingsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLastVersionRoundTripsAndAFileMarksSettingsAsStored(t *testing.T) {
+	dir := t.TempDir()
+	if got, err := settings.New(dir).Load(); err != nil || got.Stored || got.LastVersion != "" {
+		t.Fatalf("no file: loaded %+v, %v", got, err)
+	}
+	_ = os.MkdirAll(filepath.Join(dir, "settings"), 0o700)
+	_ = os.WriteFile(filepath.Join(dir, "settings", "friends.json"), []byte(`{"tags":[],"includeTeam":true}`), 0o600)
+	if got, err := settings.New(dir).Load(); err != nil || !got.Stored || got.LastVersion != "" {
+		t.Fatalf("older file: loaded %+v, %v", got, err)
+	}
+	if err := settings.New(dir).Save(dto.Preferences{Tags: []string{}, IncludeTeam: true, LastVersion: "0.8.0"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := settings.New(dir).Load(); err != nil || !got.Stored || got.LastVersion != "0.8.0" {
+		t.Fatalf("saved: loaded %+v, %v", got, err)
+	}
+}
+
 func TestOlderFileAndNoFileLoadWithUpdateChecksOn(t *testing.T) {
 	dir := t.TempDir()
 	if got, err := settings.New(dir).Load(); err != nil || !got.CheckUpdates {

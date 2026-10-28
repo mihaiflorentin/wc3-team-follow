@@ -91,6 +91,7 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 			System:              runtime.GOOS,
 			Executable:          s.config.App.Executable,
 			Updated:             s.config.App.Updated,
+			Changelog:           s.config.App.Changelog,
 		}), nil
 	})
 }

@@ -123,6 +123,8 @@ func run(exe string) (err error) {
 	if real, err := filepath.EvalSymlinks(exe); err == nil {
 		cfg.App.Executable = real
 	}
+	// What's new reads the changelog built into the app.
+	cfg.App.Changelog = changelog
 	logger.Info("app.start",
 		slog.String("version", version), slog.String("commit", commit), slog.String("built", built),
 		slog.String("os", runtime.GOOS), slog.String("arch", runtime.GOARCH), slog.String("go", runtime.Version()),

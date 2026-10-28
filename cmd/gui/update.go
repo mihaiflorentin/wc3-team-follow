@@ -19,6 +19,13 @@ func (b *Bridge) UpdateLater() dto.FollowState { return b.companion.UpdateLater(
 // SkipUpdate stops offering the release on offer.
 func (b *Bridge) SkipUpdate() (dto.FollowState, error) { return b.companion.SkipUpdate() }
 
+// DismissWhatsNew closes What's new until the next update.
+func (b *Bridge) DismissWhatsNew() dto.FollowState { return b.companion.DismissWhatsNew() }
+
+// Changelog is every released version in the changelog built into the app,
+// newest first, for the Updates section.
+func (b *Bridge) Changelog() []dto.ChangelogSection { return b.companion.Changelog() }
+
 // SetCheckUpdates switches automatic update checks on or off.
 func (b *Bridge) SetCheckUpdates(on bool) (dto.FollowState, error) {
 	return b.companion.Configure(dto.FollowConfig{CheckUpdates: &on})

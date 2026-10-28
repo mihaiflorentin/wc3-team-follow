@@ -31,6 +31,9 @@ type AppConfig struct {
 	// Updated marks the first start after an update; main sets both.
 	Executable string `mapstructure:"-"`
 	Updated    bool   `mapstructure:"-"`
+	// Changelog is CHANGELOG.md, embedded by main, never read from
+	// config.toml.
+	Changelog string `mapstructure:"-"`
 }
 
 type LoggingConfig struct {

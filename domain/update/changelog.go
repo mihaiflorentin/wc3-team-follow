@@ -11,7 +11,7 @@ import (
 // Limits on what ParseChangelog keeps, since the text comes from the
 // network.
 const (
-	maxSections = 50
+	maxSections = 500
 	maxGroups   = 10
 	maxEntries  = 100
 	maxEntryLen = 1000
@@ -264,7 +264,12 @@ func ChangesBetween(sections []dto.ChangelogSection, current, offered Version) [
 			out = append(out, s)
 		}
 	}
-	slices.SortStableFunc(out, func(a, b dto.ChangelogSection) int {
+	return newestFirst(out)
+}
+
+// newestFirst sorts sections by version, newest first, in place.
+func newestFirst(sections []dto.ChangelogSection) []dto.ChangelogSection {
+	slices.SortStableFunc(sections, func(a, b dto.ChangelogSection) int {
 		va, _ := ParseVersion(a.Version)
 		vb, _ := ParseVersion(b.Version)
 		switch {
@@ -275,5 +280,5 @@ func ChangesBetween(sections []dto.ChangelogSection, current, offered Version) [
 		}
 		return 0
 	})
-	return out
+	return sections
 }

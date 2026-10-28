@@ -1,6 +1,7 @@
 package update_test
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -169,5 +170,16 @@ func TestParseChangelogLimitsHugeInput(t *testing.T) {
 	entries := got[0].Groups[0].Entries
 	if len(entries) > 100 || len(entries[0].Spans[0].Text) > 1000 {
 		t.Fatalf("kept %d entries, first %d characters", len(entries), len(entries[0].Spans[0].Text))
+	}
+}
+
+func TestParseChangelogKeepsALongHistory(t *testing.T) {
+	var b strings.Builder
+	for minor := 150; minor > 0; minor-- {
+		fmt.Fprintf(&b, "## [0.%d.0] - 2026-10-28\n### Added\n- Thing %d.\n", minor, minor)
+	}
+	got := update.ParseChangelog(b.String())
+	if len(got) != 150 || got[0].Version != "0.150.0" || got[149].Version != "0.1.0" {
+		t.Fatalf("kept %d sections", len(got))
 	}
 }

@@ -17,6 +17,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **Update check.** Team Follow tells you when a new version is out, with what changed since your version. Choose **Update** to open the download page, **Later** to hide the banner for now, or **Skip this version**. It warns you first when you're in a lobby or a match, or Auto-join or Auto-host is on.
 - An **Updates** section shows your version, with **Check for updates** and a switch to turn automatic checks off.
+- **What's new.** The first time you start a newer version, Team Follow shows what changed since the version you ran before. It works offline. Open it again any time from the Updates section, where the **Changelog** lists every version.
 
 ### Changed
 

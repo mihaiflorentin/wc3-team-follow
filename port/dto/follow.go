@@ -213,6 +213,12 @@ type Preferences struct {
 	CheckUpdates bool `json:"checkUpdates"`
 	// SkippedVersion is the release the player chose to skip, like 0.8.0.
 	SkippedVersion string `json:"skippedVersion,omitempty"`
+	// LastVersion is the last version of Team Follow the player ran, like
+	// 0.8.0, for What's new; "" in settings saved before it existed.
+	LastVersion string `json:"lastVersion,omitempty"`
+	// Stored reports that the preferences were loaded from this computer,
+	// not defaults for a fresh install. It is never saved.
+	Stored bool `json:"-"`
 }
 
 // HostSettings is how Auto-host creates lobbies. Everything else uses the

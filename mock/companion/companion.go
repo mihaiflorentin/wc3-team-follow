@@ -32,11 +32,15 @@ type Companion struct {
 	CheckCalls int
 	LaterCalls int
 	SkipCalls  int
-	// InstallCalls, CancelCalls and DismissCalls count the in-app update
-	// calls.
-	InstallCalls int
-	CancelCalls  int
-	DismissCalls int
+	// InstallCalls, CancelCalls and DismissNotesCalls count the in-app
+	// update calls.
+	InstallCalls      int
+	CancelCalls       int
+	DismissNotesCalls int
+	// DismissCalls counts DismissWhatsNew calls; ChangelogSections is what
+	// Changelog returns.
+	DismissCalls      int
+	ChangelogSections []dto.ChangelogSection
 	// NoteCalls counts SetNote calls; LastNoteTag and LastNoteText hold the
 	// last one's arguments.
 	NoteCalls    int
@@ -60,7 +64,7 @@ func (c *Companion) CancelUpdate() dto.FollowState {
 }
 
 func (c *Companion) DismissUpdateNotes() dto.FollowState {
-	c.DismissCalls++
+	c.DismissNotesCalls++
 	return c.Current
 }
 
@@ -73,6 +77,13 @@ func (c *Companion) SkipUpdate() (dto.FollowState, error) {
 	c.SkipCalls++
 	return c.Current, c.Err
 }
+
+func (c *Companion) DismissWhatsNew() dto.FollowState {
+	c.DismissCalls++
+	return c.Current
+}
+
+func (c *Companion) Changelog() []dto.ChangelogSection { return c.ChangelogSections }
 
 func (c *Companion) SetNote(tag, text string) (dto.FollowState, error) {
 	c.NoteCalls++
