@@ -81,7 +81,6 @@ func TestGameModeTypesNothingWhenTheMatchEndsFirst(t *testing.T) {
 		"exited":       func(f *fixture) { f.receive("ExitedGame", nil) },
 		"score screen": func(f *fixture) { f.receive("SetGlueScreen", map[string]any{"screen": "SCORE_SCREEN"}) },
 		"left":         func(f *fixture) { f.receive("MultiplayerGameLeave", nil) },
-		"menus":        func(f *fixture) { f.receive("IsGameUIActive", map[string]any{"isActive": false}) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newFixture(t)
@@ -97,6 +96,32 @@ func TestGameModeTypesNothingWhenTheMatchEndsFirst(t *testing.T) {
 				t.Fatalf("typed %q after the match ended", got)
 			}
 		})
+	}
+}
+
+func TestGameModeStillTypesWhenTheGameUIGoesInactive(t *testing.T) {
+	// IsGameUIActive false may come from alt-tab or the in-game menu, so it
+	// isn't the end of the match.
+	f := newFixture(t)
+	f.mustHost(gameModeSettings("-ar", 5))
+	f.startHostedMatch()
+	f.waitAndTick(2 * time.Second)
+	f.receive("IsGameUIActive", map[string]any{"isActive": false})
+	f.waitAndTick(3 * time.Second)
+	if got := f.typed(); len(got) != 1 || got[0] != "-ar" {
+		t.Fatalf("typed = %q, want [-ar]", got)
+	}
+}
+
+func TestGameModeTypesNothingAfterADisconnect(t *testing.T) {
+	f := newFixture(t)
+	f.mustHost(gameModeSettings("-ar", 5))
+	f.startHostedMatch()
+	f.waitAndTick(2 * time.Second)
+	f.engine.Connection(false, "")
+	f.waitAndTick(time.Minute)
+	if got := f.typed(); len(got) != 0 {
+		t.Fatalf("typed %q after the game disconnected", got)
 	}
 }
 

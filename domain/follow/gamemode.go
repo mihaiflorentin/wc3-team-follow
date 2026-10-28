@@ -43,6 +43,12 @@ func normalizeGameMode(command string, delay int) (string, int, error) {
 // Auto-host created. The match starts with SetGlueScreen DISABLED_SCREEN
 // and IsGameUIActive true once every player has loaded (live check, issue
 // 9); LoadingScreenGameStart never arrives.
+//
+// Only the real end of the match cancels a command that isn't due yet:
+// ExitedGame or a score screen (handled with Auto-host's phase in
+// host.go), MultiplayerGameLeave here, or a disconnect, which resets
+// Auto-host. IsGameUIActive false doesn't: it may come from alt-tab or
+// the in-game menu.
 func (e *Engine) gameModeReceive(kind string, p map[string]any) {
 	h := &e.host
 	if !h.enabled || h.phase != HostMatch || h.settings.GameMode == "" {
@@ -54,11 +60,8 @@ func (e *Engine) gameModeReceive(kind string, p map[string]any) {
 			e.gameModeStart()
 		}
 	case "IsGameUIActive":
-		switch p["isActive"] {
-		case "true", true:
+		if active := p["isActive"]; active == true || active == "true" {
 			e.gameModeStart()
-		case "false", false:
-			e.gameModeCancel()
 		}
 	case "MultiplayerGameLeave":
 		e.gameModeCancel()
@@ -66,13 +69,13 @@ func (e *Engine) gameModeReceive(kind string, p map[string]any) {
 }
 
 func (e *Engine) gameModeStart() {
-	g := &e.host.gameMode
+	g, s := &e.host.gameMode, e.host.settings
 	if g.done || !g.at.IsZero() {
 		return
 	}
-	g.at = e.now().Add(time.Duration(e.host.settings.GameModeDelaySeconds) * time.Second)
-	if e.host.settings.GameModeDelaySeconds > 0 {
-		e.Note("The match started. Game mode types " + e.host.settings.GameMode + " in " + itoa(e.host.settings.GameModeDelaySeconds) +
+	g.at = e.now().Add(time.Duration(s.GameModeDelaySeconds) * time.Second)
+	if s.GameModeDelaySeconds > 0 {
+		e.Note("The match started. Game mode types " + s.GameMode + " in " + itoa(s.GameModeDelaySeconds) +
 			" seconds; keep Warcraft III in front.")
 	}
 }
