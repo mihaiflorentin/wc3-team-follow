@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-28
+
 ### Added
 
 - **Blacklist.** A third tab in the People panel keeps players out of lobbies you host. When a blacklisted player joins a lobby you host, Team Follow bans them with the game's own Ban, whether you created the lobby by hand or with Auto-host.
@@ -90,7 +92,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A friends picker, watching before joining, and log files for reporting problems.
 - Warcraft Team Follow rebuilt in Go, with one app for Windows, macOS and Linux.
 
-[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.5.4...v0.6.0
