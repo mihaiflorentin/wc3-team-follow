@@ -85,6 +85,8 @@ func run() (err error) {
 	version, commit, built := cli.BuildInfo()
 	// The update check compares releases with the running build.
 	cfg.App.Version = version
+	// What's new reads the changelog built into the app.
+	cfg.App.Changelog = changelog
 	logger.Info("app.start",
 		slog.String("version", version), slog.String("commit", commit), slog.String("built", built),
 		slog.String("os", runtime.GOOS), slog.String("arch", runtime.GOARCH), slog.String("go", runtime.Version()),

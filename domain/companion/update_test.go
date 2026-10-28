@@ -104,11 +104,13 @@ func TestSkipIsSavedAndLaterIsNot(t *testing.T) {
 	h.updater.Set(newerRelease("v0.8.0"), nil)
 	h.run(t)
 	waitFor(t, "banner", func() bool { return h.svc.State().Update.Prompt })
+	// Start-up saves the running version for What's new.
+	startSaves := prefs.Saves
 
 	if s := h.svc.UpdateLater(); s.Update.Prompt || s.Update.Release == nil {
 		t.Fatalf("Later = %+v", s.Update)
 	}
-	if got, _ := prefs.Load(); got.SkippedVersion != "" || prefs.Saves != 0 {
+	if got, _ := prefs.Load(); got.SkippedVersion != "" || prefs.Saves != startSaves {
 		t.Fatalf("Later saved %+v", got)
 	}
 	s, err := h.svc.SkipUpdate()

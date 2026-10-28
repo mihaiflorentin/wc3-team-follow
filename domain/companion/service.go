@@ -62,6 +62,9 @@ type Options struct {
 	UpdateRetryInterval time.Duration
 	// ReleasesURL is the releases page, for updating by hand.
 	ReleasesURL string
+	// Changelog is CHANGELOG.md as built into the app, for What's new and
+	// the changelog in the Updates section.
+	Changelog string
 	// Now reads the clock; nil uses time.Now.
 	Now func() time.Time
 }
@@ -106,6 +109,8 @@ type Service struct {
 	recent *follow.Recent
 	// updates decides when to check for a newer release and what to offer.
 	updates *update.Checker
+	// whatsNew is What's new in the running version.
+	whatsNew *update.WhatsNew
 	// runCtx is Run's context, for checks the player starts; nil until Run.
 	runCtx context.Context
 	// checks tracks running update checks; Run waits for them.
@@ -211,6 +216,7 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		logger.Warn("companion.preferences_load", slog.Any("error", err))
 		s.prefsError = loadFailed
 	}
+	s.startWhatsNew(saved, err == nil)
 	return s
 }
 
@@ -501,6 +507,7 @@ func (s *Service) snapshot() dto.FollowState {
 	state.LobbyTags = s.recent.Present()
 	state.Update = s.updates.State(update.Activity{InLobby: state.Busy && !state.InMatch, InMatch: state.InMatch,
 		AutoJoin: state.Enabled, AutoHost: state.Host.Enabled})
+	state.Update.WhatsNew = s.whatsNew.View()
 	state.Notes = maps.Clone(s.notes)
 	if !state.Connected {
 		state.ConnectionHint = s.hint
@@ -640,6 +647,7 @@ func (s *Service) save() error {
 		MapsFolder:   s.mapsFolder, Host: &host,
 		Blacklist: s.engine.Blacklist(), AutoBan: s.engine.AutoBan(), BlacklistManualBans: s.engine.BlacklistManualBans(),
 		CheckUpdates: s.updates.Automatic(), SkippedVersion: s.updates.SkippedVersion(),
+		LastVersion: s.whatsNew.LastVersion(),
 	})
 }
 

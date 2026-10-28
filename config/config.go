@@ -27,6 +27,9 @@ type AppConfig struct {
 	// Version is the build's version, set by main from the build info,
 	// never read from config.toml.
 	Version string `mapstructure:"-"`
+	// Changelog is CHANGELOG.md, embedded by main, never read from
+	// config.toml.
+	Changelog string `mapstructure:"-"`
 }
 
 type LoggingConfig struct {

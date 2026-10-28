@@ -87,6 +87,7 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 			UpdateInterval:      checkEvery,
 			UpdateRetryInterval: retryEvery,
 			ReleasesURL:         "https://github.com/" + s.config.Updates.Repository + "/releases",
+			Changelog:           s.config.App.Changelog,
 		}), nil
 	})
 }

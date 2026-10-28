@@ -49,6 +49,8 @@ type fileShape struct {
 	// CheckUpdates is written only when off: a file without it is on.
 	CheckUpdates   *bool  `json:"checkUpdates,omitempty"`
 	SkippedVersion string `json:"skippedVersion,omitempty"`
+	// LastVersion is missing in files saved before What's new existed.
+	LastVersion string `json:"lastVersion,omitempty"`
 }
 
 // savedHost is the Auto-host setup as saved. Settings saved before Game
@@ -95,7 +97,8 @@ func (s *Store) Load() (dto.Preferences, error) {
 		JoinHostTeam: saved.JoinHostTeam == nil || *saved.JoinHostTeam, MapsFolder: saved.MapsFolder,
 		Host: (*dto.HostSettings)(saved.Host), Blacklist: blacklist, AutoBan: saved.AutoBan == nil || *saved.AutoBan,
 		BlacklistManualBans: saved.BlacklistManualBans == nil || *saved.BlacklistManualBans,
-		CheckUpdates:        saved.CheckUpdates == nil || *saved.CheckUpdates, SkippedVersion: saved.SkippedVersion}, nil
+		CheckUpdates:        saved.CheckUpdates == nil || *saved.CheckUpdates, SkippedVersion: saved.SkippedVersion,
+		LastVersion: saved.LastVersion, Stored: true}, nil
 }
 
 // Save replaces the file atomically. Only the selection, the Maps folder,
@@ -122,7 +125,8 @@ func (s *Store) Save(prefs dto.Preferences) error {
 	}
 	content, err := json.MarshalIndent(fileShape{Tags: tags, IncludeTeam: &prefs.IncludeTeam, AskPassword: prefs.AskPassword, JoinHostTeam: joinHostTeam,
 		MapsFolder: prefs.MapsFolder, Host: (*savedHost)(prefs.Host), Blacklist: prefs.Blacklist, AutoBan: autoBan,
-		BlacklistManualBans: manualBans, CheckUpdates: checkUpdates, SkippedVersion: prefs.SkippedVersion}, "", "  ")
+		BlacklistManualBans: manualBans, CheckUpdates: checkUpdates, SkippedVersion: prefs.SkippedVersion,
+		LastVersion: prefs.LastVersion}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode friends: %w", err)
 	}

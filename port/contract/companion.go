@@ -47,6 +47,11 @@ type Companion interface {
 	// SkipUpdate silences the release on offer for good; the next release is
 	// offered again.
 	SkipUpdate() (dto.FollowState, error)
+	// DismissWhatsNew closes What's new until the next update.
+	DismissWhatsNew() dto.FollowState
+	// Changelog is every released version in the changelog built into the
+	// app, newest first.
+	Changelog() []dto.ChangelogSection
 	// SetNote saves the player's private note about the player with tag;
 	// empty text deletes it. Notes hold at most dto.MaxNoteLength characters
 	// and stay on this computer.

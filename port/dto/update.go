@@ -61,6 +61,24 @@ type UpdateState struct {
 	LastChecked *time.Time `json:"lastChecked,omitempty"`
 	// ReleasesURL is the releases page, for updating by hand.
 	ReleasesURL string `json:"releasesUrl"`
+	// WhatsNew is what changed in the running version, from the changelog
+	// built into the app, or nil when it has no entries for this version.
+	WhatsNew *WhatsNew `json:"whatsNew"`
+}
+
+// WhatsNew is "What's new in Team Follow X.Y.Z": the changelog sections
+// after the version the player ran before, up to and including the
+// running one, newest first.
+type WhatsNew struct {
+	// Version is the running version, like 0.8.0.
+	Version string `json:"version"`
+	// Since is the version the player ran before, or "" when unknown.
+	Since string `json:"since"`
+	// Changes is never empty.
+	Changes []ChangelogSection `json:"changes"`
+	// Show opens it on the first start after an update, until the player
+	// closes it. The Updates section reopens it any time.
+	Show bool `json:"show"`
 }
 
 // UpdateRelease is the newer release shown in the banner.

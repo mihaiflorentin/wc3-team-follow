@@ -18,6 +18,17 @@ func updateBridge(c *mockcompanion.Companion) (*gui.Bridge, *[]string) {
 	return b, &opened
 }
 
+func TestBridgePassesWhatsNewAndTheChangelogOn(t *testing.T) {
+	c := &mockcompanion.Companion{ChangelogSections: []dto.ChangelogSection{{Version: "0.8.0"}, {Version: "0.7.0"}}}
+	b, _ := updateBridge(c)
+	if b.DismissWhatsNew(); c.DismissCalls != 1 {
+		t.Fatal("DismissWhatsNew not passed on")
+	}
+	if got := b.Changelog(); len(got) != 2 || got[0].Version != "0.8.0" {
+		t.Fatalf("Changelog = %+v", got)
+	}
+}
+
 func TestBridgePassesUpdateCallsOn(t *testing.T) {
 	c := &mockcompanion.Companion{Current: dto.FollowState{Update: dto.UpdateState{Phase: dto.UpdateChecking}}}
 	b, _ := updateBridge(c)
