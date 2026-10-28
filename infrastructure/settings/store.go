@@ -3,7 +3,6 @@
 package settings
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,9 +35,23 @@ type fileShape struct {
 	IncludeTeam *bool    `json:"includeTeam"`
 	AskPassword bool     `json:"askPassword,omitempty"`
 	// JoinHostTeam is written only when off: a file without it is on.
-	JoinHostTeam *bool             `json:"joinHostTeam,omitempty"`
-	MapsFolder   string            `json:"mapsFolder,omitempty"`
-	Host         *dto.HostSettings `json:"host,omitempty"`
+	JoinHostTeam *bool      `json:"joinHostTeam,omitempty"`
+	MapsFolder   string     `json:"mapsFolder,omitempty"`
+	Host         *savedHost `json:"host,omitempty"`
+}
+
+// savedHost is the Auto-host setup as saved. Settings saved before Game
+// mode existed get its default delay.
+type savedHost dto.HostSettings
+
+func (h *savedHost) UnmarshalJSON(data []byte) error {
+	type plain dto.HostSettings
+	v := plain{GameModeDelaySeconds: dto.DefaultGameModeDelaySeconds}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*h = savedHost(v)
+	return nil
 }
 
 // Load returns the saved selection, or every tag empty and the team
@@ -59,22 +72,12 @@ func (s *Store) Load() (dto.Preferences, error) {
 		return dto.Preferences{}, fmt.Errorf("%w: %v", ErrUnreadable, err)
 	}
 	var saved fileShape
-	var host struct {
-		Host json.RawMessage `json:"host"`
-	}
-	decoder := json.NewDecoder(bytes.NewReader(content))
-	if err := decoder.Decode(&saved); err != nil || saved.Tags == nil || saved.IncludeTeam == nil || json.Unmarshal(content, &host) != nil {
+	if err := json.Unmarshal(content, &saved); err != nil || saved.Tags == nil || saved.IncludeTeam == nil {
 		return dto.Preferences{}, fmt.Errorf("%w: unrecognized content", ErrUnreadable)
 	}
-	if saved.Host != nil {
-		// Settings saved before Game mode existed get its default delay.
-		saved.Host = &dto.HostSettings{GameModeDelaySeconds: dto.DefaultGameModeDelaySeconds}
-		if err := json.Unmarshal(host.Host, saved.Host); err != nil {
-			return dto.Preferences{}, fmt.Errorf("%w: unrecognized content", ErrUnreadable)
-		}
-	}
 	return dto.Preferences{Tags: saved.Tags, IncludeTeam: *saved.IncludeTeam, AskPassword: saved.AskPassword,
-		JoinHostTeam: saved.JoinHostTeam == nil || *saved.JoinHostTeam, MapsFolder: saved.MapsFolder, Host: saved.Host}, nil
+		JoinHostTeam: saved.JoinHostTeam == nil || *saved.JoinHostTeam, MapsFolder: saved.MapsFolder,
+		Host: (*dto.HostSettings)(saved.Host)}, nil
 }
 
 // Save replaces the file atomically. Only the selection, the Maps folder and
@@ -89,7 +92,7 @@ func (s *Store) Save(prefs dto.Preferences) error {
 		joinHostTeam = &prefs.JoinHostTeam
 	}
 	content, err := json.MarshalIndent(fileShape{Tags: tags, IncludeTeam: &prefs.IncludeTeam, AskPassword: prefs.AskPassword, JoinHostTeam: joinHostTeam,
-		MapsFolder: prefs.MapsFolder, Host: prefs.Host}, "", "  ")
+		MapsFolder: prefs.MapsFolder, Host: (*savedHost)(prefs.Host)}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode friends: %w", err)
 	}
