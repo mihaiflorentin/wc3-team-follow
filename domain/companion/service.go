@@ -55,8 +55,8 @@ type Ports struct {
 	Library   contract.MapLibrary
 	// Processes closes the game when the player asks for it.
 	Processes contract.GameProcesses
-	// Keyboard types Game mode's command in the match chat; nil means this
-	// build can't type.
+	// Keyboard types Game mode's command in the match chat. It is required;
+	// on a system that can't type, its Status says so.
 	Keyboard contract.GameKeyboard
 }
 
@@ -92,6 +92,9 @@ type Service struct {
 	gamePID int
 	// keyboardStatus is the keyboard's last reported status.
 	keyboardStatus dto.KeyboardStatus
+	// typing tracks the goroutines typing Game mode's lines; Run waits for
+	// them.
+	typing sync.WaitGroup
 
 	subMu       sync.Mutex
 	subscribers map[int]func(dto.FollowState)
@@ -187,11 +190,11 @@ func (s *Service) Run(ctx context.Context) error {
 			_ = s.engine.Configure(dto.FollowConfig{Enabled: &off})
 			s.logStatus()
 			s.logger.Info("companion.stop")
-			if s.session != nil {
-				_ = s.session.Close()
-				s.session = nil
-			}
+			s.dropSession()
 			s.mu.Unlock()
+			// Typing stops with ctx; wait for it to report, so nothing
+			// runs after Run returns.
+			s.typing.Wait()
 			return nil
 		case <-ticker.C:
 			s.step(ctx)
@@ -199,9 +202,18 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 
+// dropSession closes the game session, if any, and forgets the game's
+// process, so nothing is typed into it. It runs with s.mu held.
+func (s *Service) dropSession() {
+	if s.session != nil {
+		_ = s.session.Close()
+	}
+	s.session, s.gamePID = nil, 0
+}
+
 // step runs once a second: timers, roster refresh and discovery.
 func (s *Service) step(ctx context.Context) {
-	keyboard := s.readKeyboardStatus(ctx)
+	keyboard := s.keyboard.Status(ctx)
 	s.mu.Lock()
 	s.keyboardStatus = keyboard
 	s.engine.Tick()
@@ -299,8 +311,7 @@ func (s *Service) read(ctx context.Context, session contract.GameSession) {
 			return
 		}
 		if err != nil {
-			_ = session.Close()
-			s.session = nil
+			s.dropSession()
 			s.engine.Connection(false, "")
 			s.logStatus()
 			s.mu.Unlock()
@@ -329,8 +340,8 @@ func (s *Service) read(ctx context.Context, session contract.GameSession) {
 			if ev.MessageType == "LoggedOut" {
 				// This game is signed out, often because the same account
 				// signed in from another copy: find the game again.
-				_ = session.Close()
-				s.session, s.nextDiscovery = nil, time.Time{}
+				s.dropSession()
+				s.nextDiscovery = time.Time{}
 				s.logStatus()
 				s.mu.Unlock()
 				s.logger.InfoContext(ctx, "companion.disconnected", slog.String("reason", "logged out"))
@@ -646,11 +657,7 @@ func (s *Service) CloseGames(ctx context.Context) (dto.FollowState, error) {
 	s.mu.Lock()
 	s.closing = false
 	if count > 0 {
-		if s.session != nil {
-			session := s.session
-			s.session = nil
-			_ = session.Close()
-		}
+		s.dropSession()
 		if s.engine.Connected() {
 			s.engine.Connection(false, "")
 		}
@@ -683,43 +690,34 @@ func (s *Service) CloseGames(ctx context.Context) (dto.FollowState, error) {
 	return state, err
 }
 
-// noKeyboard is the status when this build has no way to type.
-var noKeyboard = dto.KeyboardStatus{Reason: "Typing in the game chat isn't supported on this system yet."}
-
-// readKeyboardStatus asks the keyboard whether it can type. It never
-// prompts and runs without s.mu.
-func (s *Service) readKeyboardStatus(ctx context.Context) dto.KeyboardStatus {
-	if s.keyboard == nil {
-		return noKeyboard
-	}
-	return s.keyboard.Status(ctx)
-}
-
 // RequestKeyboardPermission asks the system for the permission typing
 // needs, which may show a system prompt. The window calls it only when the
-// player clicks to allow typing.
+// player clicks to allow typing. The companion handles the keyboard's
+// error: it logs it here, once, and returns a sentence for the player.
 func (s *Service) RequestKeyboardPermission(ctx context.Context) (dto.FollowState, error) {
-	if s.keyboard == nil {
-		return s.State(), errors.New(noKeyboard.Reason)
-	}
 	err := s.keyboard.RequestPermission(ctx)
 	status := s.keyboard.Status(ctx)
 	s.mu.Lock()
 	s.keyboardStatus = status
 	state := s.snapshot()
 	s.mu.Unlock()
+	attrs := []any{slog.Bool("permitted", status.Permitted)}
 	if err != nil {
-		s.logger.WarnContext(ctx, "keyboard.permission", slog.Any("error", err))
+		attrs = append(attrs, slog.Any("error", err))
 		err = errors.New(playerSentence(err, "The permission to type couldn't be requested. Allow it in your system settings."))
-	} else {
-		s.logger.InfoContext(ctx, "keyboard.permission", slog.Bool("permitted", status.Permitted))
 	}
+	s.logger.InfoContext(ctx, "keyboard.permission", attrs...)
 	s.notify()
 	return state, err
 }
 
+// errNoGame is why a line isn't typed when no game is connected.
+var errNoGame = errors.New("Warcraft III isn't connected.")
+
 // typeChatLines starts typing every line Game mode asked for. Typing takes
-// a second or two, so each line is typed in its own goroutine, off s.mu.
+// a second or two, so each line is typed in its own goroutine, off s.mu;
+// Run waits for them before it returns. A line asked for while no game is
+// connected is dropped, so nothing is ever typed into a game that's gone.
 // It runs with s.mu held.
 func (s *Service) typeChatLines(ctx context.Context) {
 	for {
@@ -727,39 +725,63 @@ func (s *Service) typeChatLines(ctx context.Context) {
 		if !ok {
 			return
 		}
-		go s.typeChatLine(ctx, s.gamePID, line)
+		if s.session == nil {
+			s.chatLineTyped(ctx, line, errNoGame)
+			continue
+		}
+		pid := s.gamePID
+		s.typing.Go(func() {
+			defer s.guard("type")
+			err := s.typeChatLine(ctx, pid, line)
+			s.mu.Lock()
+			s.chatLineTyped(ctx, line, err)
+			s.logStatus()
+			s.mu.Unlock()
+			s.notify()
+		})
 	}
 }
 
-// typeChatLine types one line into the game and reports the result to the
-// engine. Nothing is retried.
-func (s *Service) typeChatLine(ctx context.Context, pid int, line string) {
-	defer s.guard("type")
-	failure := ""
-	status := s.readKeyboardStatus(ctx)
-	switch {
-	case !status.Supported || !status.Permitted:
-		failure = status.Reason
-		if failure == "" {
-			failure = "Team Follow isn't allowed to type on this computer."
+// typeChatLine types one line into the game process pid. Its error is a
+// sentence for the player. Nothing is retried.
+func (s *Service) typeChatLine(ctx context.Context, pid int, line string) error {
+	status := s.keyboard.Status(ctx)
+	if !status.Supported || !status.Permitted {
+		if status.Reason == "" {
+			return errors.New("Team Follow isn't allowed to type on this computer.")
 		}
-	default:
-		if err := s.keyboard.TypeLine(ctx, pid, line); err != nil {
-			s.logger.WarnContext(ctx, "gamemode.type", slog.Any("error", err))
-			failure = playerSentence(err, "Keep Warcraft III in front while Game mode types.")
-		}
+		return errors.New(status.Reason)
 	}
-	if failure == "" {
+	if err := s.keyboard.TypeLine(ctx, pid, line); err != nil {
+		return typingError{sentence: playerSentence(err, "Keep Warcraft III in front while Game mode types."), cause: err}
+	}
+	return nil
+}
+
+// typingError is a keyboard failure: its text is the sentence for the
+// player, and it unwraps to the keyboard's own error for the log.
+type typingError struct {
+	sentence string
+	cause    error
+}
+
+func (e typingError) Error() string { return e.sentence }
+func (e typingError) Unwrap() error { return e.cause }
+
+// chatLineTyped logs how typing line went, once, and tells the engine. It
+// runs with s.mu held.
+func (s *Service) chatLineTyped(ctx context.Context, line string, err error) {
+	if err == nil {
 		s.logger.InfoContext(ctx, "gamemode.typed", slog.String("line", line))
-	} else {
-		s.logger.InfoContext(ctx, "gamemode.not_typed", slog.String("line", line), slog.String("reason", failure))
+		s.engine.ChatLineTyped(line, nil)
+		return
 	}
-	s.mu.Lock()
-	s.keyboardStatus = status
-	s.engine.ChatLineTyped(line, failure)
-	s.logStatus()
-	s.mu.Unlock()
-	s.notify()
+	attrs := []any{slog.String("line", line), slog.String("reason", err.Error())}
+	if cause := errors.Unwrap(err); cause != nil {
+		attrs = append(attrs, slog.Any("error", cause))
+	}
+	s.logger.WarnContext(ctx, "gamemode.not_typed", attrs...)
+	s.engine.ChatLineTyped(line, err)
 }
 
 // playerSentence returns the outermost error text written for players (a

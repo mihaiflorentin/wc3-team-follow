@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,6 +34,8 @@ type harness struct {
 	library   *mockmaps.Library
 	processes *mockgame.Processes
 	keyboard  *mockkeyboard.Keyboard
+	// skew moves the service's clock ahead of the real one, in nanoseconds.
+	skew atomic.Int64
 }
 
 func newHarness(t *testing.T, prefs *mockprefs.Store) *harness {
@@ -51,16 +54,24 @@ func newHarness(t *testing.T, prefs *mockprefs.Store) *harness {
 		VerifiedBuilds:    []string{build},
 		RefreshInterval:   5 * time.Second,
 		DiscoveryInterval: 10 * time.Second,
+		Now:               func() time.Time { return time.Now().Add(time.Duration(h.skew.Load())) },
 	})
 	return h
 }
 
 func (h *harness) run(t *testing.T) {
 	t.Helper()
+	stop := h.start()
+	t.Cleanup(func() { <-stop() })
+}
+
+// start runs the service until the returned stop is called; stop cancels
+// it and returns a channel closed once Run returned.
+func (h *harness) start() (stop func() <-chan struct{}) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { _ = h.svc.Run(ctx); close(done) }()
-	t.Cleanup(func() { cancel(); <-done })
+	return func() <-chan struct{} { cancel(); return done }
 }
 
 func waitFor(t *testing.T, what string, cond func() bool) {
@@ -246,7 +257,7 @@ func TestLogsNeverContainTheSessionOrPasswords(t *testing.T) {
 		session:   mockgame.NewSession(),
 		prefs:     mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}),
 	}
-	h.svc = companion.New(companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: h.prefs, Maps: &mockmaps.Locator{}, Library: &mockmaps.Library{}},
+	h.svc = companion.New(companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: h.prefs, Maps: &mockmaps.Locator{}, Library: &mockmaps.Library{}, Keyboard: &mockkeyboard.Keyboard{}},
 		slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		companion.Options{VerifiedBuilds: []string{build}, RefreshInterval: 5 * time.Second, DiscoveryInterval: 10 * time.Second})
 	h.run(t)

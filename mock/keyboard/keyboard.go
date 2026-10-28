@@ -13,12 +13,15 @@ import (
 var _ contract.GameKeyboard = (*Keyboard)(nil)
 
 // Keyboard reports Current as its status, fails TypeLine with Err, and
-// records every line it was asked to type.
+// records every line it was asked to type. When Hold is set, TypeLine
+// records the line and then waits until Hold is closed, as a slow typist
+// would; it ignores the context so a test can see who waits for it.
 type Keyboard struct {
 	mu       sync.Mutex
 	Current  dto.KeyboardStatus
 	Err      error
 	PermErr  error
+	Hold     chan struct{}
 	Lines    []string
 	PIDs     []int
 	Requests int
@@ -30,6 +33,13 @@ func (k *Keyboard) Status(context.Context) dto.KeyboardStatus {
 	return k.Current
 }
 
+// SetStatus changes the status Status reports.
+func (k *Keyboard) SetStatus(status dto.KeyboardStatus) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.Current = status
+}
+
 func (k *Keyboard) RequestPermission(context.Context) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -39,10 +49,14 @@ func (k *Keyboard) RequestPermission(context.Context) error {
 
 func (k *Keyboard) TypeLine(_ context.Context, pid int, line string) error {
 	k.mu.Lock()
-	defer k.mu.Unlock()
 	k.Lines = append(k.Lines, line)
 	k.PIDs = append(k.PIDs, pid)
-	return k.Err
+	hold, err := k.Hold, k.Err
+	k.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
+	return err
 }
 
 // Typed returns a copy of the lines typed so far.

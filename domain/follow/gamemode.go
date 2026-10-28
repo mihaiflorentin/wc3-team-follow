@@ -114,13 +114,13 @@ func (e *Engine) TakeChatLine() (string, bool) {
 	return line, true
 }
 
-// ChatLineTyped reports how typing a line from TakeChatLine went: failure
-// is "" on success, or a sentence for the player saying why it wasn't
-// typed. Nothing is retried.
-func (e *Engine) ChatLineTyped(line, failure string) {
-	if failure == "" {
+// ChatLineTyped reports how typing a line from TakeChatLine went: err is
+// nil when it was typed, or an error whose text is a sentence for the
+// player saying why it wasn't. Nothing is retried.
+func (e *Engine) ChatLineTyped(line string, err error) {
+	if err == nil {
 		e.Note("Typed " + line + " in the game chat.")
 		return
 	}
-	e.Note("Game mode didn't type " + line + ". " + failure)
+	e.Note("Game mode didn't type " + line + ". " + err.Error())
 }

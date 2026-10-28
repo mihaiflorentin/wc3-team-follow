@@ -1,6 +1,7 @@
 package follow_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -225,11 +226,11 @@ func TestGameModeDelayDefaultsToFiveSeconds(t *testing.T) {
 
 func TestChatLineTypedReportsTheResult(t *testing.T) {
 	f := newFixture(t)
-	f.engine.ChatLineTyped("-ar", "")
+	f.engine.ChatLineTyped("-ar", nil)
 	if got := f.state().Status; got != "Typed -ar in the game chat." {
 		t.Fatalf("status = %q", got)
 	}
-	f.engine.ChatLineTyped("-ar", "Warcraft III wasn't in front.")
+	f.engine.ChatLineTyped("-ar", errors.New("Warcraft III wasn't in front."))
 	if got := f.state().Status; got != "Game mode didn't type -ar. Warcraft III wasn't in front." {
 		t.Fatalf("status = %q", got)
 	}
