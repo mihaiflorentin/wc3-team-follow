@@ -28,6 +28,9 @@ func main() {
 	window := len(os.Args) < 2
 	// The path is read before an update can rename the running program.
 	exe, exeErr := os.Executable()
+	// The config is built once; the supervisor and error dialogs read their
+	// folders from it too.
+	cfg, cfgErr := config.NewConfig()
 	if window {
 		// After an update, the new version waits for the old one to exit,
 		// so it doesn't meet the old window's single-instance lock.
@@ -35,7 +38,7 @@ func main() {
 	}
 	if window && crashreport.Supervises && !crashreport.Supervised() {
 		if exeErr == nil {
-			dir := logDir()
+			dir := logDir(cfg)
 			opts := crashreport.Options{
 				Exe: exe, Console: os.Stdout, LogDir: dir, Show: crashreport.Show,
 				CrashFile: crashFile(dir), StartupTimeout: time.Minute,
@@ -45,18 +48,18 @@ func main() {
 				// hold its data folder: a window that fails at once gets one
 				// more try, after waiting for the folder (ADR 0009).
 				opts.RetryWithin = retryWithin
-				opts.BeforeRetry = func() { waitForWebview(webviewDir()) }
+				opts.BeforeRetry = func() { waitForWebview(webviewDir(cfg)) }
 			}
 			os.Exit(crashreport.Supervise(opts))
 		}
 	}
-	if err := run(exe); err != nil {
+	if err := run(cfg, cfgErr, exe); err != nil {
 		if errors.Is(err, cli.ErrRestart) {
 			os.Exit(restart(exe, exeErr))
 		}
 		fmt.Fprintln(os.Stderr, "error:", err)
 		if window && !crashreport.Supervised() {
-			crashreport.Show(crashreport.Title, crashreport.Message(err.Error(), logDir()))
+			crashreport.Show(crashreport.Title, crashreport.Message(err.Error(), logDir(cfg)))
 		}
 		os.Exit(1)
 	}
@@ -69,18 +72,27 @@ const (
 	retryWithin = 10 * time.Second
 )
 
+// dataFolder is the per-user data folder, or "" when the config failed to
+// load or the folder is unknown.
+func dataFolder(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	dir, err := config.DataDir(cfg.Storage)
+	if err != nil {
+		return ""
+	}
+	return dir
+}
+
 // webviewDir is the WebView2 data folder (Windows), or "" when the data
 // folder is unknown. cmd/cli hands the same folder to the window.
-func webviewDir() string {
-	cfg, err := config.NewConfig()
-	if err != nil {
+func webviewDir(cfg *config.Config) string {
+	dir := dataFolder(cfg)
+	if dir == "" {
 		return ""
 	}
-	dataDir, err := config.DataDir(cfg.Storage)
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(dataDir, "webview")
+	return filepath.Join(dir, "webview")
 }
 
 // waitForWebview waits, on Windows, until no WebView2 browser holds dir:
@@ -124,22 +136,17 @@ func crashFile(dir string) string {
 
 // logDir is the log folder named in error dialogs, or "" when file logging
 // is off or the data folder is unknown.
-func logDir() string {
-	cfg, err := config.NewConfig()
-	if err != nil || cfg.Logging == nil || !cfg.Logging.File {
+func logDir(cfg *config.Config) string {
+	dir := dataFolder(cfg)
+	if dir == "" || cfg.Logging == nil || !cfg.Logging.File {
 		return ""
 	}
-	dataDir, err := config.DataDir(cfg.Storage)
-	if err != nil {
-		return ""
-	}
-	return logging.Dir(dataDir)
+	return logging.Dir(dir)
 }
 
-func run(exe string) (err error) {
-	cfg, err := config.NewConfig()
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+func run(cfg *config.Config, cfgErr error, exe string) (err error) {
+	if cfgErr != nil {
+		return fmt.Errorf("load config: %w", cfgErr)
 	}
 
 	dataDir, dirErr := config.DataDir(cfg.Storage)
@@ -161,7 +168,7 @@ func run(exe string) (err error) {
 		cfg.App.Executable = real
 	}
 	if len(os.Args) < 2 && cfg.App.Updated && runtime.GOOS == "windows" {
-		waited, free := waitForWebview(webviewDir())
+		waited, free := waitForWebview(webviewDir(cfg))
 		logger.Info("app.webview_wait", slog.Duration("waited", waited), slog.Bool("free", free))
 	}
 	// What's new reads the changelog built into the app.
