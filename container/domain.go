@@ -22,6 +22,10 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 		if cfg == nil {
 			return nil, errors.New("missing [follow] config section")
 		}
+		updatesCfg := s.config.Updates
+		if updatesCfg == nil {
+			return nil, errors.New("missing [updates] config section")
+		}
 		refresh, err := time.ParseDuration(cfg.RefreshInterval)
 		if err != nil {
 			return nil, fmt.Errorf("invalid follow.refresh_interval %q: %w", cfg.RefreshInterval, err)
@@ -70,13 +74,13 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve updater: %w", err)
 		}
-		checkEvery, err := time.ParseDuration(s.config.Updates.CheckInterval)
+		checkEvery, err := time.ParseDuration(updatesCfg.CheckInterval)
 		if err != nil {
-			return nil, fmt.Errorf("invalid updates.check_interval %q: %w", s.config.Updates.CheckInterval, err)
+			return nil, fmt.Errorf("invalid updates.check_interval %q: %w", updatesCfg.CheckInterval, err)
 		}
-		retryEvery, err := time.ParseDuration(s.config.Updates.RetryInterval)
+		retryEvery, err := time.ParseDuration(updatesCfg.RetryInterval)
 		if err != nil {
-			return nil, fmt.Errorf("invalid updates.retry_interval %q: %w", s.config.Updates.RetryInterval, err)
+			return nil, fmt.Errorf("invalid updates.retry_interval %q: %w", updatesCfg.RetryInterval, err)
 		}
 		ports := companion.Ports{Discovery: discovery, Dialer: dialer, Prefs: prefs, Maps: locator, Library: library, Processes: processes,
 			Keyboard: keyboard, Recent: recent, Notes: notes, Updater: updates}
@@ -87,7 +91,7 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 			AppVersion:          s.config.App.Version,
 			UpdateInterval:      checkEvery,
 			UpdateRetryInterval: retryEvery,
-			ReleasesURL:         "https://github.com/" + s.config.Updates.Repository + "/releases",
+			ReleasesURL:         "https://github.com/" + updatesCfg.Repository + "/releases",
 			System:              runtime.GOOS,
 			Executable:          s.config.App.Executable,
 			Updated:             s.config.App.Updated,

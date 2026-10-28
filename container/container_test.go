@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -109,6 +110,19 @@ func TestCompanion_BuildsFromTheEmbeddedConfig(t *testing.T) {
 	}
 	if state := first.State(); state.Enabled || !state.Diagnostic {
 		t.Fatalf("companion did not start off in preview: %+v", state)
+	}
+}
+
+func TestCompanion_ReportsAMissingUpdatesSection(t *testing.T) {
+	t.Setenv(config.DataDirEnv, t.TempDir())
+	cfg, err := config.NewConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Updates = nil
+	c := New(cfg, slog.New(slog.DiscardHandler))
+	if _, err := c.Companion(); err == nil || !strings.Contains(err.Error(), "[updates]") {
+		t.Fatalf("built the companion without [updates]: %v", err)
 	}
 }
 
