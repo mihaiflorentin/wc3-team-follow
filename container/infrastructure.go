@@ -81,10 +81,3 @@ func (s *ServiceContainer) PreferenceStore() (contract.PreferenceStore, error) {
 		return settings.New(dir), nil
 	})
 }
-
-// GameKeyboard returns the keystroke input Game mode types with. Until the
-// keystroke adapter (issue 12) is merged there is none, and Game mode says
-// typing isn't supported on this system.
-func (s *ServiceContainer) GameKeyboard() (contract.GameKeyboard, error) {
-	return nil, nil
-}
