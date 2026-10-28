@@ -5,9 +5,11 @@ name: release
 #
 # - A pushed Release Tag (X.Y.Z, optional leading v and pre-release part)
 #   publishes a release named after the tag. scripts/release-tag.sh
-#   classifies the tag; tags it rejects run nothing.
+#   classifies the tag; tags it rejects run nothing. The notes are the
+#   tag's CHANGELOG.md section (scripts/releasenotes); a tag without one
+#   fails before anything is built.
 # - A push to master replaces the rolling "edge" pre-release, so the latest
-#   master build is always downloadable.
+#   master build is always downloadable. Its notes are [Unreleased].
 #
 # The window needs cgo on macOS and Linux, so each of those builds runs on
 # its own OS; Windows cross-compiles from Linux. Tests run on all three.
@@ -56,6 +58,33 @@ jobs:
             echo "version=0.0.0-edge.${SHA::7}" >> "$GITHUB_OUTPUT"
           fi
           cat "$GITHUB_OUTPUT"
+      # The release notes are the tag's CHANGELOG.md section (edge: the
+      # [Unreleased] one). A tag without a section stops the release here,
+      # before anything is built.
+      - uses: actions/setup-go@v6
+        if: steps.kind.outputs.release == 'true'
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Release notes from CHANGELOG.md
+        if: steps.kind.outputs.release == 'true'
+        env:
+          TAG: ${{ steps.kind.outputs.tag }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          mkdir -p notes
+          if ! go run ./scripts/releasenotes -tag "$TAG" -repo "$REPO" -head "${SHA::7}" > notes/notes.md; then
+            echo "::error file=CHANGELOG.md::No release notes for $TAG. CHANGELOG.md needs a section for this version; see docs/ci.md."
+            exit 1
+          fi
+          cat notes/notes.md
+      - uses: actions/upload-artifact@v4
+        if: steps.kind.outputs.release == 'true'
+        with:
+          name: notes
+          path: notes/notes.md
+          if-no-files-found: error
 
   test:
     needs: classify
@@ -132,6 +161,10 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: notes
+          path: notes
       - name: Checksums
         working-directory: dist
         run: sha256sum wc3-team-follow-* > checksums.txt && cat checksums.txt
@@ -147,10 +180,10 @@ jobs:
             gh release delete edge --cleanup-tag --yes || true
             gh release create edge dist/wc3-team-follow-* dist/checksums.txt \
               --target "$SHA" --prerelease --title "Edge build (master ${SHA::7})" \
-              --notes "Built automatically from the latest commit on master. Not a tested release; see docs/install.md for setup."
+              --notes-file notes/notes.md
           else
             prerelease=""
             if [ "$PRERELEASE" = "true" ]; then prerelease="--prerelease"; fi
             gh release create "$TAG" dist/wc3-team-follow-* dist/checksums.txt \
-              --title "$TAG" --generate-notes --verify-tag $prerelease
+              --title "$TAG" --notes-file notes/notes.md --verify-tag $prerelease
           fi
