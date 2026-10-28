@@ -43,7 +43,18 @@ The window only: `cmd/gui/frontend/app.js` (`playerMenuGroups`, `openPlayerMenu`
 - **Keyboard and focus:** ARIA `menu`/`menuitem`/`separator`, focus on the first item; the arrow keys (wrapping), Home, End and a first letter move; Enter or Space chooses; Esc or Tab closes. Focus returns to the row, found again by BattleTag after the lists redraw, or to its neighbour when the row left the list. A pointer press outside, scrolling, resizing or leaving the window closes it.
 - **Placement:** fixed, below and right of the pointer or row, flipped above or left when there's no room, and kept 8 px inside the window; it scrolls when the window is shorter than the menu.
 - **Confirmation:** a short line at the bottom ("Copied Player#1234", "Blacklisted Player#1234") and a polite status region for screen readers.
-- **Later items:** items come in groups split by a separator. Notes add their own group in front without changing the rest.
+- **Groups:** items come in groups split by a separator: the player's note first (see Player notes), then Copy BattleTag and the group item, then the blacklist item.
+
+## Player notes
+
+A private note per BattleTag, kept on this computer only and never sent to the game, logged or put in `Diagnostics`.
+
+- **Rules:** `domain/follow/notes.go`. `NoteKey` is the lower-cased, trimmed BattleTag; `NoteText` trims the text and refuses a note longer than `dto.MaxNoteLength` (500) characters (Unicode characters, not bytes) whole, never cutting it short ("A note can be at most 500 characters."). Empty text deletes the note.
+- **Saving:** `Companion.SetNote(tag, text)` is the only writer. It saves the whole map through `contract.PlayerNotes` (`notes.json`, written atomically next to `friends.json`) and only then changes the state, so a failed save keeps the old note and returns "Your note couldn't be saved on this computer. Try again.". It logs `notes.saved` with a count, never a BattleTag or the text. A missing, unreadable or corrupt file loads as no notes; loading also lower-cases keys, trims text, cuts anything over 500 characters and drops empty notes.
+- **Bridge:** `SetNote(tag, text)` and `DeleteNote(tag)` (which sends empty text).
+- **Menu:** Add note when the player has none; Edit note and View note when they do. Every player row and chip offers them, the player's own included.
+- **Popover:** `cmd/gui/frontend/app.js` (`openNote`). One fixed popover (`role="dialog"`), placed like the menu next to the row. Writing: a textarea, a count ("61 / 500", amber within 50 of the limit, red with "N over the 500-character limit" past it, when Save is unavailable and screen readers hear the limit once), and Save, Cancel and Delete (Delete only for an existing note). Ctrl+Enter or Cmd+Enter saves; saving empty text deletes. Errors stay in the popover so nothing typed is lost. Reading: the note as plain text with its line breaks (`textContent`, never HTML), when it was updated, and Edit note and Close. Esc closes and focus returns to the row; Tab stays inside. A click outside closes it unless the text was changed.
+- **Lists:** rows in Friends, Recent players and Blacklist show a small note icon ("Has a note") after the name. The search box matches note text as well as BattleTags (and maps in Recent players).
 
 ## Blacklist and auto-ban
 

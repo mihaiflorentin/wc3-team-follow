@@ -39,6 +39,9 @@
   <symbol id="i-user-plus" viewBox="0 0 24 24"><circle cx="10" cy="8" r="3.5"/><path d="M3.5 20a6.5 6.5 0 0 1 13 0"/><path d="M19 8v6M16 11h6"/></symbol>
   <symbol id="i-user-minus" viewBox="0 0 24 24"><circle cx="10" cy="8" r="3.5"/><path d="M3.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 11h6"/></symbol>
   <symbol id="i-unban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3.5h8.5L19 8v12.5H6z"/><path d="M14 3.5V8h5"/><path d="M9 12.5h6M9 16h4"/></symbol>
+  <symbol id="i-note-add" viewBox="0 0 24 24"><path d="M12.5 20.5H6v-17h8.5L19 8v4.5"/><path d="M14 3.5V8h5"/><path d="M18 15.5v6M15 18.5h6"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4.5 19.5 5.5 15 15.8 4.7a2.1 2.1 0 0 1 3 3L8.5 18z"/><path d="m13.8 6.7 3 3"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.01"/></symbol>
 </svg>
 
@@ -46,6 +49,29 @@
      that confirms its actions, and what screen readers hear of that line;
      app.js fills them. -->
 <div id="player-menu" class="player-menu" hidden></div>
+<!-- The note popover: write, edit or read the player's private note about
+     someone. app.js fills the head and the text, always as plain text. -->
+<div id="note-popover" class="note-popover" role="dialog" hidden>
+  <div id="note-head" class="menu-head" aria-hidden="true"></div>
+  <form id="note-edit" class="note-edit" novalidate>
+    <label for="note-text" class="visually-hidden">Your note</label>
+    <textarea id="note-text" rows="5" data-max="500" aria-describedby="note-count" placeholder="What do you want to remember about them? Only you can see this."></textarea>
+    <span id="note-count" class="note-count"></span>
+    <p id="note-error" class="note-error" role="alert"></p>
+    <div class="row end note-actions">
+      <button type="button" id="note-delete" class="ghost small quiet-danger start"><svg class="icon"><use href="#i-x"/></svg>Delete</button>
+      <button type="button" id="note-cancel" class="ghost small">Cancel</button>
+      <button type="submit" id="note-save" class="primary small">Save</button>
+    </div>
+  </form>
+  <div id="note-view" class="note-view">
+    <p id="note-body" class="note-body"></p>
+    <div class="row end note-actions">
+      <button type="button" id="note-close" class="ghost small">Close</button>
+      <button type="button" id="note-to-edit" class="primary small"><svg class="icon"><use href="#i-pencil"/></svg>Edit note</button>
+    </div>
+  </div>
+</div>
 <div id="toast" class="toast" aria-hidden="true"></div>
 <p id="announce" class="visually-hidden" role="status" aria-live="polite"></p>
 
@@ -162,8 +188,8 @@
       <div class="picker-tools">
         <label class="search">
           <svg class="icon"><use href="#i-search"/></svg>
-          <span id="search-label" class="visually-hidden">Search your friends</span>
-          <input id="friend-search" type="search" placeholder="Search your Battle.net friends" autocomplete="off" spellcheck="false">
+          <span id="search-label" class="visually-hidden">Search your friends and notes</span>
+          <input id="friend-search" type="search" placeholder="Search your friends and notes" autocomplete="off" spellcheck="false">
         </label>
         <label class="switch" id="show-offline-switch">
           <input type="checkbox" id="show-offline">

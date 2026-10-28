@@ -13,9 +13,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Players you ban yourself in a lobby you host are added to the blacklist automatically (English game client). A switch turns this off.
 - Blacklisted players are marked in Recent players and Friends, and are taken out of your follow group.
 - **Player menu.** Right-click any player name, or press Shift+F10 or the Menu key, to copy their BattleTag, add or remove them from your group, or add or remove them from the blacklist.
+- **Player notes.** Write a private note about any player from the player menu with **Add note**, then edit or read it in full later. Notes hold up to 500 characters, are kept on this computer only, and clearing the text deletes one. Players with a note show a note icon, and the search box finds note text too.
 
 ### Changed
 
+- In narrow windows, a long lobby name in Friends or Recent players is shortened so the player's BattleTag stays readable.
 - Before each ban, Team Follow reads every lobby update the game has already sent. It bans only the slot the blacklisted player holds at that moment, and warns you by name if the game reports a different player as banned.
 
 ## [0.7.0] - 2026-10-28

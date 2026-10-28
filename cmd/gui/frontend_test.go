@@ -24,3 +24,18 @@ func TestGameModeDelayFieldUsesTheSameLimit(t *testing.T) {
 		t.Fatalf("game-mode-delay max = %s, want %s", got, want)
 	}
 }
+
+// The note box must use the Go limit; app.js reads it from data-max.
+func TestNoteFieldUsesTheSameLimit(t *testing.T) {
+	page, err := os.ReadFile("frontend/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	field := regexp.MustCompile(`<textarea id="note-text"[^>]*\bdata-max="(\d+)"`).FindSubmatch(page)
+	if field == nil {
+		t.Fatal("no note-text field with a data-max")
+	}
+	if got, want := string(field[1]), strconv.Itoa(dto.MaxNoteLength); got != want {
+		t.Fatalf("note-text data-max = %s, want %s", got, want)
+	}
+}

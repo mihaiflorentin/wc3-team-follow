@@ -6,12 +6,13 @@ Ports (`port/contract`) and DTOs (`port/dto`) are the only types that cross laye
 
 - `port/contract/`: interfaces only, no structs.
   - Inbound: `Companion`, which the window and commands drive.
-  - Outbound: `GameDiscovery`, `GameDialer`, `GameSession`, `GameProcesses`, `GameKeyboard`, `MapsLocator`, `MapLibrary`, `PreferenceStore` and `RecentPlayers`, which adapters implement and the domain calls.
+  - Outbound: `GameDiscovery`, `GameDialer`, `GameSession`, `GameProcesses`, `GameKeyboard`, `MapsLocator`, `MapLibrary`, `PreferenceStore`, `RecentPlayers` and `PlayerNotes`, which adapters implement and the domain calls.
   - `GameCounter` is implemented by discovery's several-copies error; the companion reads it with `errors.As` to fill `FollowState.GameCount`, so the domain never imports the adapter or parses the message.
 - `port/dto/` (`package dto`): plain data between layers. There are no subfolders: the app has no HTTP API.
   - `follow.go`: `FollowConfig` (what the page sends), `FollowState` (what it renders), `TeamMember`, `WatchedMember`, `Friend` (one Battle.net friend in `FollowState.Roster`), `PasswordRequest`, `JoinRecord`, `LogEntry`, `Diagnostics`, `Preferences`.
   - `follow.go` also holds Auto-host's `HostSettings`, `HostConfig` and `HostState`.
   - `recent.go`: `RecentPlayer` (`tag`, `map`, `lastSeen`) and `MaxRecentPlayers` (200).
+  - `notes.go`: `PlayerNote` (`text`, `updated`) and `MaxNoteLength` (500).
   - `follow.go` also holds `BlacklistEntry` (`tag`, `added`) and `MaxBlacklist` (500).
   - `game.go`: `GameConnection` (port, session, version, pid), `GameEvent` (one loosely typed message from the game) and `KeyboardStatus`.
 
@@ -31,4 +32,5 @@ Ports (`port/contract`) and DTOs (`port/dto`) are the only types that cross laye
 12. `FollowState.Recent` (`recent`) lists the players seen in a lobby or match with the player, newest first, at most 200; `FollowState.LobbyTags` (`lobbyTags`) names the ones in the current lobby or match. Both are never null. Status isn't stored: the window shows "In your lobby" for `lobbyTags`, a friend's status from `roster`, or "Not a friend" once the roster has loaded. `Bridge.ClearRecentPlayers` (`Companion.ClearRecentPlayers`) empties the list. `recent-players.json` holds `{"players": [RecentPlayer…]}` and lives only on this computer.
 13. The window's Friends tab badge counts `roster` friends with `online` set (accessible name "Friends, 17 online", tooltip "17 of 166 online"). The panel header counts the follow group ("4 of 12 chosen"), shared by both tabs. The selected tab is kept in the page's `localStorage` (`wtf.peopleTab`), not in Go.
 14. The blacklist is in `FollowState` (`blacklist`, never null, newest first; `autoBan`; `blacklistManualBans`) and `Preferences`. `FollowConfig` changes it: `blacklistAdd` (BattleTags, stamped with the time and removed from the follow group), `blacklistRemove`, `blacklist` (the whole list, as loaded), `autoBan` and `blacklistManualBans`. The bridge's `AddToBlacklist(tags)`, `RemoveFromBlacklist(tag)`, `SetAutoBan(on)` and `SetBlacklistManualBans(on)` send these. `friends.json` stores `blacklist` when it isn't empty, and `autoBan` and `blacklistManualBans` only when off, so a file saved before the blacklist existed loads with an empty list and both on. The selected People tab (`wtf.peopleTab`) may be `friends`, `recent` or `blacklist`.
-15. `GameSession.TryReceive` returns an event already received without waiting (`ok` false when none is). Auto-ban uses it to read every waiting event before a ban (docs/adr/0008).
+15. `FollowState.Notes` (`notes`) maps the lower-cased BattleTag to the player's private `PlayerNote` (`text`, `updated`); never null. `Bridge.SetNote(tag, text)` and `Bridge.DeleteNote(tag)` call `Companion.SetNote`, where empty text deletes. Notes hold at most `dto.MaxNoteLength` (500) characters, enforced in `domain/follow` (refused whole) and in the window, whose note box reads the limit from its `data-max` (a test keeps the two equal). `notes.json` holds `{"notes": {tag: PlayerNote}}` and lives only on this computer; notes never reach `Diagnostics` or the log.
+16. `GameSession.TryReceive` returns an event already received without waiting (`ok` false when none is). Auto-ban uses it to read every waiting event before a ban (docs/adr/0008).

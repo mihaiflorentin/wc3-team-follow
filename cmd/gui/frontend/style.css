@@ -449,7 +449,7 @@ h2 .icon { color: var(--lichen); }
 
 .picker { max-height: 390px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -6px; padding: 0 6px; }
 
-.pick { grid-template-columns: 20px auto minmax(0, 1fr) auto; cursor: pointer; }
+.pick { grid-template-columns: 20px auto minmax(5.5em, 1fr) minmax(0, auto); cursor: pointer; }
 .pick:hover { background: var(--spruce-raised); }
 .pick[data-selected="true"] { background: color-mix(in srgb, var(--open) 9%, transparent); }
 .pick[data-disabled="true"] { cursor: not-allowed; opacity: .5; }
@@ -529,7 +529,7 @@ h2 .icon { color: var(--lichen); }
 
 /* Recent players: the Friends row, with the map and last seen beneath the
    name and the status. */
-.recent .pick { grid-template-columns: 20px auto minmax(0, 1fr) auto; row-gap: 1px; padding: 8px 6px; }
+.recent .pick { grid-template-columns: 20px auto minmax(5.5em, 1fr) minmax(0, auto); row-gap: 1px; padding: 8px 6px; }
 .recent .pick > input, .recent .pick > .avatar { grid-row: span 2; }
 .recent .meta {
   grid-column: 3 / -1;
@@ -1207,3 +1207,75 @@ select {
 .toast span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .toast .icon { color: #2f8a55; stroke-width: 2.4; }
 .toast[data-show="true"] { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity .18s, transform .18s; }
+
+/* Player notes --------------------------------------------------------
+   The note icon sits quietly after a name, in the lists' secondary colour.
+   The popover is the player menu's sheet, a little wider, with the same
+   head; the note reads as plain prose and keeps its line breaks. */
+
+.note-mark { flex: none; display: inline-flex; color: var(--lichen); }
+.note-mark .icon { width: 13px; height: 13px; }
+
+.note-popover {
+  position: fixed;
+  z-index: 55;
+  top: 0;
+  left: 0;
+  width: min(320px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px 10px 10px;
+  border-radius: 12px;
+  background: var(--spruce-raised);
+  box-shadow: 0 0 0 1px var(--spruce-line), 0 16px 36px rgba(6, 12, 12, .55);
+  animation: menu-in .12s ease-out;
+}
+.note-popover .menu-head { padding: 8px 0 10px; margin-bottom: 10px; }
+
+.note-popover textarea {
+  display: block;
+  width: 100%;
+  min-height: 112px;
+  max-height: 45vh;
+  resize: vertical;
+  border: 1px solid var(--spruce-line);
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: var(--spruce);
+  color: var(--bone);
+  font: 13.5px/1.45 var(--ui);
+  user-select: text;
+}
+.note-popover textarea:focus-visible { outline: 2px solid var(--preview); outline-offset: 1px; }
+.note-popover textarea[aria-invalid="true"] { border-color: var(--danger); }
+.note-popover textarea[aria-invalid="true"]:focus-visible { outline-color: var(--danger); }
+.note-popover textarea::placeholder { color: color-mix(in srgb, var(--lichen) 75%, transparent); }
+
+.note-count {
+  display: block;
+  margin-top: 6px;
+  text-align: right;
+  color: var(--lichen);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.note-count[data-state="near"] { color: var(--open); }
+.note-count[data-state="over"] { color: var(--danger); font-weight: 600; }
+.note-error { margin: 6px 0 0; color: var(--danger); font-size: 12.5px; }
+.note-error:empty { display: none; }
+
+.note-body {
+  margin: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13.5px;
+  line-height: 1.5;
+  user-select: text;
+}
+.note-actions { margin-top: 12px; }
+.note-actions .icon { width: 14px; height: 14px; }
+.ghost.quiet-danger { background: transparent; color: var(--danger); padding-left: 6px; }
+.ghost.quiet-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 14%, transparent); }

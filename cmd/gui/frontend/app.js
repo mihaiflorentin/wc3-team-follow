@@ -112,13 +112,31 @@ function presence(text, lobby) {
 // isBlacklisted reports whether tag is on the blacklist.
 const isBlacklisted = (s, tag) => (s.blacklist ?? []).some(b => key(b.tag) === key(tag));
 
-// nameCell is a row's BattleTag, with the Blacklisted badge when it is on
-// the blacklist.
-function nameCell(tag, banned) {
+// noteOf returns the player's note about tag, or undefined.
+const noteOf = (s, tag) => s.notes?.[key(tag)];
+
+// matchesPlayer reports whether a search finds tag, by its BattleTag or by
+// the player's note about it. query is lower-cased.
+const matchesPlayer = (s, tag, query) => key(tag).includes(query) || Boolean(noteOf(s, tag)?.text.toLowerCase().includes(query));
+
+// noteMark is the small icon on a row whose player has a note.
+function noteMark() {
+  const mark = el('span', 'note-mark');
+  mark.setAttribute('role', 'img');
+  mark.setAttribute('aria-label', 'Has a note');
+  mark.title = 'You have a note about this player';
+  mark.append(icon('note'));
+  return mark;
+}
+
+// nameCell is a row's BattleTag, with the note icon when the player has a
+// note and the Blacklisted badge when it is on the blacklist.
+function nameCell(tag, banned, noted = false) {
   const wrap = el('span', 'name-wrap');
   const name = el('span', 'name', tag);
   name.title = tag;
   wrap.append(name);
+  if (noted) wrap.append(noteMark());
   if (banned) {
     const badge = el('span', 'ban-badge');
     badge.title = 'Blacklisted';
@@ -380,7 +398,7 @@ function pickRow(f, full) {
       : state.manualTags.filter(t => key(t) !== key(f.battleTag));
     changeGroup({tags});
   };
-  label.append(box, avatar(f.battleTag, {badge: Boolean(f.open), banned}), nameCell(f.battleTag, banned), presence(f.open ? 'Lobby open' : f.label, f.open ? f.lobby : ''));
+  label.append(box, avatar(f.battleTag, {badge: Boolean(f.open), banned}), nameCell(f.battleTag, banned, Boolean(noteOf(state, f.battleTag))), presence(f.open ? 'Lobby open' : f.label, f.open ? f.lobby : ''));
   li.append(label);
   return li;
 }
@@ -393,12 +411,12 @@ function renderFriends(s) {
   const showOffline = $('show-offline').checked;
   const full = s.manualTags.length >= MAX_TAGS;
   const {chosen, others} = pickerRows(s);
-  const visible = others.filter(f => (query ? key(f.battleTag).includes(query) : showOffline || f.online));
+  const visible = others.filter(f => (query ? matchesPlayer(s, f.battleTag, query) : showOffline || f.online));
   const hiddenOffline = others.filter(f => !f.online).length;
 
   // Re-render only when something visible changed, so scrolling and focus
   // survive the once-a-second state updates.
-  const signature = JSON.stringify([s.connected, full, chosen, visible, query, showOffline, s.roster.length, s.blacklist]);
+  const signature = JSON.stringify([s.connected, full, chosen, visible, query, showOffline, s.roster.length, s.blacklist, s.notes]);
   if (signature !== pickerSignature) {
     pickerSignature = signature;
     const scroll = list.scrollTop;
@@ -448,7 +466,7 @@ try {
   if (saved === 'recent' || saved === 'blacklist') tab = saved;
 } catch { /* storage blocked */ }
 
-const placeholders = {friends: 'Search your Battle.net friends', recent: 'Search recent players', blacklist: 'Search the blacklist'};
+const placeholders = {friends: 'Search your friends and notes', recent: 'Search recent players and notes', blacklist: 'Search the blacklist and notes'};
 
 const tabs = [...document.querySelectorAll('.tabs [role="tab"]')];
 
@@ -551,7 +569,7 @@ function recentRow(s, p, full) {
   }
   label.dataset.disabled = box.getAttribute('aria-disabled');
   markPlayer(label, box, p.tag);
-  const name = nameCell(p.tag, banned);
+  const name = nameCell(p.tag, banned, Boolean(noteOf(s, p.tag)));
   const meta = el('span', 'meta');
   const map = el('span', 'map');
   map.append(icon('map'), document.createTextNode(p.map || 'Unknown map'));
@@ -572,13 +590,13 @@ function renderRecent(s) {
   const recent = s.recent ?? [];
   const query = $('friend-search').value.trim().toLowerCase();
   const full = s.manualTags.length >= MAX_TAGS;
-  const visible = query ? recent.filter(p => key(p.tag).includes(query) || p.map.toLowerCase().includes(query)) : recent;
+  const visible = query ? recent.filter(p => matchesPlayer(s, p.tag, query) || p.map.toLowerCase().includes(query)) : recent;
   $('recent-count').textContent = recent.length ? String(recent.length) : '';
 
   if (tab === 'recent') {
     // Last seen is rounded to minutes, so this changes at most once a minute.
     const signature = JSON.stringify([visible.map(p => [p.tag, p.map, lastSeen(p.lastSeen, false), recentStatus(s, p.tag)]), s.manualTags, full, query,
-      s.blacklist, banMode, banConfirm, [...banPick]]);
+      s.blacklist, s.notes, banMode, banConfirm, [...banPick]]);
     if (signature !== recentSignature) {
       recentSignature = signature;
       const scroll = list.scrollTop;
@@ -697,7 +715,7 @@ function addedOn(iso, now = new Date()) {
   return `Added ${then.toLocaleDateString([], opts)}`;
 }
 
-function blacklistRow(entry) {
+function blacklistRow(s, entry) {
   const li = el('li');
   const row = el('div', 'person');
   row.dataset.status = 'banned';
@@ -717,8 +735,7 @@ function blacklistRow(entry) {
       (target ?? $('ban-tag')).focus();
     }
   };
-  const name = el('span', 'name', entry.tag);
-  name.title = entry.tag;
+  const name = nameCell(entry.tag, false, Boolean(noteOf(s, entry.tag)));
   row.append(avatar(entry.tag, {banned: true}), name, added, remove);
   markPlayer(row, remove, entry.tag);
   li.append(row);
@@ -739,15 +756,15 @@ function renderBlacklist(s) {
   if (tab !== 'blacklist') return;
 
   const query = $('friend-search').value.trim().toLowerCase();
-  const visible = query ? entries.filter(b => key(b.tag).includes(query)) : entries;
-  const signature = JSON.stringify([visible.map(b => [b.tag, addedOn(b.added)]), query, entries.length]);
+  const visible = query ? entries.filter(b => matchesPlayer(s, b.tag, query)) : entries;
+  const signature = JSON.stringify([visible.map(b => [b.tag, addedOn(b.added), noteOf(s, b.tag)?.text ?? '']), query, entries.length]);
   if (signature !== blacklistSignature) {
     blacklistSignature = signature;
     const list = $('blacklist');
     const scroll = list.scrollTop;
     const focused = document.activeElement?.dataset?.tag;
     list.replaceChildren();
-    for (const b of visible) list.append(blacklistRow(b));
+    for (const b of visible) list.append(blacklistRow(s, b));
     if (!entries.length) list.append(el('li', 'empty', 'Nobody is blacklisted. Add a BattleTag below, or choose players in Recent players.'));
     else if (!visible.length) list.append(el('li', 'empty', `No blacklisted player matches “${query}”.`));
     list.scrollTop = scroll;
@@ -858,7 +875,8 @@ function renderLog(s) {
    group chip. Right-click, Shift+F10 or the Menu key opens it; the arrow
    keys, Home and End move, Enter or Space chooses, and Esc or Tab closes
    it and puts focus back on the row. Its items come in groups split by a
-   line, so notes can add a group of their own in front. */
+   line: the player's note first, then the general actions, then the
+   blacklist. */
 
 // playerMenuGroups lists the actions that apply to tag right now. Each item
 // is {label, icon, run, danger, disabled, hint}.
@@ -872,6 +890,9 @@ function playerMenuGroups(s, tag) {
   const banned = isBlacklisted(s, tag);
   const full = s.manualTags.length >= MAX_TAGS;
 
+  const notes = noteOf(s, tag)
+    ? [{label: 'Edit note', icon: 'pencil', run: () => openNote(tag, 'edit')}, {label: 'View note', icon: 'note', run: () => openNote(tag, 'view')}]
+    : [{label: 'Add note', icon: 'note-add', run: () => openNote(tag, 'edit')}];
   const general = [{label: 'Copy BattleTag', icon: 'copy', run: () => copyTag(tag)}];
   if (chosen) {
     general.push({label: 'Remove from group', icon: 'user-minus', run: () => changeMenuGroup(tag, false)});
@@ -879,7 +900,7 @@ function playerMenuGroups(s, tag) {
     general.push({label: 'Add to group', icon: 'user-plus', run: () => changeMenuGroup(tag, true),
       disabled: full, hint: full ? `Your group is full (${MAX_TAGS})` : ''});
   }
-  const groups = [general];
+  const groups = [notes, general];
   if (banned) groups.push([{label: 'Remove from blacklist', icon: 'unban', run: () => unblacklist(tag)}]);
   else if (!self) groups.push([{label: 'Add to blacklist', icon: 'ban', danger: true, run: () => blacklist(tag), hint: chosen ? 'Also leaves your group' : ''}]);
   return groups;
@@ -934,6 +955,7 @@ const menuItems = () => [...$('player-menu').querySelectorAll('[role="menuitem"]
 function openPlayerMenu(tag, origin, at = null) {
   if (!state) return;
   closePlayerMenu();
+  closeNote({focus: false});
   const banned = isBlacklisted(state, tag);
   const chosen = state.manualTags.some(t => key(t) === key(tag));
   const box = $('player-menu');
@@ -976,14 +998,20 @@ function openPlayerMenu(tag, origin, at = null) {
   list.onkeydown = menuKeys;
   box.replaceChildren(head, list);
 
-  menu.tag = tag;
-  menu.origin = origin;
-  menu.scope = origin?.closest('ul') ?? null;
-  menu.order = menu.scope ? [...menu.scope.querySelectorAll('[data-tag]')].map(n => n.dataset.tag) : [];
+  anchorTo(tag, origin);
   if (origin?.hasAttribute('aria-expanded')) origin.setAttribute('aria-expanded', 'true');
   box.hidden = false;
   placeMenu(box, origin, at);
   menuItems()[0]?.focus();
+}
+
+// anchorTo remembers the row a menu or popover for tag was opened on, so
+// focus can go back to it, or to its neighbour when the lists redraw.
+function anchorTo(tag, origin) {
+  menu.tag = tag;
+  menu.origin = origin;
+  menu.scope = origin?.closest('ul') ?? null;
+  menu.order = menu.scope ? [...menu.scope.querySelectorAll('[data-tag]')].map(n => n.dataset.tag) : [];
 }
 
 // placeMenu keeps the menu inside the window: below and right of the point
@@ -1114,6 +1142,170 @@ document.addEventListener('scroll', event => {
 }, true);
 window.addEventListener('resize', () => closePlayerMenu());
 window.addEventListener('blur', () => closePlayerMenu());
+
+/* Player notes ------------------------------------------------------------
+   One popover for writing, editing and reading the player's private note
+   about someone, opened from the player menu. Notes stay on this computer;
+   they are shown as plain text only. Esc or Cancel closes it with focus
+   back on the row; Ctrl+Enter or Cmd+Enter saves. */
+
+// NOTE_MAX is the longest note, in characters; Go enforces the same limit
+// (dto.MaxNoteLength), and the textarea's data-max says it.
+const NOTE_MAX = Number($('note-text').dataset.max);
+const noteLength = text => [...text.trim()].length;
+
+const notePop = {tag: '', mode: '', saving: false, warned: false};
+
+// openNote opens the popover for tag: mode 'edit' writes or edits the note,
+// 'view' reads it. origin is the row to anchor to; it defaults to the row
+// the player menu was opened on.
+function openNote(tag, mode, origin = menu.tag === tag ? menu.origin : null) {
+  if (!state) return;
+  const note = noteOf(state, tag);
+  if (mode === 'view' && !note) mode = 'edit';
+  if (origin) anchorTo(tag, origin);
+  Object.assign(notePop, {tag, mode, saving: false, warned: false});
+
+  const box = $('note-popover');
+  const [name, number] = tag.split('#');
+  const who = el('span', 'menu-who');
+  const line = el('span', 'menu-name', name);
+  if (number) line.append(el('span', 'menu-number', `#${number}`));
+  const sub = mode === 'view' ? `Note, updated ${noteDate(note.updated)}` : note ? 'Editing your note' : 'New note, kept on this computer only';
+  who.append(line, el('span', 'menu-standing', sub));
+  $('note-head').replaceChildren(avatar(tag, {banned: isBlacklisted(state, tag)}), who);
+  box.setAttribute('aria-label', mode === 'view' ? `Your note about ${tag}` : `${note ? 'Edit' : 'Add'} a note about ${tag}`);
+
+  $('note-edit').hidden = mode !== 'edit';
+  $('note-view').hidden = mode !== 'view';
+  $('note-error').textContent = '';
+  if (mode === 'edit') {
+    $('note-text').value = note?.text ?? '';
+    $('note-delete').hidden = !note;
+    noteCount();
+  } else {
+    $('note-body').textContent = note.text;
+  }
+  box.hidden = false;
+  placeNote();
+  if (mode === 'edit') {
+    const area = $('note-text');
+    area.focus();
+    area.setSelectionRange(area.value.length, area.value.length);
+  } else {
+    $('note-to-edit').focus();
+  }
+}
+
+function placeNote() {
+  const box = $('note-popover');
+  if (box.hidden) return;
+  const origin = menu.origin?.isConnected ? menu.origin : null;
+  if (origin) placeMenu(box, origin, null);
+  else {
+    box.style.left = `${Math.max(8, (innerWidth - box.offsetWidth) / 2)}px`;
+    box.style.top = `${Math.max(8, (innerHeight - box.offsetHeight) / 3)}px`;
+  }
+}
+
+// noteDate says when a note was last saved: a day this year, else a date.
+function noteDate(when) {
+  const then = new Date(when);
+  if (Number.isNaN(then.getTime()) || then.getFullYear() < 2000) return 'earlier';
+  const opts = {day: 'numeric', month: 'short'};
+  if (then.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return then.toLocaleDateString([], opts);
+}
+
+// noteCount shows how many characters are left, and blocks saving past
+// the limit; screen readers hear it once when the note gets too long.
+function noteCount() {
+  const n = noteLength($('note-text').value);
+  const over = n > NOTE_MAX;
+  const count = $('note-count');
+  count.textContent = over ? `${n - NOTE_MAX} over the ${NOTE_MAX}-character limit` : `${n} / ${NOTE_MAX}`;
+  count.dataset.state = over ? 'over' : n > NOTE_MAX - 50 ? 'near' : '';
+  $('note-text').setAttribute('aria-invalid', String(over));
+  $('note-save').disabled = over || notePop.saving;
+  if (over && !notePop.warned) {
+    notePop.warned = true;
+    $('announce').textContent = `Notes can be at most ${NOTE_MAX} characters.`;
+  }
+  if (!over) notePop.warned = false;
+}
+
+// noteDirty reports whether the text differs from the saved note.
+const noteDirty = () => notePop.mode === 'edit' && $('note-text').value.trim() !== (noteOf(state, notePop.tag)?.text ?? '');
+
+function closeNote({focus = true} = {}) {
+  const box = $('note-popover');
+  if (box.hidden) return;
+  box.hidden = true;
+  notePop.mode = '';
+  if (focus) focusPlayer();
+}
+
+// saveNote saves text as the note about the popover's player; empty text
+// deletes it. Errors stay in the popover so nothing typed is lost.
+async function saveNote(text) {
+  const {tag} = notePop;
+  const had = Boolean(noteOf(state, tag));
+  text = text.trim();
+  if (!text && !had) return closeNote();
+  if (noteLength(text) > NOTE_MAX) return noteCount();
+  notePop.saving = true;
+  noteCount();
+  try {
+    render(await (text ? bridge.SetNote(tag, text) : bridge.DeleteNote(tag)));
+  } catch (err) {
+    notePop.saving = false;
+    noteCount();
+    $('note-error').textContent = String(err?.message ?? err);
+    return;
+  }
+  closeNote();
+  toast(text ? `Saved your note about ${tag}` : `Deleted your note about ${tag}`);
+}
+
+$('note-text').oninput = noteCount;
+$('note-edit').onsubmit = event => {
+  event.preventDefault();
+  saveNote($('note-text').value);
+};
+$('note-text').onkeydown = event => {
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    saveNote($('note-text').value);
+  }
+};
+$('note-delete').onclick = () => saveNote('');
+$('note-cancel').onclick = () => closeNote();
+$('note-close').onclick = () => closeNote();
+$('note-to-edit').onclick = () => openNote(notePop.tag, 'edit');
+
+// Esc closes; Tab stays inside the popover.
+$('note-popover').addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    return closeNote();
+  }
+  if (event.key !== 'Tab') return;
+  const stops = [...$('note-popover').querySelectorAll('textarea, button')].filter(n => !n.disabled && n.getClientRects().length);
+  const i = stops.indexOf(document.activeElement);
+  const next = event.shiftKey ? (i <= 0 ? stops.length - 1 : i - 1) : (i + 1) % stops.length;
+  event.preventDefault();
+  stops[next]?.focus();
+});
+
+// A click outside closes a note being read, or one with no changes; a
+// changed note stays open so nothing typed is lost.
+document.addEventListener('pointerdown', event => {
+  const box = $('note-popover');
+  if (box.hidden || box.contains(event.target) || $('player-menu').contains(event.target)) return;
+  if (!noteDirty()) closeNote({focus: false});
+}, true);
+window.addEventListener('resize', placeNote);
 
 /* Events --------------------------------------------------------------- */
 
@@ -1272,9 +1464,9 @@ boot();
 // demoOpen opens a dialog in the demo page, for screenshots:
 // ?open=host-setup|maps|maps-search|report|close-games. The recent scenes
 // open the Recent players tab (recent-select and recent-select-confirm in
-// its blacklist selection), the blacklist scenes the Blacklist tab, and the
-// menu scenes the player menu on a recent player, a blacklisted player or a
-// group chip.
+// its blacklist selection), the blacklist scenes the Blacklist tab, the
+// menu scenes the player menu on a recent player, a blacklisted player, a
+// group chip or a player with a note, and the note scenes the note popover.
 async function demoOpen(what) {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   switch (what) {
@@ -1346,6 +1538,42 @@ async function demoOpen(what) {
       target.closest('[data-player]').scrollIntoView({block: 'center'});
       await wait(50);
       openPlayerMenu(tag, target);
+      break;
+    }
+    // Notes: rows with the note icon, a search that matches note text, and
+    // the note popover adding, editing (one too long) and reading a note.
+    case 'notes':
+    case 'notes-search':
+      selectTab('recent');
+      if (what === 'notes-search') {
+        $('friend-search').value = 'carries';
+        $('friend-search').dispatchEvent(new Event('input'));
+      }
+      await wait(50);
+      $('recent').scrollIntoView({block: 'center'});
+      break;
+    case 'menu-note':
+    case 'note-add':
+    case 'note-edit':
+    case 'note-long':
+    case 'note-view': {
+      const tag = {'menu-note': 'Arthas#1123', 'note-add': 'Kelthuzad#6644', 'note-edit': 'Arthas#1123', 'note-long': 'Garrosh#7781', 'note-view': 'Jaina#2214'}[what];
+      selectTab('recent');
+      await wait(50);
+      const target = $('recent').querySelector(`[data-tag="${CSS.escape(tag)}"]`);
+      if (!target) break;
+      target.closest('[data-player]').scrollIntoView({block: 'center'});
+      await wait(50);
+      if (what === 'menu-note') {
+        openPlayerMenu(tag, target);
+        break;
+      }
+      anchorTo(tag, target);
+      openNote(tag, what === 'note-view' ? 'view' : 'edit', target);
+      if (what === 'note-long') {
+        $('note-text').value += ' He also leaves Legion TD when the first boss leaks. '.repeat(10);
+        noteCount();
+      }
       break;
     }
   }
@@ -1732,7 +1960,8 @@ $('maps-choose').onclick = () => browser.selected && choose(browser.selected);
    paused|password|waiting|many|linux|unverified|host-waiting|host-lobby|
    game-mode|keyboard-ask|keyboard-linux|recent|recent-empty|recent-clear|
    recent-select|recent-select-confirm|blacklist|blacklist-empty|blacklist-off|
-   menu-recent|menu-blacklist|menu-group;
+   menu-recent|menu-blacklist|menu-group|notes|notes-search|menu-note|
+   note-add|note-edit|note-long|note-view;
    add &open=host-setup to see the Game mode group. */
 function demoBridge() {
   const scene = new URLSearchParams(location.search).get('scene') || 'watching';
@@ -1785,7 +2014,15 @@ function demoBridge() {
     ['Deathwing#6666', 60 * 24 * 9],
     ['Mannoroth#1404', 60 * 24 * 33],
   ].map(([tag, mins]) => ({tag, added: at(mins)}));
+  // Notes: sample BattleTags only, keyed lower-case as the Go side keeps them.
+  const notes = Object.fromEntries([
+    ['Arthas#1123', 'Carries in Legion TD. Calls the waves early and builds Elves.', 60 * 5],
+    ['Jaina#2214', 'Friend of Thrall’s from the Sunday group.\nPlays every race; asks before picking random.\n\nGood at Footmen Frenzy, weaker at tower defense. Prefers voice chat on Discord and is usually on after 8 pm. Happy to host when the lobby fills slowly.', 60 * 24 * 2],
+    ['Garrosh#7781', 'Left three Castle Fight games in a row when losing.', 60 * 26],
+    ['Kaelthas#7710', 'Met in a Legion TD lobby. Plays well, quiet in chat.', 60 * 24 * 20],
+  ].map(([tag, text, mins]) => [key(tag), {text, updated: at(mins)}]));
   const s = {
+    notes,
     recent, lobbyTags: ['Medivh#3310', 'Varimathras#2207'],
     blacklist, autoBan: true, blacklistManualBans: true,
     connected: true, version: '3.0.1.24371', verifiedBuild: true, enabled: false, diagnostic: false,
@@ -1852,6 +2089,13 @@ function demoBridge() {
     'menu-recent': {manualTags: ['Arthas#1123', 'Jaina#2214', 'Kelthuzad#6644']},
     'menu-blacklist': {},
     'menu-group': {},
+    notes: {},
+    'notes-search': {},
+    'menu-note': {},
+    'note-add': {},
+    'note-edit': {},
+    'note-long': {},
+    'note-view': {},
   };
   Object.assign(s, scenes[scene] || {});
   if (s.enabled) watch();
@@ -1872,6 +2116,14 @@ function demoBridge() {
     },
     SubmitPassword: async () => { s.passwordRequest = null; return clone(); },
     ClearRecentPlayers: async () => { s.recent = []; s.lobbyTags = []; return clone(); },
+    SetNote: async (tag, text) => {
+      text = text.trim();
+      if ([...text].length > NOTE_MAX) throw new Error(`A note can be at most ${NOTE_MAX} characters.`);
+      if (text) s.notes[key(tag)] = {text, updated: new Date().toISOString()};
+      else delete s.notes[key(tag)];
+      return clone();
+    },
+    DeleteNote: async tag => { delete s.notes[key(tag)]; return clone(); },
     AddToBlacklist: async tags => {
       for (const tag of tags) {
         if (!TAG_PATTERN.test(tag.trim())) throw new Error('Enter a full BattleTag, such as Player#1234.');

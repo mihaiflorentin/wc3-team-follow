@@ -21,7 +21,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `infrastructure/maps/` | Lists and searches maps in a Maps folder (`MapLibrary`). |
 | `infrastructure/gamesocket/` | Loopback websocket to the game with the command allowlist; a reader goroutine queues events so `TryReceive` can return the ones already waiting. |
 | `infrastructure/keyboard/` | Types one line in the match chat with keystrokes (`contract.GameKeyboard`, ADR 0007): the sequence and its checks in `keyboard.go`, `SendInput` in `platform_windows.go`, `CGEventPost` in `platform_darwin.go`, not supported elsewhere yet. |
-| `infrastructure/settings/` | `friends.json` (friends, Auto-host setup, blacklist) and `recent-players.json` (`RecentPlayers`) in the per-user data folder. |
+| `infrastructure/settings/` | `friends.json` (friends, Auto-host setup, blacklist) `recent-players.json` (`RecentPlayers`) and `notes.json` (`PlayerNotes`) in the per-user data folder. |
 | `mock/` | Hand-written test doubles, one package per contract group. |
 | `packaging/` | App icon sources and renders (`icon/`), the Windows resource description (`windows/winres.json`), the macOS `Info.plist` and entitlements (`darwin/`), and the Linux `.desktop` entry (`linux/`). |
 | `docs/` | Living documentation; architectural decisions go in `docs/adr/`. |
@@ -46,6 +46,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 - Nothing starts a match unless the host switched on Start when full; Auto-host otherwise only creates the lobby.
 - Follow always starts off; nothing re-enables it automatically after a disconnect.
 - Recent players (`follow.Recent`) only read the lobby events the game already sends; recording sends nothing. The list (BattleTags, map, last seen) stays in `recent-players.json` on this computer, never in `Diagnostics` or the log (only `recent.saved` with a count).
+- Player notes are written only by `Companion.SetNote` into `notes.json` on this computer. They are never sent to the game, logged (only `notes.saved` with a count) or put in `Diagnostics`, and the window shows them as plain text, never HTML.
 
 ## Dependency rules
 
@@ -57,7 +58,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 
 - `main.go` calls `config.NewConfig()`, `logging.New(cfg.Logging, os.Stdout)`, `container.New(cfg, logger)` and `cli.Execute(c)`, then `c.Close()`. Nothing else builds a container.
 - Each command receives the container through its constructor and resolves what it needs before doing any work. The root command resolves `gui.Deps` in `guiDeps` and builds `gui.Options` from `[window]`. `discover` takes a resolve function, so tests run it with mocks.
-- Every collaborator arrives as a constructor parameter and is stored in a field: `companion.New(companion.Ports{Discovery, Dialer, Prefs, Maps, Library, Processes, Keyboard, Recent}, logger, opts)`. No globals, no `init()`, no config lookups inside domain code or the window.
+- Every collaborator arrives as a constructor parameter and is stored in a field: `companion.New(companion.Ports{Discovery, Dialer, Prefs, Maps, Library, Processes, Keyboard, Recent, Notes}, logger, opts)`. No globals, no `init()`, no config lookups inside domain code or the window.
 - Container accessors are lazy singletons returning `(T, error)`. A missing config section is an error, and a failed build is retried on the next call. Adapters that hold connections register `s.onClose`.
 
 To add a dependency (an outbound adapter or a domain service):
