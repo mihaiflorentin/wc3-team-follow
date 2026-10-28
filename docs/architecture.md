@@ -13,6 +13,8 @@ Warcraft Team Follow is a hexagonal (ports and adapters) desktop app. The core (
   │                          │   │                     │   │   infrastructure/discovery    │
   │                          │   │                     │   │ contract.GameDialer/Session   │
   └──────────────────────────┘   └─────────────────────┘   │   infrastructure/gamesocket   │
+                                                           │ contract.GameKeyboard         │
+                                                           │   infrastructure/keyboard     │
                                                            │ contract.PreferenceStore      │
                                                            │   infrastructure/settings     │
                                                            └──────────────────────────────┘
@@ -27,6 +29,7 @@ Warcraft Team Follow is a hexagonal (ports and adapters) desktop app. The core (
 | Ports | `port/contract`, `port/dto` | Interfaces and plain data |
 | Driven adapters | `infrastructure/discovery` | Finds the game, its menu port and session, per OS; closes the game's processes when the player asks |
 | | `infrastructure/gamesocket` | Loopback websocket with the command allowlist |
+| | `infrastructure/keyboard` | Types one line in the match chat with keystrokes, only while the game is in front (Windows, macOS) |
 | | `infrastructure/settings` | `friends.json` in the per-user data folder |
 
 ## Startup
@@ -50,6 +53,18 @@ A reader goroutine feeds each game event to the engine. One mutex serialises the
 ## Closing the game
 
 `Companion.CloseGames` runs only when the player clicks **Close all Warcraft III** and confirms. The window shows that button when not connected and `gameCount > 1`, and always in **Report a problem**. It calls `contract.GameProcesses.CloseAll` without holding the companion's lock (closing can take a few seconds), pauses discovery meanwhile, then drops the game session, notes the result in Activity and looks for the game again at once. See `docs/adr/0005-closing-the-game-on-request.md`.
+
+## Typing in the match chat
+
+The menu socket can't reach the match chat, so Game mode types its command with keystrokes through `contract.GameKeyboard` (`docs/adr/0007-typing-in-the-match-chat-with-keystrokes.md`). `TypeLine(ctx, pid, line)` presses Enter, waits 1 s for the chat box, types each printable ASCII character with 40 ms after it, and presses Enter. Before every key it checks that the game's pid is in front, and it stops at once when it isn't. That sequence is in `infrastructure/keyboard/keyboard.go`, tested on every OS with a fake system.
+
+| | Windows | macOS | Linux |
+| --- | --- | --- | --- |
+| Keys | `SendInput`, `KEYEVENTF_UNICODE`; `VK_RETURN` | `CGEventPost` at `kCGHIDEventTap`, Unicode string plus US key code; Return is 36 | Not supported yet |
+| In front | `GetForegroundWindow` → `GetWindowThreadProcessId` | `NSWorkspace.frontmostApplication` and the topmost window's owner agree | — |
+| Permission | None (a game run as administrator drops the keys) | Event synthesizing (`CGPreflightPostEventAccess`, `CGRequestPostEventAccess`), again after each ad-hoc-signed update | — |
+
+`wc3-team-follow type -- "<text>"` runs the same path by hand.
 
 ## Game discovery
 

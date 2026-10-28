@@ -6,7 +6,7 @@ Ports (`port/contract`) and DTOs (`port/dto`) are the only types that cross laye
 
 - `port/contract/`: interfaces only, no structs.
   - Inbound: `Companion`, which the window and commands drive.
-  - Outbound: `GameDiscovery`, `GameDialer`, `GameSession`, `GameProcesses`, `MapsLocator`, `MapLibrary` and `PreferenceStore`, which adapters implement and the domain calls.
+  - Outbound: `GameDiscovery`, `GameDialer`, `GameSession`, `GameProcesses`, `GameKeyboard`, `MapsLocator`, `MapLibrary` and `PreferenceStore`, which adapters implement and the domain calls.
   - `GameCounter` is implemented by discovery's several-copies error; the companion reads it with `errors.As` to fill `FollowState.GameCount`, so the domain never imports the adapter or parses the message.
 - `port/dto/` (`package dto`): plain data between layers. There are no subfolders: the app has no HTTP API.
   - `follow.go`: `FollowConfig` (what the page sends), `FollowState` (what it renders), `TeamMember`, `WatchedMember`, `Friend` (one Battle.net friend in `FollowState.Roster`), `PasswordRequest`, `JoinRecord`, `LogEntry`, `Diagnostics`, `Preferences`.

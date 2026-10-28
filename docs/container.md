@@ -36,6 +36,7 @@ Every accessor is a method returning `(T, error)`, where `T` is a `port/contract
 | --- | --- |
 | `GameDiscovery()` | `discovery.New(logger)`, the implementation for this OS |
 | `GameProcesses()` | `discovery.NewProcesses(logger)`, the game process closer for this OS |
+| `GameKeyboard()` | `keyboard.New()`, the match chat keystroke input for this OS (ADR 0007); no config |
 | `GameDialer()` | `gamesocket.NewDialer()` |
 | `PreferenceStore()` | `settings.New(dir)` in `settings.DataDir(cfg.Storage)`; a missing `[storage]` is an error |
 | `Companion()` | `companion.New(Ports{discovery, dialer, prefs, maps locator, map library, processes}, logger, options from [follow])`; a missing `[follow]` or a bad duration is an error |
