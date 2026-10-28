@@ -122,3 +122,14 @@ func TestGameProcesses_IsBuiltOnce(t *testing.T) {
 		t.Fatal("GameProcesses built twice")
 	}
 }
+
+func TestGameKeyboard_IsBuiltOnceWithoutConfig(t *testing.T) {
+	c := New(&config.Config{}, slog.New(slog.DiscardHandler))
+	first, err := c.GameKeyboard()
+	if err != nil || first == nil {
+		t.Fatalf("GameKeyboard = %v, %v", first, err)
+	}
+	if second, _ := c.GameKeyboard(); second != first {
+		t.Fatal("GameKeyboard built twice")
+	}
+}
