@@ -28,12 +28,62 @@ type Companion struct {
 	PermissionCalls int
 	// ClearRecentCalls counts ClearRecentPlayers calls.
 	ClearRecentCalls int
+	// CheckCalls, LaterCalls and SkipCalls count the update calls.
+	CheckCalls int
+	LaterCalls int
+	SkipCalls  int
+	// InstallCalls, CancelCalls and DismissNotesCalls count the in-app
+	// update calls.
+	InstallCalls      int
+	CancelCalls       int
+	DismissNotesCalls int
+	// DismissCalls counts DismissWhatsNew calls; ChangelogSections is what
+	// Changelog returns.
+	DismissCalls      int
+	ChangelogSections []dto.ChangelogSection
 	// NoteCalls counts SetNote calls; LastNoteTag and LastNoteText hold the
 	// last one's arguments.
 	NoteCalls    int
 	LastNoteTag  string
 	LastNoteText string
 }
+
+func (c *Companion) CheckForUpdates() (dto.FollowState, error) {
+	c.CheckCalls++
+	return c.Current, c.Err
+}
+
+func (c *Companion) InstallUpdate() (dto.FollowState, error) {
+	c.InstallCalls++
+	return c.Current, c.Err
+}
+
+func (c *Companion) CancelUpdate() dto.FollowState {
+	c.CancelCalls++
+	return c.Current
+}
+
+func (c *Companion) DismissUpdateNotes() dto.FollowState {
+	c.DismissNotesCalls++
+	return c.Current
+}
+
+func (c *Companion) UpdateLater() dto.FollowState {
+	c.LaterCalls++
+	return c.Current
+}
+
+func (c *Companion) SkipUpdate() (dto.FollowState, error) {
+	c.SkipCalls++
+	return c.Current, c.Err
+}
+
+func (c *Companion) DismissWhatsNew() dto.FollowState {
+	c.DismissCalls++
+	return c.Current
+}
+
+func (c *Companion) Changelog() []dto.ChangelogSection { return c.ChangelogSections }
 
 func (c *Companion) SetNote(tag, text string) (dto.FollowState, error) {
 	c.NoteCalls++

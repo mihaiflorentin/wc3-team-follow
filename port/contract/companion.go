@@ -38,6 +38,30 @@ type Companion interface {
 	// ClearRecentPlayers forgets every recent player, on this computer too.
 	// The follow group stays as it is.
 	ClearRecentPlayers() (dto.FollowState, error)
+	// CheckForUpdates starts an update check the player asked for; the
+	// answer arrives with a later state (ADR 0009).
+	CheckForUpdates() (dto.FollowState, error)
+	// UpdateLater hides the update banner until a newer release is found or
+	// the player checks again.
+	UpdateLater() dto.FollowState
+	// SkipUpdate silences the release on offer for good; the next release is
+	// offered again.
+	SkipUpdate() (dto.FollowState, error)
+	// InstallUpdate downloads, verifies and installs the release on offer,
+	// after the player clicked Update. Its steps arrive with later states,
+	// ending in restarting (the window closes and Team Follow starts again
+	// in the new version) or failed (the running version is untouched).
+	InstallUpdate() (dto.FollowState, error)
+	// CancelUpdate stops the update's download.
+	CancelUpdate() dto.FollowState
+	// DismissUpdateNotes hides what the player had to redo after an
+	// update, such as the Linux setcap step.
+	DismissUpdateNotes() dto.FollowState
+	// DismissWhatsNew closes What's new until the next update.
+	DismissWhatsNew() dto.FollowState
+	// Changelog is every released version in the changelog built into the
+	// app, newest first.
+	Changelog() []dto.ChangelogSection
 	// SetNote saves the player's private note about the player with tag;
 	// empty text deletes it. Notes hold at most dto.MaxNoteLength characters
 	// and stay on this computer.

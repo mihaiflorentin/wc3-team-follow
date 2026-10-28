@@ -264,6 +264,7 @@ function render(s) {
   renderRecent(s);
   renderBlacklist(s);
   renderLog(s);
+  renderUpdate(s);
   refreshTip();
 }
 
@@ -1723,6 +1724,17 @@ async function demoOpen(what) {
     case 'blacklist-off':
       selectTab('blacklist');
       break;
+    case 'update-open':
+    case 'update-notes':
+      $('update-notes').open = true;
+      break;
+    // The Changelog in the Updates section, scrolled into view.
+    case 'changelog':
+    case 'changelog-dev':
+      $('changelog').open = true;
+      await wait(100);
+      $('changelog').scrollIntoView({block: 'start'});
+      break;
     // The player menu, opened from the keyboard on a row or chip.
     case 'menu-recent':
     case 'menu-blacklist':
@@ -2177,11 +2189,323 @@ $('maps-change-folder').onclick = async () => {
 $('maps-cancel').onclick = () => $('maps-dialog').close();
 $('maps-choose').onclick = () => browser.selected && choose(browser.selected);
 
+/* Updates ---------------------------------------------------------------
+   The banner and the Updates section (docs/adr/0009). Changelog text comes
+   from GitHub, so it is only ever set with textContent. */
+
+const longDate = iso => {
+  const d = iso ? new Date(iso.length === 10 ? iso + 'T12:00:00' : iso) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString([], {day: 'numeric', month: 'long', year: 'numeric'}) : '';
+};
+
+// featureNames are the bold feature names the changes introduce, newest
+// first, for the one-line summary.
+function featureNames(changes) {
+  const names = [];
+  for (const section of changes) {
+    for (const group of section.groups) {
+      for (const entry of group.entries) {
+        const first = entry.spans[0];
+        if (first?.bold) names.push(first.text.replace(/[.:]\s*$/, ''));
+      }
+    }
+  }
+  return [...new Set(names)];
+}
+
+function teaser(changes) {
+  const names = featureNames(changes);
+  if (!names.length) return '';
+  if (names.length <= 3) return names.join(', ');
+  return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
+}
+
+function changeEntry(entry) {
+  const li = el('li');
+  for (const span of entry.spans) {
+    li.append(span.code ? el('code', '', span.text) : span.bold ? el('strong', '', span.text) : document.createTextNode(span.text));
+  }
+  return li;
+}
+
+// changeSection is one version's entries, folded or open; current marks
+// the version this computer runs.
+function changeSection(section, open, current = false) {
+  const box = el('details', 'change');
+  box.open = open;
+  const summary = el('summary');
+  summary.append(icon('chevron'), el('span', 'change-version', section.version));
+  if (section.date) {
+    const time = el('time', 'change-date', longDate(section.date));
+    time.dateTime = section.date;
+    summary.append(time);
+  }
+  if (current) {
+    box.classList.add('change-current');
+    summary.append(el('span', 'change-badge', 'Your version'));
+  }
+  box.append(summary);
+  for (const group of section.groups) {
+    const block = el('div', 'change-group');
+    block.dataset.group = group.name.toLowerCase();
+    if (group.name) block.append(el('h4', '', group.name));
+    const list = el('ul');
+    for (const entry of group.entries) list.append(changeEntry(entry));
+    block.append(list);
+    box.append(block);
+  }
+  return box;
+}
+
+let changesSignature = '';
+
+function renderChanges(release) {
+  const changes = release.changes ?? [];
+  const signature = JSON.stringify([release.version, changes, release.notes]);
+  if (signature === changesSignature) return;
+  changesSignature = signature;
+  const box = $('update-changes');
+  box.replaceChildren();
+  if (changes.length) {
+    // The newest version is open; older ones fold away.
+    changes.forEach((section, i) => box.append(changeSection(section, i === 0)));
+  } else {
+    box.append(el('p', 'release-notes', release.notes?.trim() || 'This release has no notes.'));
+  }
+  $('update-notes-label').textContent = changes.length > 1 ? `What’s new in ${changes.length} versions` : 'What’s new';
+  $('update-teaser').textContent = teaser(changes);
+}
+
+// The install's steps, after the player clicked Update (docs/adr/0009).
+const installing = ['downloading', 'verifying', 'installing', 'restarting'];
+
+function updateStatus(u) {
+  if (!u.supported) return u.message;
+  if (u.phase === 'checking') return 'Checking GitHub for a newer version…';
+  if (u.release && installing.includes(u.phase)) return `Installing Team Follow ${u.release.version}…`;
+  if (u.release && u.phase === 'failed') return `Team Follow ${u.release.version} couldn’t be installed.`;
+  if (u.release) {
+    const v = `Team Follow ${u.release.version} is available.`;
+    return u.skipped ? `${v} You skipped this version.` : v;
+  }
+  if (u.message) return u.message;
+  if (u.lastChecked) return `Last checked at ${new Date(u.lastChecked).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}.`;
+  return u.checkAutomatically ? 'Not checked yet.' : 'Automatic checks are off.';
+}
+
+function renderUpdate(s) {
+  const u = s.update;
+  if (!u) return;
+  const banner = $('update-banner');
+  const show = Boolean(u.prompt && u.release);
+  banner.hidden = !show;
+  if (show) renderBanner(u);
+  renderAfterUpdate(u);
+
+  $('updates-version').textContent = u.currentVersion ? `Version ${u.currentVersion}` : '';
+  const status = $('updates-status');
+  status.textContent = updateStatus(u);
+  status.dataset.tone = !u.supported ? 'off' : u.phase === 'failed' ? 'problem' : u.release ? 'available' : /couldn’t|couldn't|limiting/.test(u.message) ? 'problem' : '';
+  const check = $('updates-check');
+  check.disabled = !u.supported || u.phase === 'checking' || installing.includes(u.phase);
+  check.querySelector('span').textContent = u.phase === 'checking' ? 'Checking…' : 'Check for updates';
+  // While the banner is hidden (Later or Skip), the offer stays reachable here.
+  $('updates-go').hidden = !u.release || show;
+  if (u.release) $('updates-go').textContent = `Update to ${u.release.version}`;
+  const auto = $('updates-auto');
+  auto.checked = Boolean(u.supported && u.checkAutomatically);
+  auto.disabled = !u.supported;
+  renderWhatsNew(u);
+}
+
+/* What's new: on the first start after an update, the changelog sections
+   since the version the player ran before, from the changelog built into
+   the app. The Updates section reopens it. */
+
+let whatsNewReopened = false;
+let whatsNewSignature = '';
+let runningVersion = '';
+
+function renderWhatsNew(u) {
+  runningVersion = u.supported ? u.currentVersion : '';
+  const w = u.whatsNew;
+  const link = $('whats-new-open');
+  link.hidden = !w;
+  const card = $('whats-new');
+  card.hidden = !w || !(w.show || whatsNewReopened);
+  if (!w) return;
+  link.querySelector('span').textContent = `What’s new in ${w.version}`;
+  $('whats-new-title').textContent = `What’s new in Team Follow ${w.version}`;
+  const versions = w.changes.length;
+  $('whats-new-sub').textContent = w.since
+    ? `You updated from ${w.since}.${versions > 1 ? ` Here’s what changed in ${versions} versions.` : ''}`
+    : 'Here’s what changed in this version.';
+  const signature = JSON.stringify(w.changes);
+  if (signature !== whatsNewSignature) {
+    whatsNewSignature = signature;
+    const box = $('whats-new-changes');
+    box.replaceChildren();
+    // The newest version is open; older ones fold away.
+    w.changes.forEach((section, i) => box.append(changeSection(section, i === 0)));
+  }
+}
+
+$('whats-new-close').onclick = async () => {
+  whatsNewReopened = false;
+  $('whats-new').hidden = true;
+  if (state?.update?.whatsNew?.show) await act(() => bridge.DismissWhatsNew());
+};
+$('whats-new-open').onclick = () => {
+  whatsNewReopened = true;
+  if (state) renderWhatsNew(state.update);
+  const card = $('whats-new');
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  card.scrollIntoView({block: 'start', behavior: still ? 'auto' : 'smooth'});
+  card.focus({preventScroll: true});
+};
+
+/* Changelog: every version built into the app, newest first, read once
+   when the player first opens it. */
+
+let changelogLoaded = false;
+
+async function loadChangelog() {
+  if (changelogLoaded) return;
+  changelogLoaded = true;
+  const list = $('changelog-list');
+  let sections = [];
+  try { sections = (await bridge.Changelog()) ?? []; } catch { sections = []; }
+  list.replaceChildren();
+  if (!sections.length) {
+    list.append(el('p', 'release-notes', 'The changelog isn’t available in this build.'));
+    return;
+  }
+  $('changelog-count').textContent = `${sections.length} versions`;
+  // The running version is open; without it, the newest.
+  const openVersion = sections.some(s => s.version === runningVersion) ? runningVersion : sections[0].version;
+  for (const section of sections) list.append(changeSection(section, section.version === openVersion, section.version === runningVersion));
+}
+
+$('changelog').ontoggle = e => { if (e.target.open) loadChangelog(); };
+
+const megabytes = n => `${(n / 1048576).toFixed(1)} MB`;
+
+function downloadLine(p) {
+  if (!p || !p.done) return 'Starting the download…';
+  return p.total ? `${megabytes(p.done)} of ${megabytes(p.total)}` : `${megabytes(p.done)} downloaded`;
+}
+
+// renderBanner fills the banner for the offer, the install's progress or
+// its failure. Only the step's own buttons show.
+function renderBanner(u) {
+  const rel = u.release;
+  const phase = u.phase;
+  const busy = installing.includes(phase);
+  const failed = phase === 'failed';
+  $('update-banner').dataset.phase = busy || failed ? phase : 'available';
+
+  const titles = {
+    downloading: `Downloading Team Follow ${rel.version}`,
+    verifying: `Checking Team Follow ${rel.version}`,
+    installing: `Installing Team Follow ${rel.version}`,
+    restarting: `Restarting into Team Follow ${rel.version}`,
+    failed: `Team Follow ${rel.version} couldn’t be installed`,
+  };
+  $('update-title').textContent = titles[phase] ?? `Team Follow ${rel.version} is available`;
+  const released = longDate(rel.published);
+  const subs = {
+    downloading: 'Nothing changes until the download is complete and checked.',
+    verifying: 'Comparing the download with its published SHA-256 checksum.',
+    installing: 'Replacing Team Follow. This takes a moment.',
+    restarting: 'Team Follow closes and opens again in the new version.',
+    failed: '',
+  };
+  $('update-sub').textContent = subs[phase] ??
+    `You have ${u.currentVersion}.${released ? ` Released ${released}.` : ''} Update downloads it, checks it and restarts Team Follow.`;
+
+  const go = $('update-go');
+  go.hidden = busy;
+  go.querySelector('span').textContent = failed ? 'Try again' : 'Update';
+  $('update-cancel').hidden = !(phase === 'downloading' || phase === 'verifying');
+  $('update-releases').hidden = !failed;
+  $('update-later').hidden = busy;
+  $('update-skip').hidden = busy || failed;
+
+  $('update-progress').hidden = !busy;
+  if (busy) {
+    const bar = $('update-bar');
+    const p = u.progress;
+    const pct = phase === 'downloading' && p?.total ? Math.min(100, Math.round((p.done / p.total) * 100)) : null;
+    bar.toggleAttribute('data-busy', pct === null);
+    if (pct === null) bar.removeAttribute('aria-valuenow'); else bar.setAttribute('aria-valuenow', String(pct));
+    bar.style.setProperty('--done', `${pct ?? 0}%`);
+    $('update-steps').textContent = phase === 'downloading' ? downloadLine(p) : phase === 'verifying' ? 'Download complete.' : '';
+  }
+
+  $('update-problem').hidden = !failed;
+  $('update-problem-text').textContent = failed ? u.problem : '';
+  const note = !failed && !busy && u.installNote;
+  $('update-install-note').hidden = !note;
+  $('update-install-note-text').textContent = note || '';
+  const warn = !failed && phase !== 'restarting' && u.warning;
+  $('update-warning').hidden = !warn;
+  $('update-warning-text').textContent = warn || '';
+  $('update-notes').hidden = busy || failed;
+  renderChanges(rel);
+}
+
+// renderAfterUpdate shows the step the new version needs: the Linux setcap
+// command with Copy, or the macOS Accessibility permission for Game mode.
+function renderAfterUpdate(u) {
+  const after = u.after;
+  $('update-after').hidden = !after;
+  if (!after) return;
+  $('update-after-title').textContent = after.setcap ? 'Allow Team Follow to read the game again' : 'Game mode may need Accessibility again';
+  $('update-after-sub').textContent = after.setcap
+    ? `Team Follow ${after.version} replaced its program, and Linux doesn’t carry the permission over. Run this once in a terminal, then restart Team Follow.`
+    : `Team Follow ${after.version} is a new app to macOS. If Game mode stops typing, allow Team Follow again in System Settings, Privacy & Security, Accessibility.`;
+  $('update-after-command').hidden = !after.setcap;
+  $('update-after-command-text').textContent = after.setcap || '';
+}
+
+async function openUpdate() {
+  $('error').textContent = '';
+  try { render(await bridge.Update()); } catch (err) { $('error').textContent = String(err?.message ?? err); }
+}
+
+$('update-go').onclick = openUpdate;
+$('updates-go').onclick = openUpdate;
+$('update-cancel').onclick = () => act(async () => bridge.CancelUpdate());
+$('update-releases').onclick = async () => {
+  $('error').textContent = '';
+  try { await bridge.OpenReleasesPage(); } catch (err) { $('error').textContent = String(err?.message ?? err); }
+};
+$('update-after-done').onclick = () => act(async () => bridge.DismissUpdateNotes());
+$('update-after-copy').onclick = async () => {
+  await copy($('update-after-command-text').textContent);
+  const text = $('update-after-copy').querySelector('span');
+  text.textContent = 'Copied';
+  setTimeout(() => { text.textContent = 'Copy'; }, 1500);
+};
+$('update-later').onclick = () => act(() => bridge.UpdateLater());
+$('update-skip').onclick = () => act(() => bridge.SkipUpdate());
+$('updates-check').onclick = () => act(() => bridge.CheckForUpdates());
+$('updates-auto').onchange = e => act(() => bridge.SetCheckUpdates(e.target.checked));
+$('updates-releases').onclick = async () => {
+  $('error').textContent = '';
+  try { await bridge.OpenReleasesPage(); } catch (err) { $('error').textContent = String(err?.message ?? err); }
+};
+
 /* Demo bridge: used only when the page runs outside the app, to preview
    the design in a browser. Pick a scene with ?scene=watching|first|live|
    paused|password|waiting|many|linux|unverified|host-waiting|host-lobby|
    game-mode|keyboard-ask|keyboard-linux|recent|recent-empty|recent-clear|
    recent-select|recent-select-confirm|blacklist|blacklist-empty|blacklist-off|
+   update|update-open|update-warning|update-notes|update-later|update-skipped|
+   update-latest|update-offline|update-dev|update-downloading|update-verifying|
+   update-installing|update-failed|update-translocated|update-linux|update-after-linux|
+   update-after-mac|whats-new|whats-new-older|
+   changelog|changelog-dev|
    menu-recent|menu-blacklist|menu-group|notes|notes-search|menu-note|
    note-add|note-edit|note-long|note-view|tooltip|tooltip-blacklist|
    tooltip-focus;
@@ -2238,6 +2562,60 @@ function demoBridge() {
     ['Deathwing#6666', 60 * 24 * 9],
     ['Mannoroth#1404', 60 * 24 * 33],
   ].map(([tag, mins]) => ({tag, added: at(mins)}));
+  // Updates: a sample changelog spanning three versions.
+  const t = text => ({text});
+  const b = text => ({text, bold: true});
+  const c = text => ({text, code: true});
+  const changes = [
+    {version: '0.9.0', date: '2026-11-12', groups: [
+      {name: 'Added', entries: [
+        {spans: [b('Update check.'), t(' Team Follow tells you when a new version is out and shows what changed before you update.')]},
+        {spans: [b('Player menu.'), t(' Right-click anyone in the People panel to follow, whisper or blacklist them.')]},
+      ]},
+      {name: 'Changed', entries: [{spans: [t('The Activity list keeps the last 14 lines and shows the time of each.')]}]},
+      {name: 'Fixed', entries: [{spans: [t('Auto-host no longer creates a second lobby when the game is slow to answer.')]}]},
+    ]},
+    {version: '0.8.1', date: '2026-11-05', groups: [
+      {name: 'Fixed', entries: [
+        {spans: [t('Auto-join finds lobbies whose name contains '), c('[PRIVATE]'), t('.')]},
+        {spans: [t('The blacklist keeps BattleTags with accents, such as Player#1234.')]},
+      ]},
+    ]},
+    {version: '0.8.0', date: '2026-11-02', groups: [
+      {name: 'Added', entries: [
+        {spans: [b('Blacklist.'), t(' A third tab in the People panel keeps players out of lobbies you host.')]},
+        {spans: [t('Pick several players at once in Recent players with '), b('Select to blacklist'), t('.')]},
+      ]},
+    ]},
+  ];
+  // The changelog built into the app: the sample above, then older ones.
+  const history = [...changes,
+    {version: '0.7.0', date: '2026-10-28', groups: [
+      {name: 'Added', entries: [
+        {spans: [b('Recent players.'), t(' The People panel has Friends and Recent players tabs.')]},
+        {spans: [t('The Friends tab shows how many friends are online.')]},
+      ]},
+    ]},
+    {version: '0.6.1', date: '2026-10-28', groups: [
+      {name: 'Added', entries: [{spans: [t('App icon for the Windows, macOS and Linux builds.')]}]},
+    ]},
+    {version: '0.6.0', date: '2026-10-28', groups: [
+      {name: 'Added', entries: [
+        {spans: [b('Game mode.'), t(' Auto-host can type a command such as '), c('-ar'), t(' in the match chat a few seconds after the match starts.')]},
+        {spans: [b('Join the host’s team'), t(' (Auto-join): moves you into an open slot on the host’s team.')]},
+      ]},
+      {name: 'Changed', entries: [{spans: [t('The window is simpler: the Your team card is gone.')]}]},
+    ]},
+  ];
+  const page = 'https://github.com/mihaiflorentin/wc3-team-follow/releases';
+  const offer = {version: '0.9.0', url: `${page}/tag/v0.9.0`, published: '2026-11-12T10:00:00Z', changes, notes: ''};
+  const updateIdle = {supported: true, phase: 'idle', currentVersion: '0.7.0', checkAutomatically: true, release: null, prompt: false,
+    skipped: false, warning: '', message: '', lastChecked: at(40), releasesUrl: page,
+    whatsNew: {version: '0.7.0', since: '', changes: history.slice(3, 4), show: false}};
+  // After updating from 0.7.0 to 0.9.0.
+  const updated = {...updateIdle, currentVersion: '0.9.0', whatsNew: {version: '0.9.0', since: '0.7.0', changes, show: true}};
+  const updateOffer = {...updateIdle, phase: 'available', release: offer, prompt: true, progress: null, problem: '', installNote: '', after: null};
+  const macNote = 'After updating, macOS may ask you again to allow Team Follow under Accessibility for Game mode.';
   // Notes: sample BattleTags only, keyed lower-case as the Go side keeps them.
   const notes = Object.fromEntries([
     ['Arthas#1123', 'Carries in Legion TD. Calls the waves early and builds Elves.', 60 * 5],
@@ -2246,6 +2624,7 @@ function demoBridge() {
     ['Kaelthas#7710', 'Met in a Legion TD lobby. Plays well, quiet in chat.', 60 * 24 * 20],
   ].map(([tag, text, mins]) => [key(tag), {text, updated: at(mins)}]));
   const s = {
+    update: scene.startsWith('update') ? updateOffer : updateIdle,
     notes,
     recent, lobbyTags: ['Medivh#3310', 'Varimathras#2207'],
     blacklist, autoBan: true, blacklistManualBans: true,
@@ -2310,6 +2689,34 @@ function demoBridge() {
       {time: at(1), message: 'Banned Garrosh#7781 (on your blacklist).'}, {time: at(0), message: 'Added Mannoroth#1404 to your blacklist (you banned them).'}]},
     'blacklist-empty': {blacklist: []},
     'blacklist-off': {autoBan: false},
+    update: {},
+    'update-warning': {enabled: true, paused: true, busy: true, inMatch: true, inMenus: false, status: 'Follow is on but paused during the match.',
+      update: {...updateOffer, warning: 'You’re in a lobby or a match. Updating restarts Team Follow and turns Follow off.'}},
+    'update-notes': {update: {...updateOffer, release: {...offer, version: '0.7.1', changes: [],
+      notes: 'What’s Changed\n• Fix Auto-join after signing in again\n• Faster map search\n\nFull Changelog: v0.7.0...v0.7.1'}}},
+    'update-later': {update: {...updateOffer, prompt: false}},
+    'update-skipped': {update: {...updateOffer, prompt: false, skipped: true}},
+    'update-latest': {update: {...updateIdle, message: 'Team Follow is up to date.'}},
+    'update-offline': {update: {...updateIdle, checkAutomatically: false, lastChecked: null,
+      message: 'Team Follow couldn’t check for updates. Check your internet connection and try again.'}},
+    'update-dev': {update: {...updateIdle, supported: false, currentVersion: 'v0.7.0-3-gabc1234-dirty', lastChecked: null,
+      message: 'Updates are off in development builds. Download releases from GitHub.', whatsNew: null}},
+    'update-downloading': {update: {...updateOffer, phase: 'downloading', progress: {done: 5662310, total: 13212057}}},
+    'update-verifying': {update: {...updateOffer, phase: 'verifying', progress: {done: 13212057, total: 13212057}}},
+    'update-installing': {update: {...updateOffer, phase: 'installing'}},
+    'update-failed': {update: {...updateOffer, phase: 'failed',
+      problem: 'The download didn’t match its published checksum, so nothing was installed. Team Follow 0.7.0 keeps running. You can also download the new version from the releases page.'}},
+    'update-translocated': {update: {...updateOffer, phase: 'failed', installNote: macNote,
+      problem: 'macOS is running Team Follow from a temporary copy, so it can’t update itself. Move Warcraft Team Follow to the Applications folder, open it from there and try again. Team Follow 0.7.0 keeps running. You can also download the new version from the releases page.'}},
+    'update-linux': {update: {...updateOffer, installNote: 'After updating, run the setcap step again so Team Follow can read the game.'}},
+    'update-after-linux': {update: {...updateIdle, currentVersion: '0.9.0', whatsNew: null,
+      after: {version: '0.9.0', setcap: "sudo setcap cap_sys_ptrace=ep '/home/player/Apps/wc3-team-follow/wc3-team-follow'", accessibility: false}}},
+    'update-after-mac': {update: {...updateIdle, currentVersion: '0.9.0', whatsNew: null, after: {version: '0.9.0', setcap: '', accessibility: true}}},
+    'whats-new': {update: updated},
+    'whats-new-older': {update: {...updated, whatsNew: {version: '0.9.0', since: '', changes: changes.slice(0, 1), show: true}}},
+    changelog: {update: updated},
+    'changelog-dev': {update: {...updateIdle, supported: false, currentVersion: 'v0.7.0-3-gabc1234-dirty', lastChecked: null,
+      message: 'Updates are off in development builds. Download releases from GitHub.', whatsNew: null}},
     'menu-recent': {manualTags: ['Arthas#1123', 'Jaina#2214', 'Kelthuzad#6644']},
     'menu-blacklist': {},
     'menu-group': {},
@@ -2327,6 +2734,7 @@ function demoBridge() {
   Object.assign(s, scenes[scene] || {});
   if (s.enabled) watch();
   const clone = () => structuredClone(s);
+  let demoInstall = 0;
   return {
     State: async () => clone(),
     ExecutablePath: async () => '/home/me/Apps/wc3-team-follow',
@@ -2342,6 +2750,40 @@ function demoBridge() {
       return clone();
     },
     SubmitPassword: async () => { s.passwordRequest = null; return clone(); },
+    CheckForUpdates: async () => {
+      await new Promise(r => setTimeout(r, 700));
+      s.update = {...s.update, ...updateOffer, checkAutomatically: s.update.checkAutomatically, skipped: false, lastChecked: new Date().toISOString()};
+      return clone();
+    },
+    UpdateLater: async () => { s.update = {...s.update, prompt: false}; return clone(); },
+    DismissWhatsNew: async () => {
+      if (s.update.whatsNew) s.update = {...s.update, whatsNew: {...s.update.whatsNew, show: false}};
+      return clone();
+    },
+    Changelog: async () => structuredClone(history),
+    SkipUpdate: async () => { s.update = {...s.update, prompt: false, skipped: true}; return clone(); },
+    SetCheckUpdates: async on => { s.update = {...s.update, checkAutomatically: on}; return clone(); },
+    // The demo walks through the install's steps, then restarts; Cancel
+    // stops it.
+    Update: async () => {
+      const total = 13212057;
+      let done = 0;
+      s.update = {...s.update, phase: 'downloading', prompt: true, problem: '', progress: {done, total}};
+      clearInterval(demoInstall);
+      demoInstall = setInterval(() => {
+        done = Math.min(total, done + 1400000);
+        const u = s.update;
+        if (u.phase === 'downloading') s.update = done < total ? {...u, progress: {done, total}} : {...u, phase: 'verifying', progress: {done, total}};
+        else if (u.phase === 'verifying') s.update = {...u, phase: 'installing', progress: null};
+        else if (u.phase === 'installing') s.update = {...u, phase: 'restarting'};
+        else clearInterval(demoInstall);
+        render(clone());
+      }, 450);
+      return clone();
+    },
+    CancelUpdate: async () => { clearInterval(demoInstall); s.update = {...s.update, phase: 'available', progress: null}; return clone(); },
+    DismissUpdateNotes: async () => { s.update = {...s.update, after: null}; return clone(); },
+    OpenReleasesPage: async () => {},
     ClearRecentPlayers: async () => { s.recent = []; s.lobbyTags = []; return clone(); },
     SetNote: async (tag, text) => {
       text = text.trim();

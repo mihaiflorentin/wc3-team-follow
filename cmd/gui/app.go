@@ -5,10 +5,13 @@ package gui
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
@@ -20,7 +23,15 @@ import (
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
+	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
+
+// ErrRestart is returned by Run when the window closed because an update
+// was installed: the caller starts the new version (ADR 0009).
+var ErrRestart = errors.New("restart into the updated version")
+
+// restartDelay lets the player read "Restarting" before the window closes.
+const restartDelay = 800 * time.Millisecond
 
 //go:embed frontend
 var frontend embed.FS
@@ -72,15 +83,24 @@ func Run(deps Deps, opts Options) error {
 	bridge := NewBridge(deps.Companion, opts.AppVersion, opts.Executable, opts.LogDir)
 
 	var (
-		wg     sync.WaitGroup
-		cancel context.CancelFunc
-		stop   func()
+		restart atomic.Bool
+		wg      sync.WaitGroup
+		cancel  context.CancelFunc
+		stop    func()
 	)
 	startup := func(ctx context.Context) {
 		bridge.ctx = ctx
 		// The crash reporter reads this to tell a window that never started.
 		deps.Logger.Info("gui.startup")
-		stop = deps.Companion.Subscribe(func(state dtoState) { wailsruntime.EventsEmit(ctx, StateEvent, state) })
+		stop = deps.Companion.Subscribe(func(state dtoState) {
+			wailsruntime.EventsEmit(ctx, StateEvent, state)
+			if state.Update.Phase == dto.UpdateRestarting && restart.CompareAndSwap(false, true) {
+				// The update is installed: close the window, so main starts
+				// the new version.
+				deps.Logger.Info("gui.restart")
+				time.AfterFunc(restartDelay, func() { wailsruntime.Quit(ctx) })
+			}
+		})
 		var runCtx context.Context
 		runCtx, cancel = context.WithCancel(ctx)
 		wg.Go(func() {
@@ -143,6 +163,9 @@ func Run(deps Deps, opts Options) error {
 	})
 	if err != nil {
 		return fmt.Errorf("run window: %w", err)
+	}
+	if restart.Load() {
+		return ErrRestart
 	}
 	return nil
 }

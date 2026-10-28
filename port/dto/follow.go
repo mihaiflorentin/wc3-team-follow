@@ -30,7 +30,9 @@ type FollowConfig struct {
 	// BlacklistManualBans adds players the player bans by hand, in a lobby
 	// they host, to the blacklist.
 	BlacklistManualBans *bool `json:"blacklistManualBans,omitempty"`
-	Enabled             *bool `json:"enabled,omitempty"`
+	// CheckUpdates switches automatic update checks on or off.
+	CheckUpdates *bool `json:"checkUpdates,omitempty"`
+	Enabled      *bool `json:"enabled,omitempty"`
 	// FromMenus confirms the player is in the game menus, outside a lobby,
 	// match or queue. Enabling Follow requires it.
 	FromMenus bool `json:"fromMenus,omitempty"`
@@ -98,6 +100,9 @@ type FollowState struct {
 	// BlacklistManualBans reports whether players banned by hand join the
 	// blacklist.
 	BlacklistManualBans bool `json:"blacklistManualBans"`
+	// Update is the update check: the running version, a newer release and
+	// the banner (ADR 0009).
+	Update UpdateState `json:"update"`
 }
 
 // MaxBlacklist is how many BattleTags the blacklist holds.
@@ -203,6 +208,17 @@ type Preferences struct {
 	// BlacklistManualBans adds players banned by hand to the blacklist; on
 	// by default.
 	BlacklistManualBans bool `json:"blacklistManualBans"`
+	// CheckUpdates checks GitHub for a newer release at start-up and every
+	// few hours; on by default.
+	CheckUpdates bool `json:"checkUpdates"`
+	// SkippedVersion is the release the player chose to skip, like 0.8.0.
+	SkippedVersion string `json:"skippedVersion,omitempty"`
+	// LastVersion is the last version of Team Follow the player ran, like
+	// 0.8.0, for What's new; "" in settings saved before it existed.
+	LastVersion string `json:"lastVersion,omitempty"`
+	// Stored reports that the preferences were loaded from this computer,
+	// not defaults for a fresh install. It is never saved.
+	Stored bool `json:"-"`
 }
 
 // HostSettings is how Auto-host creates lobbies. Everything else uses the

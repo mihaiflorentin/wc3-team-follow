@@ -17,6 +17,7 @@
   --offline: #6f807d;   /* offline */
   --preview: #8fd3ea;   /* preview mode */
   --danger: #ef6f61;    /* errors, password prompts */
+  --update: #86aef7;    /* a newer Team Follow */
 
   --display: "Bahnschrift", "DIN Alternate", "Avenir Next Condensed", "Roboto Condensed", "DejaVu Sans Condensed", system-ui, sans-serif;
   --ui: system-ui, -apple-system, "Segoe UI", "Cantarell", "Noto Sans", sans-serif;
@@ -1111,6 +1112,233 @@ select {
   .game-mode-row { grid-template-columns: 1fr; gap: 0; }
 }
 
+/* Update banner ---------------------------------------------------------
+   A newer Team Follow: one strip above the beacon, with the beacon's inset
+   bar in the update colour. It never covers anything, so a match goes on. */
+
+.update {
+  margin-bottom: 14px;
+  padding: 14px 18px 12px;
+  border-radius: 12px;
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--update) 13%, transparent), transparent 60%),
+    var(--spruce-raised);
+  box-shadow: inset 4px 0 0 var(--update);
+}
+.update-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.update-mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  flex: none;
+  color: var(--update);
+  background: color-mix(in srgb, var(--update) 18%, transparent);
+}
+.update-mark .icon { width: 20px; height: 20px; }
+.update-text { flex: 1 1 260px; min-width: 0; }
+.update-title { display: block; font: 600 var(--step-1)/1.2 var(--display); font-stretch: 85%; }
+.update-sub { margin: 3px 0 0; color: var(--lichen); font-size: 12.5px; }
+.update-sub:empty { display: none; }
+.update-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.update-actions .primary { background: var(--update); }
+.update-actions .primary .icon { width: 14px; height: 14px; }
+.update-actions .link { margin-left: 6px; }
+
+.update-warning {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--away) 14%, transparent);
+  font-size: 13px;
+}
+.update-warning .icon { color: var(--away); margin-top: 2px; }
+
+/* The in-app update: the banner turns into the install's progress. The
+   inset bar stays the update colour while it runs and turns red when it
+   failed; the old version keeps running either way. */
+.update[data-phase="failed"] {
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--danger) 12%, transparent), transparent 60%),
+    var(--spruce-raised);
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+.update[data-phase="failed"] .update-mark { color: var(--danger); background: color-mix(in srgb, var(--danger) 18%, transparent); }
+.update-progress { margin-top: 12px; }
+.update-track {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--spruce-deep);
+}
+.update-track > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--done, 0%);
+  border-radius: inherit;
+  background: var(--update);
+  transition: width .2s linear;
+}
+/* No size to measure (checking, installing, restarting): a sweep. */
+.update-track[data-busy] > span { width: 32%; animation: update-sweep 1.3s ease-in-out infinite; }
+@keyframes update-sweep { from { left: -32%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) {
+  .update-track[data-busy] > span { animation: none; width: 100%; opacity: .55; }
+}
+.update-steps { margin: 6px 0 0; color: var(--lichen); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.update-problem, .update-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+.update-problem { padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.update-problem .icon { color: var(--danger); margin-top: 2px; flex: none; }
+.update-note { color: var(--lichen); }
+.update-note .icon { width: 14px; height: 14px; margin-top: 3px; flex: none; color: var(--update); }
+
+/* After an update: the step the new version needs (Linux setcap, macOS
+   Accessibility), until the player says Done. */
+.update-after .update-mark { color: var(--open); background: color-mix(in srgb, var(--open) 16%, transparent); }
+.update-after { box-shadow: inset 4px 0 0 var(--open); background: var(--spruce-raised); }
+.update-after .command { margin-top: 12px; }
+
+.update-notes { margin-top: 10px; }
+.update-notes > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 0;
+  color: var(--bone);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.update-notes > summary::-webkit-details-marker { display: none; }
+.update-notes .chev, .change .icon { width: 13px; height: 13px; align-self: center; color: var(--lichen); transition: transform .15s; }
+.update-notes[open] > summary .chev, .change[open] > summary .icon { transform: rotate(90deg); }
+.update-teaser { color: var(--lichen); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.update-notes[open] .update-teaser { display: none; }
+
+/* The changelog: plain text from GitHub, grouped by version. Long ones
+   scroll inside the banner instead of pushing the window down. */
+.changes {
+  max-height: min(320px, 45vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-top: 8px;
+  padding: 4px 14px 8px;
+  border-radius: 10px;
+  background: var(--spruce-deep);
+  user-select: text;
+}
+.changes:focus-visible { outline-offset: -2px; }
+.change { padding: 6px 0; }
+.change + .change { border-top: 1px solid color-mix(in srgb, var(--spruce-line) 60%, transparent); }
+.change > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.change > summary::-webkit-details-marker { display: none; }
+.change-version { font: 600 var(--step-1)/1.2 var(--display); font-stretch: 85%; font-variant-numeric: tabular-nums; }
+.change-date { color: var(--lichen); font-size: 12px; }
+.change-group { margin: 6px 0 4px 23px; }
+.change-group h4 { margin: 8px 0 4px; color: var(--lichen); font-size: 12.5px; font-weight: 600; }
+.change-group ul { margin: 0; padding: 0; list-style: none; max-width: 72ch; }
+.change-group li { position: relative; padding: 3px 0 3px 16px; font-size: 13px; line-height: 1.5; }
+.change-group li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: .8em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--spruce-line);
+}
+.change-group li strong { color: var(--bone); font-weight: 650; }
+.change-group li code, .release-notes code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--spruce-raised);
+  font: 12px ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace;
+}
+.release-notes { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; color: var(--bone); }
+
+/* What's new: the update banner's strip after an update, with the changes
+   in view rather than folded, and one way out. The running version in the
+   changelog carries a badge in the same colour. */
+
+.whats-new:focus { outline: none; }
+.whats-new:focus-visible { outline: 2px solid var(--update); outline-offset: 2px; }
+.whats-new .changes { margin-top: 12px; }
+.change-badge {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: var(--update);
+  background: color-mix(in srgb, var(--update) 16%, transparent);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.change-current > summary .change-version { color: var(--update); }
+
+/* Updates section ------------------------------------------------------- */
+
+.updates h2 .icon { color: var(--update); }
+.updates-status { margin: 0 0 10px; font-size: 13px; color: var(--lichen); }
+.updates-status[data-tone="available"] { color: var(--update); font-weight: 600; }
+.updates-status[data-tone="problem"] { color: var(--danger); }
+.updates-status:empty { display: none; }
+.updates .row { margin-bottom: 10px; }
+.updates-releases { margin-left: auto; }
+#updates-go { background: var(--update); }
+.updates-auto { background: var(--spruce); }
+.updates-auto:has(input:disabled) { cursor: not-allowed; opacity: .6; }
+.updates-auto input:disabled { cursor: not-allowed; }
+.whats-new-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; }
+.whats-new-link .icon { width: 14px; height: 14px; color: var(--update); }
+.changelog { margin-top: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--spruce-line) 60%, transparent); }
+.changelog > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.changelog > summary::-webkit-details-marker { display: none; }
+.changelog > summary .count { margin-left: auto; font-weight: 400; }
+.changelog .chev { width: 13px; height: 13px; align-self: center; color: var(--lichen); transition: transform .15s; }
+.changelog[open] > summary .chev { transform: rotate(90deg); }
+.changelog .changes { max-height: min(420px, 55vh); padding: 4px 12px 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .changelog .chev, .update-notes .chev, .change .icon { transition: none; }
+}
+
+@media (max-width: 560px) {
+  .update { padding: 12px 14px; }
+  .update-mark { display: none; }
+  .update-actions { width: 100%; }
+  .update-actions .link { margin-left: auto; }
+  .change-group { margin-left: 0; }
+}
 /* Player menu ---------------------------------------------------------
    One raised sheet for every player row and group chip. The head names the
    player the way the lists do (avatar, name, #number); the items follow the

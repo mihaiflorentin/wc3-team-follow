@@ -44,6 +44,8 @@ func (s *Store) Save(prefs dto.Preferences) error {
 	s.Saves++
 	s.Saved = prefs
 	s.Saved.Tags = slices.Clone(prefs.Tags)
+	// Saved settings load as stored, like the real store's file.
+	s.Saved.Stored = true
 	if prefs.Host != nil {
 		host := *prefs.Host
 		s.Saved.Host = &host

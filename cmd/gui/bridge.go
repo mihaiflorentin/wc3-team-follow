@@ -28,12 +28,16 @@ type Bridge struct {
 	logDir     string
 	// reveal opens a folder in the system file manager.
 	reveal func(dir string) error
+	// openURL opens a web page in the browser.
+	openURL func(link string) error
 }
 
 // NewBridge returns the bridge for companion. logDir is the log folder, or
 // "" when file logging is off.
 func NewBridge(companion contract.Companion, appVersion, executable, logDir string) *Bridge {
-	return &Bridge{companion: companion, appVersion: appVersion, executable: executable, logDir: logDir, reveal: revealFolder}
+	b := &Bridge{companion: companion, appVersion: appVersion, executable: executable, logDir: logDir, reveal: revealFolder}
+	b.openURL = b.browserOpener
+	return b
 }
 
 // State returns the current state.
