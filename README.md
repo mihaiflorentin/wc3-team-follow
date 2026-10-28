@@ -8,7 +8,7 @@ It runs on **Windows (x64)**, **macOS (Apple silicon)** and **Linux (x64, with t
 
 ![Team Follow with Auto-join on, following a group of five friends: one has a lobby open, and the friends list shows who is in Warcraft III, online, away or offline](docs/screenshots/following.png)
 
-Screenshots use sample friends and maps. Colours mean the same thing everywhere: **amber** is a lobby open (and Auto-join or Auto-host on), **violet** is in Warcraft III, **green** is online, **orange** is away, **grey** is offline.
+Screenshots use sample friends and maps. Colours mean the same thing everywhere: **amber** is a lobby open (and Auto-join or Auto-host on), **violet** is in Warcraft III, **green** is online, **orange** is away, **grey** is offline, and an empty ring is a player who isn't your Battle.net friend, whose status the game doesn't share.
 
 ## Download
 
@@ -34,7 +34,11 @@ Start Warcraft III through Battle.net and Team Follow connects by itself. Until 
 
 ### Choose your friends and watch them
 
-The **Friends** list is your Battle.net friends list, with live status. Search it, show offline friends if you need them, and tick up to 12 people you play with. Your choice is saved on this computer.
+The **Friends** tab is your Battle.net friends list, with live status; its badge counts who is online. Search it, show offline friends if you need them, and tick up to 12 people you play with. Your choice is saved on this computer.
+
+The **Recent players** tab lists everyone who was in a lobby or match with you (lobbies you host, join with Auto-join or open by hand; observers included, never computers or you), most recent first, up to 200. Each row shows the full BattleTag, the last map you played together and when you last saw them, which keeps updating while you're still in the lobby or match with them. Status shows "In your lobby", a friend's Battle.net status, or "Not a friend" when the game doesn't say. Tick someone there to add them to the same group as the Friends tab: Auto-host counts them for Same team and Start when full, while Auto-join can only follow Battle.net friends into lobbies. **Clear all** empties the list after you confirm and leaves your group alone. The list is kept on this computer only and never sent anywhere.
+
+![The Recent players tab: two players in your lobby, then earlier players with the map and when you last saw them](docs/screenshots/recent-players.png)
 
 Team Follow watches them straight away: their portraits show who is online, away or in Warcraft III, and Activity notes when one of them opens a lobby. Watching never joins anything.
 

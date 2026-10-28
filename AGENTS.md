@@ -13,15 +13,15 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `container/` | `ServiceContainer`: lazy `(T, error)` accessors and `Close`. Used only by the wiring layer. |
 | `config/` | `config.toml` (embedded into the binary) and `NewConfig`. |
 | `logging/` | `Setup` (console + rotated log file + crash file), `New` (console only) and the log handlers. Cross-cutting: every layer may receive a `*slog.Logger`. |
-| `domain/follow/` | The follow state machine (port of 0.4's `team-follow.cjs`) and Auto-host (`host.go`). Pure. |
-| `domain/companion/` | `contract.Companion`: discovery loop, game session, saving friends, publishing state. |
+| `domain/follow/` | The follow state machine (port of 0.4's `team-follow.cjs`), Auto-host (`host.go`) and the recent players recorder (`recent.go`). Pure. |
+| `domain/companion/` | `contract.Companion`: discovery loop, game session, saving friends and recent players, publishing state. |
 | `port/contract/` | Interfaces (ports) that domain and adapters meet at. Interfaces only, no structs. |
 | `port/dto/` | Plain data shapes, `package dto`, no subfolders. |
 | `infrastructure/discovery/` | Finds the game, menu port, session and version, and the Maps folders (`MapsLocator`, with Wine path translation). `Processes` closes the game's own processes when the player asks (`contract.GameProcesses`). `platform_<os>.go` per OS; portable parsing beside it. |
 | `infrastructure/maps/` | Lists and searches maps in a Maps folder (`MapLibrary`). |
 | `infrastructure/gamesocket/` | Loopback websocket to the game with the command allowlist. |
 | `infrastructure/keyboard/` | Types one line in the match chat with keystrokes (`contract.GameKeyboard`, ADR 0007): the sequence and its checks in `keyboard.go`, `SendInput` in `platform_windows.go`, `CGEventPost` in `platform_darwin.go`, not supported elsewhere yet. |
-| `infrastructure/settings/` | `friends.json` in the per-user data folder. |
+| `infrastructure/settings/` | `friends.json` and `recent-players.json` (`RecentPlayers`) in the per-user data folder. |
 | `mock/` | Hand-written test doubles, one package per contract group. |
 | `packaging/darwin/` | `Info.plist` and entitlements for the macOS app bundle. |
 | `docs/` | Living documentation; architectural decisions go in `docs/adr/`. |
@@ -44,6 +44,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 - Keystrokes (ADR 0007) go only through `contract.GameKeyboard` (`infrastructure/keyboard`), only to the discovered game process and only while it is the window in front, checked before every key; the moment it isn't, or the context ends, typing stops and the error says the chat box may hold part of the line. Never bring the game forward, activate a window or steal focus. Only Enter and printable ASCII characters (no hotkeys, orders or Esc), one line of at most 100 characters, refused whole rather than cut short. Only Auto-host's own Game mode command, as host, after the player entered one and switched it on (off by default); the `type` command is the one manual exception. Keystrokes write no memory and inject no code. Linux isn't supported yet; never add uinput or portal input, which can't check the target.
 - Nothing starts a match unless the host switched on Start when full; Auto-host otherwise only creates the lobby.
 - Follow always starts off; nothing re-enables it automatically after a disconnect.
+- Recent players (`follow.Recent`) only read the lobby events the game already sends; recording sends nothing. The list (BattleTags, map, last seen) stays in `recent-players.json` on this computer, never in `Diagnostics` or the log (only `recent.saved` with a count).
 
 ## Dependency rules
 
@@ -55,7 +56,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 
 - `main.go` calls `config.NewConfig()`, `logging.New(cfg.Logging, os.Stdout)`, `container.New(cfg, logger)` and `cli.Execute(c)`, then `c.Close()`. Nothing else builds a container.
 - Each command receives the container through its constructor and resolves what it needs before doing any work. The root command resolves `gui.Deps` in `guiDeps` and builds `gui.Options` from `[window]`. `discover` takes a resolve function, so tests run it with mocks.
-- Every collaborator arrives as a constructor parameter and is stored in a field: `companion.New(companion.Ports{Discovery, Dialer, Prefs, Maps, Library, Processes, Keyboard}, logger, opts)`. No globals, no `init()`, no config lookups inside domain code or the window.
+- Every collaborator arrives as a constructor parameter and is stored in a field: `companion.New(companion.Ports{Discovery, Dialer, Prefs, Maps, Library, Processes, Keyboard, Recent}, logger, opts)`. No globals, no `init()`, no config lookups inside domain code or the window.
 - Container accessors are lazy singletons returning `(T, error)`. A missing config section is an error, and a failed build is retried on the next call. Adapters that hold connections register `s.onClose`.
 
 To add a dependency (an outbound adapter or a domain service):

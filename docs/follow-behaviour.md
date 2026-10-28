@@ -21,6 +21,18 @@ Commands the app may send, enforced by `infrastructure/gamesocket`:
 
 Every `FriendsFriendData` snapshot replaces the roster: the whole Battle.net friends list, shown in the window's picker with each friend's status (`Lobby open`, `In Warcraft III`, `Online in Battle.net`, `Away`, `Offline`). The roster is display-only. It survives starting Follow (which empties the presence the engine acts on) and is cleared on disconnect. Ticking a friend adds their BattleTag to the follow group (`manualTags`, up to 12).
 
+## Recent players
+
+`domain/follow/recent.go` (`follow.Recent`), driven by the companion with the events it already receives; it only reads them and never sends anything to the game.
+
+- **Who:** each `GameLobbySetup` while the player is in a lobby (hosted with Auto-host, joined with Auto-join, or created or joined by hand) lists the other humans present: slots with `slotType` 0 (human) and `slotStatus` 2 (occupied), observers included, and never the player's own slot (`isSelf`) or a slot with the player's own name. Computers, open and closed slots, and names that aren't BattleTags (`name` is the full BattleTag on Battle.net, checked live) are left out.
+- **Map:** `mapData.mapName` without the game's colour codes, else the base name of `mapData.mapPath` without its folder and extension, else `lobbyName`.
+- **Last seen:** each lobby update stamps everyone in it with the companion's clock, and the companion's once-a-second tick refreshes them, so last seen is the last moment the two were together. Lobby updates stop once the match loads, so the last lobby's players stay present through the match. A player who leaves the lobby drops out of the next update and is no longer refreshed. It ends (one last stamp) on a score screen, a menu screen, `MultiplayerGameLeave`, `ExitedGame`, `LoggedOut`, a disconnect, Close all Warcraft III, or the app stopping.
+- **List:** one entry per BattleTag (matched case-insensitively), newest first, at most `dto.MaxRecentPlayers` (200). `FollowState.recent` carries it and `FollowState.lobbyTags` names who is present now; the window works out the status from those and the friends roster.
+- **Saving:** `contract.RecentPlayers` (`recent-players.json`, written atomically next to `friends.json`). The companion saves at most every 5 seconds after a player or map was added or changed, at most once a minute when only last-seen times moved (each second in a match), and on shutdown. A failed save is logged and tried again. A missing or unreadable file loads as an empty list. Only `recent.saved` with a count is logged; no names.
+- **Clear all** (`Companion.ClearRecentPlayers`) removes the file and the list, including who is present now (the next lobby update records them again). It doesn't touch the follow group.
+- **Follow group:** ticking a recent player adds their BattleTag to `manualTags`, like Add by BattleTag; the 12-member limit is unchanged. Auto-join refuses to start with a group member who isn't a Battle.net friend (see Starting); Auto-host counts them for Same team and Start when full.
+
 ## Watching
 
 Whenever the game is connected, the engine watches the group: the team's other members when *Follow my team* is on, plus the chosen friends. When one of them is seen with a joinable lobby (see Joining), it notes "Thrall#1820 opened a lobby: Legion TD." once per lobby (keyed like attempts), from the roster, without starting anything and without sending any command. This is what the window shows while Auto-join is off.

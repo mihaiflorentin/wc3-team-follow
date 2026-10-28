@@ -213,6 +213,7 @@ function render(s) {
   $('ask-password').checked = Boolean(s.askPassword);
   $('join-host-team').checked = Boolean(s.joinHostTeam);
   renderFriends(s);
+  renderRecent(s);
   renderLog(s);
 }
 
@@ -365,11 +366,16 @@ function renderFriends(s) {
     if (focused) list.querySelector(`input[data-tag="${CSS.escape(focused)}"]`)?.focus();
   }
 
+  // How many friends are online sits on the Friends tab; the header counts
+  // the follow group, which both tabs share.
   const online = s.roster.filter(f => f.online).length;
+  const badge = $('online-count');
+  badge.textContent = s.roster.length ? String(online) : '';
+  badge.title = s.roster.length ? `${online} of ${s.roster.length} online` : '';
+  if (s.roster.length) $('tab-friends').setAttribute('aria-label', `Friends, ${online} online`);
+  else $('tab-friends').removeAttribute('aria-label');
   const count = $('friend-count');
-  count.textContent = s.manualTags.length
-    ? `${s.manualTags.length} of ${MAX_TAGS} chosen`
-    : s.roster.length ? `${online} of ${s.roster.length} online` : '';
+  count.textContent = s.manualTags.length ? `${s.manualTags.length} of ${MAX_TAGS} chosen` : '';
   count.dataset.full = String(full);
   $('friend-tag').disabled = full;
   $('friend-form').querySelector('button').disabled = full;
@@ -378,6 +384,177 @@ function renderFriends(s) {
     || (full ? `You can follow up to ${MAX_TAGS} friends. Untick someone to choose another.` : 'Tick everyone you play with. Team Follow joins whoever opens a lobby first.');
   note.classList.toggle('error-note', Boolean(s.preferencesError));
 }
+
+/* People tabs ---------------------------------------------------------- */
+
+const TAB_KEY = 'wtf.peopleTab';
+let tab = 'friends';
+try { if (localStorage.getItem(TAB_KEY) === 'recent') tab = 'recent'; } catch { /* storage blocked */ }
+
+const tabs = [...document.querySelectorAll('.tabs [role="tab"]')];
+
+function selectTab(name, {focus = false} = {}) {
+  tab = name;
+  try { localStorage.setItem(TAB_KEY, name); } catch { /* storage blocked */ }
+  for (const t of tabs) {
+    const on = t.dataset.tab === name;
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+    if (on && focus) t.focus();
+  }
+  $('panel-friends').hidden = name !== 'friends';
+  $('panel-recent').hidden = name !== 'recent';
+  $('show-offline-switch').hidden = name !== 'friends';
+  const placeholder = name === 'recent' ? 'Search recent players' : 'Search your Battle.net friends';
+  $('friend-search').placeholder = placeholder;
+  $('search-label').textContent = placeholder;
+  closeClearConfirm();
+  if (state) render(state);
+}
+
+for (const t of tabs) {
+  t.onclick = () => selectTab(t.dataset.tab);
+  // Arrow keys, Home and End move between tabs, as a tab list does.
+  t.onkeydown = event => {
+    const i = tabs.indexOf(t);
+    const next = {ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1}[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    selectTab(tabs[(next + tabs.length) % tabs.length].dataset.tab, {focus: true});
+  };
+}
+
+/* Recent players ------------------------------------------------------- */
+
+// lastSeen says when a recent player was last in a lobby or match with
+// you: "Now", "2 min ago", "3 hours ago", "Yesterday" or a date.
+function lastSeen(iso, here, now = new Date()) {
+  if (here) return 'Now';
+  const then = new Date(iso);
+  const mins = Math.floor((now - then) / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (then >= midnight) return plural(Math.floor(mins / 60), 'hour ago', 'hours ago');
+  if (then >= new Date(midnight - 86400000)) return 'Yesterday';
+  const opts = {day: 'numeric', month: 'short'};
+  if (then.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
+  return then.toLocaleDateString([], opts);
+}
+
+// recentStatus works out a recent player's status: in your lobby, their
+// Battle.net status when they're a friend, or that the game doesn't say.
+function recentStatus(s, tag) {
+  if (s.lobbyTags.some(t => key(t) === key(tag))) return {status: 'lobby', label: 'In your lobby', lobby: ''};
+  const f = s.roster.find(r => key(r.battleTag) === key(tag));
+  if (f) return {status: statusOf(f), label: f.open ? 'Lobby open' : f.label, lobby: f.open ? f.lobby : ''};
+  if (s.connected && s.roster.length) return {status: 'unknown', label: 'Not a friend', lobby: ''};
+  return {status: 'unknown', label: '', lobby: ''};
+}
+
+function recentRow(s, p, full) {
+  const chosen = s.manualTags.some(t => key(t) === key(p.tag));
+  const st = recentStatus(s, p.tag);
+  const li = el('li');
+  const label = el('label', 'pick');
+  label.dataset.status = st.status;
+  label.dataset.selected = String(chosen);
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = chosen;
+  box.dataset.tag = p.tag;
+  box.disabled = !chosen && full;
+  box.setAttribute('aria-label', `Follow ${p.tag}`);
+  label.dataset.disabled = String(box.disabled);
+  box.onchange = () => {
+    const tags = box.checked
+      ? [...state.manualTags, p.tag]
+      : state.manualTags.filter(t => key(t) !== key(p.tag));
+    changeGroup({tags});
+  };
+  const name = el('span', 'name', p.tag);
+  name.title = p.tag;
+  const meta = el('span', 'meta');
+  const map = el('span', 'map');
+  map.append(icon('map'), document.createTextNode(p.map || 'Unknown map'));
+  map.title = p.map;
+  const seen = el('time', '', lastSeen(p.lastSeen, st.status === 'lobby'));
+  seen.dateTime = p.lastSeen;
+  seen.title = new Date(p.lastSeen).toLocaleString();
+  meta.append(map, seen);
+  label.append(box, avatar(p.tag, {badge: st.status === 'open'}), name, presence(st.label, st.lobby), meta);
+  li.append(label);
+  return li;
+}
+
+let recentSignature = '';
+
+function renderRecent(s) {
+  const list = $('recent');
+  const recent = s.recent ?? [];
+  const query = $('friend-search').value.trim().toLowerCase();
+  const full = s.manualTags.length >= MAX_TAGS;
+  const visible = query ? recent.filter(p => key(p.tag).includes(query) || p.map.toLowerCase().includes(query)) : recent;
+  $('recent-count').textContent = recent.length ? String(recent.length) : '';
+
+  if (tab === 'recent') {
+    // Last seen is rounded to minutes, so this changes at most once a minute.
+    const signature = JSON.stringify([visible.map(p => [p.tag, p.map, lastSeen(p.lastSeen, false), recentStatus(s, p.tag)]), s.manualTags, full, query]);
+    if (signature !== recentSignature) {
+      recentSignature = signature;
+      const scroll = list.scrollTop;
+      const focused = document.activeElement?.dataset?.tag;
+      list.replaceChildren();
+      for (const p of visible) list.append(recentRow(s, p, full));
+      if (!recent.length) list.append(el('li', 'empty', 'Players appear here after you’ve been in a lobby with them.'));
+      else if (!visible.length) list.append(el('li', 'empty', `No recent player matches “${query}”.`));
+      list.scrollTop = scroll;
+      if (focused) list.querySelector(`input[data-tag="${CSS.escape(focused)}"]`)?.focus();
+    }
+  }
+
+  // Ticking someone who isn't a friend: say what that does.
+  const strangers = s.connected && s.roster.length
+    ? s.manualTags.filter(t => recent.some(p => key(p.tag) === key(t)) && !s.roster.some(f => key(f.battleTag) === key(t)))
+    : [];
+  const note = $('recent-note');
+  note.textContent = s.preferencesError
+    || (strangers.length
+      ? `Auto-join follows only Battle.net friends into lobbies. Auto-host still counts ${strangers.length === 1 ? strangers[0] : 'these players'} for Same team and Start when full.`
+      : full ? `You can follow up to ${MAX_TAGS} players. Untick someone to choose another.`
+        : 'Everyone who was in a lobby or match with you. Kept on this computer only.');
+  note.classList.toggle('error-note', Boolean(s.preferencesError));
+  $('recent-clear').hidden = !recent.length || !$('recent-confirm').hidden;
+  if (!recent.length) closeClearConfirm();
+}
+
+function openClearConfirm() {
+  const n = state?.recent?.length ?? 0;
+  if (!n) return;
+  $('recent-confirm-text').textContent = `Clear all ${plural(n, 'recent player', 'recent players')}?`;
+  $('recent-clear').hidden = true;
+  $('recent-confirm').hidden = false;
+  $('recent-clear-no').focus();
+}
+
+function closeClearConfirm({focus = false} = {}) {
+  if ($('recent-confirm').hidden) return;
+  $('recent-confirm').hidden = true;
+  $('recent-clear').hidden = !(state?.recent?.length);
+  if (focus) ($('recent-clear').hidden ? $('tab-recent') : $('recent-clear')).focus();
+}
+
+$('recent-clear').onclick = openClearConfirm;
+$('recent-clear-no').onclick = () => closeClearConfirm({focus: true});
+$('recent-confirm').onkeydown = event => {
+  if (event.key === 'Escape') closeClearConfirm({focus: true});
+};
+$('recent-clear-yes').onclick = async () => {
+  if (await act(() => bridge.ClearRecentPlayers())) {
+    closeClearConfirm();
+    $('tab-recent').focus();
+  }
+};
 
 // Activity icons, by what the line is about.
 const logKinds = [
@@ -551,17 +728,22 @@ $('open-logs').onclick = async () => {
 };
 
 async function boot() {
+  selectTab(tab);
   try { exePath = await bridge.ExecutablePath(); } catch { exePath = ''; }
   window.runtime?.EventsOn?.('state', render);
   try { render(await bridge.State()); } catch (err) { $('status').textContent = String(err); }
   // The Go side pushes every change; this poll only covers a missed event.
   setInterval(async () => { try { render(await bridge.State()); } catch { /* window closing */ } }, 5000);
-  if (!window.go) demoOpen(new URLSearchParams(location.search).get('open'));
+  if (!window.go) {
+    const params = new URLSearchParams(location.search);
+    demoOpen(params.get('open') ?? params.get('scene'));
+  }
 }
 boot();
 
 // demoOpen opens a dialog in the demo page, for screenshots:
-// ?open=host-setup|maps|maps-search|report|close-games.
+// ?open=host-setup|maps|maps-search|report|close-games. The recent scenes
+// open the Recent players tab.
 async function demoOpen(what) {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   switch (what) {
@@ -590,6 +772,15 @@ async function demoOpen(what) {
       break;
     case 'close-games':
       $('close-games').click();
+      break;
+    case 'recent':
+    case 'recent-empty':
+      selectTab('recent');
+      break;
+    case 'recent-clear':
+      selectTab('recent');
+      await wait(50);
+      openClearConfirm();
       break;
   }
 }
@@ -973,8 +1164,8 @@ $('maps-choose').onclick = () => browser.selected && choose(browser.selected);
 /* Demo bridge: used only when the page runs outside the app, to preview
    the design in a browser. Pick a scene with ?scene=watching|first|live|
    paused|password|waiting|many|linux|unverified|host-waiting|host-lobby|
-   game-mode|keyboard-ask|keyboard-linux; add &open=host-setup to see the
-   Game mode group. */
+   game-mode|keyboard-ask|keyboard-linux|recent|recent-empty|recent-clear;
+   add &open=host-setup to see the Game mode group. */
 function demoBridge() {
   const scene = new URLSearchParams(location.search).get('scene') || 'watching';
   const now = Date.now();
@@ -1004,7 +1195,24 @@ function demoBridge() {
     'FrozenThrone': [['(2)Echo Isles', false, 1], ['(4)Turtle Rock', false, 1]],
   };
   const entries = dir => (tree[dir] ?? []).map(([name, isFolder, d]) => ({name, isFolder, dir, modified: day(d), path: `${mapsRoot}/${dir ? dir + '/' : ''}${name}${isFolder ? '' : '.w3x'}`}));
+  // Recent players: sample BattleTags only. Medivh and Varimathras are in
+  // your lobby now; the rest are friends from the roster or strangers.
+  const recent = [
+    ['Medivh#3310', 'Castle Fight', 0],
+    ['Varimathras#2207', 'Castle Fight', 0],
+    ['Arthas#1123', 'Castle Fight', 3],
+    ['Kelthuzad#6644', 'Legion TD x20', 26],
+    ['Jaina#2214', 'Legion TD x20', 26],
+    ['Anubarak#5102', 'Footmen Frenzy 6.2', 190],
+    ['Rexxar#4471', 'Island Defense 4.1', 60 * 26],
+    ['Garrosh#7781', 'Island Defense 4.1', 60 * 26],
+    ['Alleria#4415', 'Green Circle TD 2020', 60 * 24 * 3],
+    ['Zuljin#3087', 'Legion TD Mega 4.2', 60 * 24 * 12],
+    ['Vereesa#9920', 'Element TD 5.5', 60 * 24 * 40],
+    ['Rokhan#1500', '(4)Twisted Meadows', 60 * 24 * 41],
+  ].map(([tag, map, mins]) => ({tag, map, lastSeen: at(mins)}));
   const s = {
+    recent, lobbyTags: ['Medivh#3310', 'Varimathras#2207'],
     connected: true, version: '3.0.1.24371', verifiedBuild: true, enabled: false, diagnostic: false,
     manualTags: ['Arthas#1123', 'Jaina#2214', 'Thrall#1820', 'Uther#5521'], includeTeam: true, joinHostTeam: true,
     status: '', screen: 'CUSTOM_LOBBIES', busy: false, queued: false, inMatch: false, paused: false, inMenus: true,
@@ -1057,6 +1265,9 @@ function demoBridge() {
     many: {connected: false, gameCount: 2, team: [], roster: [], connectionHint: 'Warcraft III is running 2 times. Close the ones you aren’t playing, or use Close all Warcraft III; a copy you restarted may still run in the background. Team Follow connects by itself once one is left.'},
     linux: {connected: false, team: [], roster: [], connectionHint: 'This computer blocked reading Warcraft III’s menu session. To allow it, run: sudo setcap cap_sys_ptrace=ep <path to wc3-team-follow>'},
     unverified: {version: '3.0.2.25010', verifiedBuild: false},
+    recent: {manualTags: ['Arthas#1123', 'Jaina#2214', 'Kelthuzad#6644'], busy: true, inMenus: false, screen: 'GAME_LOBBY'},
+    'recent-empty': {recent: [], lobbyTags: []},
+    'recent-clear': {},
   };
   Object.assign(s, scenes[scene] || {});
   if (s.enabled) watch();
@@ -1076,6 +1287,7 @@ function demoBridge() {
       return clone();
     },
     SubmitPassword: async () => { s.passwordRequest = null; return clone(); },
+    ClearRecentPlayers: async () => { s.recent = []; s.lobbyTags = []; return clone(); },
     RequestKeyboardPermission: async () => { s.keyboard = {supported: true, permitted: true, reason: ''}; return clone(); },
     ConfigureHost: async cfg => {
       if (cfg.settings) s.host.settings = cfg.settings;

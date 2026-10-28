@@ -140,31 +140,51 @@
   <main class="columns">
     <section class="panel friends-panel" aria-labelledby="friends-title">
       <div class="panel-head">
-        <h2 id="friends-title"><svg class="icon"><use href="#i-users"/></svg>Friends</h2>
+        <h2 id="friends-title"><svg class="icon"><use href="#i-users"/></svg>People</h2>
         <span id="friend-count" class="count"></span>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Who to show">
+        <button type="button" role="tab" id="tab-friends" data-tab="friends" aria-controls="panel-friends" aria-selected="true">Friends <span id="online-count" class="tab-count"></span></button>
+        <button type="button" role="tab" id="tab-recent" data-tab="recent" aria-controls="panel-recent" aria-selected="false" tabindex="-1">Recent players <span id="recent-count" class="tab-count"></span></button>
       </div>
       <div class="picker-tools">
         <label class="search">
           <svg class="icon"><use href="#i-search"/></svg>
-          <span class="visually-hidden">Search your friends</span>
+          <span id="search-label" class="visually-hidden">Search your friends</span>
           <input id="friend-search" type="search" placeholder="Search your Battle.net friends" autocomplete="off" spellcheck="false">
         </label>
-        <label class="switch">
+        <label class="switch" id="show-offline-switch">
           <input type="checkbox" id="show-offline">
           <span>Show offline</span>
         </label>
       </div>
-      <ul id="friends" class="people picker" aria-label="Battle.net friends"></ul>
-      <p id="friend-note" class="fine">Tick everyone you play with. Team Follow joins whoever opens a lobby first.</p>
-      <details class="manual">
-        <summary><svg class="icon"><use href="#i-plus"/></svg>Add by BattleTag</summary>
-        <form id="friend-form" class="add">
-          <label for="friend-tag" class="visually-hidden">Friend's BattleTag</label>
-          <input id="friend-tag" placeholder="BattleTag, like Thrall#1234" maxlength="46" autocomplete="off" spellcheck="false">
-          <button type="submit" class="ghost">Add</button>
-        </form>
-        <p class="fine">For friends who aren't listed yet. They need to be on your Battle.net friends list.</p>
-      </details>
+      <div class="tab-stack">
+        <div id="panel-friends" role="tabpanel" aria-labelledby="tab-friends" class="tabpanel">
+          <ul id="friends" class="people picker" aria-label="Battle.net friends"></ul>
+          <p id="friend-note" class="fine">Tick everyone you play with. Team Follow joins whoever opens a lobby first.</p>
+          <details class="manual">
+            <summary><svg class="icon"><use href="#i-plus"/></svg>Add by BattleTag</summary>
+            <form id="friend-form" class="add">
+              <label for="friend-tag" class="visually-hidden">Friend's BattleTag</label>
+              <input id="friend-tag" placeholder="BattleTag, like Thrall#1234" maxlength="46" autocomplete="off" spellcheck="false">
+              <button type="submit" class="ghost">Add</button>
+            </form>
+            <p class="fine">For friends who aren't listed yet. They need to be on your Battle.net friends list.</p>
+          </details>
+        </div>
+        <div id="panel-recent" role="tabpanel" aria-labelledby="tab-recent" class="tabpanel" hidden>
+          <ul id="recent" class="people picker recent" aria-label="Recent players"></ul>
+          <p id="recent-note" class="fine">Everyone who was in a lobby or match with you. Kept on this computer only.</p>
+          <div class="recent-foot">
+            <button type="button" id="recent-clear" class="link">Clear all</button>
+            <div id="recent-confirm" class="recent-confirm" role="group" aria-labelledby="recent-confirm-text" hidden>
+              <span id="recent-confirm-text"></span>
+              <button type="button" id="recent-clear-yes" class="primary danger small">Clear</button>
+              <button type="button" id="recent-clear-no" class="ghost small">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <aside class="side">
@@ -184,6 +204,7 @@
     <span data-status="online"><i></i>Online</span>
     <span data-status="away"><i></i>Away</span>
     <span data-status="offline"><i></i>Offline</span>
+    <span data-status="unknown"><i></i>Not a friend</span>
   </footer>
 </div>
 
@@ -197,7 +218,7 @@
       <div class="map-pick">
         <span class="map-pick-name"><svg class="icon"><use href="#i-map"/></svg><span id="host-map-name">No map chosen</span></span>
         <button type="button" id="host-choose-map" class="ghost small">Choose map</button>
-      </div>
+    </div>
       <span id="host-map-path" class="fine path"></span>
     </div>
 
@@ -213,7 +234,7 @@
           <label><input type="radio" name="host-private" value="public" checked><span>Public</span></label>
           <label><input type="radio" name="host-private" value="private"><span>Private</span></label>
         </div>
-      </div>
+    </div>
       <label class="field">
         <span class="field-label">Create the lobby after</span>
         <select id="host-delay">
@@ -266,11 +287,11 @@
           <span class="field-label">Seconds after loading</span>
           <input id="game-mode-delay" type="number" min="0" max="120" step="1" inputmode="numeric">
         </label>
-      </div>
+    </div>
       <div id="keyboard-line" class="keyboard-line" data-state="ok">
         <span id="keyboard-note"></span>
         <button type="button" id="keyboard-allow" class="ghost small" hidden>Allow typing</button>
-      </div>
+    </div>
     </section>
 
     <p class="fine">Other lobby options use the game's defaults: fast speed, teams locked and placed together.</p>

@@ -16,6 +16,7 @@ Warcraft Team Follow is a hexagonal (ports and adapters) desktop app. The core (
                                                            │ contract.GameKeyboard         │
                                                            │   infrastructure/keyboard     │
                                                            │ contract.PreferenceStore      │
+                                                           │ contract.RecentPlayers        │
                                                            │   infrastructure/settings     │
                                                            └──────────────────────────────┘
 ```
@@ -24,13 +25,13 @@ Warcraft Team Follow is a hexagonal (ports and adapters) desktop app. The core (
 | --- | --- | --- |
 | Composition root | `main.go`, `container/` | Builds config, logger and container; lazy accessors |
 | Driving adapters | `cmd/cli/`, `cmd/gui/` | Commands; the window and its `Bridge` |
-| Core | `domain/companion` | Discovery loop, the one game session, saving friends, publishing state |
+| Core | `domain/companion` | Discovery loop, the one game session, saving friends and recent players, publishing state |
 | | `domain/follow` | The follow state machine (`docs/follow-behaviour.md`) |
 | Ports | `port/contract`, `port/dto` | Interfaces and plain data |
 | Driven adapters | `infrastructure/discovery` | Finds the game, its menu port and session, per OS; closes the game's processes when the player asks |
 | | `infrastructure/gamesocket` | Loopback websocket with the command allowlist |
 | | `infrastructure/keyboard` | Types one line in the match chat with keystrokes, only while the game is in front (Windows, macOS) |
-| | `infrastructure/settings` | `friends.json` in the per-user data folder |
+| | `infrastructure/settings` | `friends.json` and `recent-players.json` in the per-user data folder |
 
 ## Startup
 

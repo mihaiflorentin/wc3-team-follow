@@ -6,11 +6,12 @@ Ports (`port/contract`) and DTOs (`port/dto`) are the only types that cross laye
 
 - `port/contract/`: interfaces only, no structs.
   - Inbound: `Companion`, which the window and commands drive.
-  - Outbound: `GameDiscovery`, `GameDialer`, `GameSession`, `GameProcesses`, `GameKeyboard`, `MapsLocator`, `MapLibrary` and `PreferenceStore`, which adapters implement and the domain calls.
+  - Outbound: `GameDiscovery`, `GameDialer`, `GameSession`, `GameProcesses`, `GameKeyboard`, `MapsLocator`, `MapLibrary`, `PreferenceStore` and `RecentPlayers`, which adapters implement and the domain calls.
   - `GameCounter` is implemented by discovery's several-copies error; the companion reads it with `errors.As` to fill `FollowState.GameCount`, so the domain never imports the adapter or parses the message.
 - `port/dto/` (`package dto`): plain data between layers. There are no subfolders: the app has no HTTP API.
   - `follow.go`: `FollowConfig` (what the page sends), `FollowState` (what it renders), `TeamMember`, `WatchedMember`, `Friend` (one Battle.net friend in `FollowState.Roster`), `PasswordRequest`, `JoinRecord`, `LogEntry`, `Diagnostics`, `Preferences`.
   - `follow.go` also holds Auto-host's `HostSettings`, `HostConfig` and `HostState`.
+  - `recent.go`: `RecentPlayer` (`tag`, `map`, `lastSeen`) and `MaxRecentPlayers` (200).
   - `game.go`: `GameConnection` (port, session, version, pid), `GameEvent` (one loosely typed message from the game) and `KeyboardStatus`.
 
 ## Rules
@@ -26,3 +27,5 @@ Ports (`port/contract`) and DTOs (`port/dto`) are the only types that cross laye
 9. Secrets never enter a DTO that leaves the process. `GameConnection.Session` exists only between discovery and the dialer, and the companion clears it. `FollowState` and `Diagnostics` carry no account ids, passwords or session.
 10. `HostSettings.gameMode` is the command Game mode types once in a match from Auto-host's lobby (trimmed, one line of at most 100 characters; `""` turns Game mode off) and `gameModeDelaySeconds` how long after the match starts it is typed (kept within 0 and `dto.MaxGameModeDelaySeconds`, 120, which the delay field's `max` in `index.html` matches; 5 by default, also for settings saved before Game mode existed). Both are saved with the other Auto-host settings in `friends.json`.
 11. `FollowState.Keyboard` (`keyboard`: `supported`, `permitted`, `reason`) is `GameKeyboard.Status`, refreshed by the companion each second. The window shows it in Auto-host setup and offers Allow typing when it is supported but not permitted; that button calls `Bridge.RequestKeyboardPermission`, the only path to `GameKeyboard.RequestPermission`.
+12. `FollowState.Recent` (`recent`) lists the players seen in a lobby or match with the player, newest first, at most 200; `FollowState.LobbyTags` (`lobbyTags`) names the ones in the current lobby or match. Both are never null. Status isn't stored: the window shows "In your lobby" for `lobbyTags`, a friend's status from `roster`, or "Not a friend" once the roster has loaded. `Bridge.ClearRecentPlayers` (`Companion.ClearRecentPlayers`) empties the list. `recent-players.json` holds `{"players": [RecentPlayer…]}` and lives only on this computer.
+13. The window's Friends tab badge counts `roster` friends with `online` set (accessible name "Friends, 17 online", tooltip "17 of 166 online"). The panel header counts the follow group ("4 of 12 chosen"), shared by both tabs. The selected tab is kept in the page's `localStorage` (`wtf.peopleTab`), not in Go.
