@@ -27,7 +27,7 @@ func TestSaySendsOneTrimmedLineAndPrintsChatEvents(t *testing.T) {
 	d := &mockgame.Discovery{Conn: dto.GameConnection{PID: 7, Session: "12345678901234", Version: "3.0.1.24371"}}
 	s := mockgame.NewSession()
 	s.Push(dto.GameEvent{MessageType: "ChatMessage", Payload: map[string]any{"message": map[string]any{"source": "gameChat", "type": "message", "content": "-ar"}}})
-	s.Push(dto.GameEvent{MessageType: "FriendsFriendData", Payload: map[string]any{"friends": []any{map[string]any{"battleTag": "Secret#1", "auroraId": 99}}}})
+	s.Push(dto.GameEvent{MessageType: "FriendsFriendData", Payload: map[string]any{"friends": []any{map[string]any{"battleTag": "Secret#1", "auroraId": 7319468205}}}})
 	out, err := runSay(t, d, s, "  -ar  ")
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +39,8 @@ func TestSaySendsOneTrimmedLineAndPrintsChatEvents(t *testing.T) {
 	if !strings.Contains(out, `content="-ar"`) || !strings.Contains(out, "FriendsFriendData") {
 		t.Fatalf("output:\n%s", out)
 	}
-	for _, secret := range []string{"12345678901234", "Secret#1", "99"} {
+	// The account id has too many digits to turn up in a timestamp.
+	for _, secret := range []string{"12345678901234", "Secret#1", "7319468205"} {
 		if strings.Contains(out, secret) {
 			t.Fatalf("printed %q:\n%s", secret, out)
 		}

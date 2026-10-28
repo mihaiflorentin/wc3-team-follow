@@ -120,7 +120,15 @@ func (s *Session) Send(_ context.Context, message string, payload map[string]any
 	return nil
 }
 
+// Receive returns the next event. Events already queued come first, even
+// once ctx is done or the session is closed, so tests see every event they
+// pushed.
 func (s *Session) Receive(ctx context.Context) (dto.GameEvent, error) {
+	select {
+	case ev := <-s.events:
+		return ev, nil
+	default:
+	}
 	select {
 	case ev := <-s.events:
 		return ev, nil
