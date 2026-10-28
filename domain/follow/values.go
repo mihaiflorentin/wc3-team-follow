@@ -83,19 +83,27 @@ func attribute(friend map[string]any, key string) string {
 	return ""
 }
 
+// numberIs reports whether v is the integer want.
 func numberIs(v any, want int64) bool {
+	n, ok := intValue(v)
+	return ok && n == want
+}
+
+// intValue reads an integer however a game event encodes it: a JSON
+// number, a whole float64, an int or an int64.
+func intValue(v any) (int64, bool) {
 	switch n := v.(type) {
 	case json.Number:
 		got, err := n.Int64()
-		return err == nil && got == want
+		return got, err == nil
 	case float64:
-		return n == float64(want)
+		return int64(n), n == math.Trunc(n) && math.Abs(n) < 1<<63
 	case int:
-		return int64(n) == want
+		return int64(n), true
 	case int64:
-		return n == want
+		return n, true
 	}
-	return false
+	return 0, false
 }
 
 // validAccountID accepts a positive integer that fits a JavaScript safe

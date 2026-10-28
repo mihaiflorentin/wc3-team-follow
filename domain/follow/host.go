@@ -531,11 +531,8 @@ func (e *Engine) inviteMissing() {
 
 // findPlayer matches a BattleTag to a lobby player, by full tag or by name.
 func findPlayer(players []lobbyPlayer, tag string) *lobbyPlayer {
-	key := tagKey(tag)
-	name, _, _ := strings.Cut(key, "#")
 	for i, pl := range players {
-		n := tagKey(pl.name)
-		if pl.occupied && (n == key || n == name) {
+		if pl.occupied && sameTag(pl.name, tag) {
 			return &players[i]
 		}
 	}
@@ -589,9 +586,14 @@ func (e *Engine) waitForSelfMove(tag string) bool {
 // group member with a human on the host's team who isn't in the group.
 // !swap numbers the playable positions slot + 1 and only trades two
 // players: open slots and the map's computers are never targets (checked
-// live on 3.0.1.24371, docs/follow-behaviour.md). It reports false when
-// there is no such player.
-func (e *Engine) swapWithStranger(players []lobbyPlayer, self, pl lobbyPlayer, tag string) bool {
+// live on 3.0.1.24371, docs/follow-behaviour.md).
+//
+// It reports handled: true when swapping took care of the member, because
+// a swap was asked for, or swaps are held while the countdown runs, or
+// they were given up in this lobby (already said once). It reports false
+// when there is no stranger to swap with, or the swap couldn't be typed,
+// so the caller says the two can't be put on one team.
+func (e *Engine) swapWithStranger(players []lobbyPlayer, self, pl lobbyPlayer, tag string) (handled bool) {
 	h := &e.host
 	if h.swap.unanswered >= maxSwaps {
 		// Already said once that the game didn't answer.
@@ -609,7 +611,7 @@ func (e *Engine) swapWithStranger(players []lobbyPlayer, self, pl lobbyPlayer, t
 	for _, other := range players {
 		to, ok := position(other.slot)
 		if !ok || !other.occupied || other.computer || other.self || !sameNumber(other.team, self.team) ||
-			slices.ContainsFunc(group, func(t string) bool { return findPlayer([]lobbyPlayer{other}, t) != nil }) {
+			slices.ContainsFunc(group, func(t string) bool { return sameTag(other.name, t) }) {
 			continue
 		}
 		if e.sendChat(fmt.Sprintf("!swap %d %d", from, to)) != nil {
@@ -651,18 +653,11 @@ func seating(players []lobbyPlayer) string {
 
 // position is a slot's number in the game's !swap command: slot + 1.
 func position(slot any) (int, bool) {
-	n, ok := slot.(int)
-	if !ok {
-		f, isFloat := slot.(float64)
-		if !isFloat || f != float64(int(f)) {
-			return 0, false
-		}
-		n = int(f)
-	}
-	if n < 0 {
+	n, ok := intValue(slot)
+	if !ok || n < 0 {
 		return 0, false
 	}
-	return n + 1, true
+	return int(n) + 1, true
 }
 
 // moveSlot asks the game to move a slot to a team, the way the lobby's team
@@ -714,7 +709,14 @@ func hasTeam(teams []any, team any) bool {
 	return slices.ContainsFunc(teams, func(t any) bool { return sameNumber(t, team) })
 }
 
+// sameNumber reports whether a and b are the same number, however the
+// game encoded it, or print the same otherwise.
 func sameNumber(a, b any) bool {
+	if x, ok := intValue(a); ok {
+		if y, ok := intValue(b); ok {
+			return x == y
+		}
+	}
 	return fmt.Sprint(a) == fmt.Sprint(b)
 }
 
