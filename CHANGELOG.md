@@ -10,12 +10,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **Blacklist.** A third tab in the People panel keeps players out of lobbies you host. When a blacklisted player joins a lobby you host, Team Follow bans them with the game's own Ban, whether you created the lobby by hand or with Auto-host.
 - Add players by BattleTag in the Blacklist tab, or pick several at once in Recent players with **Select to blacklist**.
+- The **Auto-ban** switch in the Blacklist tab turns banning off without clearing your list.
+- Before each ban, Team Follow reads every lobby update the game has already sent. It bans only the slot the blacklisted player holds at that moment, and warns you by name if the game reports a different player as banned.
 - Players you ban yourself in a lobby you host are added to the blacklist automatically (English game client). A switch turns this off.
-- Blacklisted players are marked in Recent players and Friends, and are taken out of your follow group.
+- Blacklisted players are marked in Recent players and Friends, and are taken out of your follow group. You can't add them to your follow group until you remove them from the blacklist.
 - **Player menu.** Right-click any player name, or press Shift+F10 or the Menu key, to copy their BattleTag, add or remove them from your group, or add or remove them from the blacklist.
 - **Player notes.** Write a private note about any player from the player menu with **Add note**, then edit or read it in full later. Notes hold up to 500 characters, are kept on this computer only, and clearing the text deletes one. Players with a note show a note icon, and the search box finds note text too.
 - **Player tooltips.** Rest the pointer on a player, or move the keyboard focus to one, to see your note, their status, whether they're in your group, a friend or blacklisted, and your history together: when you first and last saw them, the last map and how many lobbies you've shared. Players recorded before this version start their lobby count at 1.
-
 - **Update check.** Team Follow tells you when a new version is out, with what changed since your version. Choose **Update**, **Later** to hide the banner for now, or **Skip this version**. It warns you first when you're in a lobby or a match, or Auto-join or Auto-host is on.
 - **Update** installs the new version for you: it downloads it with progress and a Cancel button, checks it against its published checksum, replaces the app and restarts Team Follow. If anything goes wrong, your version keeps running and the banner says why, with a link to the releases page. On Linux it shows the setcap command to run again afterwards, and on macOS it reminds you that Game mode may need the Accessibility permission again.
 - An **Updates** section shows your version, with **Check for updates** and a switch to turn automatic checks off.
@@ -24,7 +25,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - In narrow windows, a long lobby name in Friends or Recent players is shortened so the player's BattleTag stays readable.
-- Before each ban, Team Follow reads every lobby update the game has already sent. It bans only the slot the blacklisted player holds at that moment, and warns you by name if the game reports a different player as banned.
 
 ## [0.7.0] - 2026-10-28
 
