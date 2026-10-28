@@ -120,7 +120,10 @@ type Service struct {
 	// runCtx is Run's context, for checks the player starts; nil until Run.
 	runCtx context.Context
 	// checks tracks running update checks and installs; Run waits for them.
-	checks sync.WaitGroup
+	// stopping is set, under s.mu, once Run is shutting down: nothing joins
+	// checks after that, so it can't race with Run's Wait.
+	checks   sync.WaitGroup
+	stopping bool
 	// cancelInstall stops the running update's download, or is nil.
 	cancelInstall context.CancelFunc
 	// recentSavedAt is when the recent players were last saved.
@@ -280,6 +283,7 @@ func (s *Service) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			s.mu.Lock()
+			s.stopping = true
 			off := false
 			_ = s.engine.Configure(dto.FollowConfig{Enabled: &off})
 			s.logStatus()

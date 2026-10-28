@@ -3,6 +3,7 @@ package companion_test
 import (
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -143,6 +144,34 @@ func TestTheBannerWarnsDuringAMatch(t *testing.T) {
 	waitFor(t, "connection", func() bool { return h.svc.State().Connected })
 	h.session.Push(dto.GameEvent{MessageType: "IsGameUIActive", Payload: map[string]any{"isActive": true}})
 	waitFor(t, "warning", func() bool { return strings.HasPrefix(h.svc.State().Update.Warning, "You're in a lobby or a match.") })
+}
+
+// Run with -race: checks started from the window while Run shuts down
+// must not race with Run waiting for the running ones.
+func TestNoUpdateWorkStartsOnceRunIsStopping(t *testing.T) {
+	h := newUpdateHarness(t, updatePrefs(false, ""), "v0.7.0")
+	h.updater.Set(dto.Release{Tag: "v0.7.0"}, nil)
+	stop := h.start()
+	waitFor(t, "running", func() bool { return h.svc.State().Connected })
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			for range 200 {
+				_, _ = h.svc.CheckForUpdates()
+				_, _ = h.svc.InstallUpdate()
+			}
+		})
+	}
+	<-stop()
+	wg.Wait()
+	calls := h.updater.Calls()
+	if _, err := h.svc.CheckForUpdates(); err == nil {
+		t.Fatal("CheckForUpdates started a check after Run returned")
+	}
+	time.Sleep(100 * time.Millisecond)
+	if got := h.updater.Calls(); got != calls {
+		t.Fatalf("checked %d times after Run returned", got-calls)
+	}
 }
 
 func TestDevelopmentBuildsNeverAskGitHub(t *testing.T) {

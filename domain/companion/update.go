@@ -13,6 +13,9 @@ import (
 // checkTimeout bounds one update check.
 const checkTimeout = 30 * time.Second
 
+// errClosing refuses update work once Run is shutting down.
+var errClosing = errors.New("Team Follow is closing.")
+
 // startCheck asks the Updater for the newest release in its own goroutine,
 // off s.mu; Run waits for it. The checker has already begun the check. It
 // runs with s.mu held.
@@ -53,6 +56,8 @@ func (s *Service) CheckForUpdates() (dto.FollowState, error) {
 		err = errors.New("Updates are off in development builds.")
 	case s.runCtx == nil:
 		err = errors.New("Team Follow is still starting. Try again in a moment.")
+	case s.stopping:
+		err = errClosing
 	case s.updates.Begin(true):
 		s.startCheck(s.runCtx, true)
 	}

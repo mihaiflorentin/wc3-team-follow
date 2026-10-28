@@ -19,6 +19,8 @@ func (s *Service) InstallUpdate() (dto.FollowState, error) {
 	var rel dto.Release
 	if s.runCtx == nil {
 		err = errors.New("Team Follow is still starting. Try again in a moment.")
+	} else if s.stopping {
+		err = errClosing
 	} else {
 		rel, err = s.updates.StartInstall()
 	}
