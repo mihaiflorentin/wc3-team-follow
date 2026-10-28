@@ -2054,9 +2054,14 @@ function renderChanges(release) {
   $('update-teaser').textContent = teaser(changes);
 }
 
+// The install's steps, after the player clicked Update (docs/adr/0009).
+const installing = ['downloading', 'verifying', 'installing', 'restarting'];
+
 function updateStatus(u) {
   if (!u.supported) return u.message;
   if (u.phase === 'checking') return 'Checking GitHub for a newer version…';
+  if (u.release && installing.includes(u.phase)) return `Installing Team Follow ${u.release.version}…`;
+  if (u.release && u.phase === 'failed') return `Team Follow ${u.release.version} couldn’t be installed.`;
   if (u.release) {
     const v = `Team Follow ${u.release.version} is available.`;
     return u.skipped ? `${v} You skipped this version.` : v;
@@ -2072,22 +2077,15 @@ function renderUpdate(s) {
   const banner = $('update-banner');
   const show = Boolean(u.prompt && u.release);
   banner.hidden = !show;
-  if (show) {
-    const rel = u.release;
-    $('update-title').textContent = `Team Follow ${rel.version} is available`;
-    const released = longDate(rel.published);
-    $('update-sub').textContent = `You have ${u.currentVersion}.${released ? ` Released ${released}.` : ''} Update opens the download page.`;
-    $('update-warning').hidden = !u.warning;
-    $('update-warning-text').textContent = u.warning;
-    renderChanges(rel);
-  }
+  if (show) renderBanner(u);
+  renderAfterUpdate(u);
 
   $('updates-version').textContent = u.currentVersion ? `Version ${u.currentVersion}` : '';
   const status = $('updates-status');
   status.textContent = updateStatus(u);
-  status.dataset.tone = !u.supported ? 'off' : u.release ? 'available' : /couldn’t|couldn't|limiting/.test(u.message) ? 'problem' : '';
+  status.dataset.tone = !u.supported ? 'off' : u.phase === 'failed' ? 'problem' : u.release ? 'available' : /couldn’t|couldn't|limiting/.test(u.message) ? 'problem' : '';
   const check = $('updates-check');
-  check.disabled = !u.supported || u.phase === 'checking';
+  check.disabled = !u.supported || u.phase === 'checking' || installing.includes(u.phase);
   check.querySelector('span').textContent = u.phase === 'checking' ? 'Checking…' : 'Check for updates';
   // While the banner is hidden (Later or Skip), the offer stays reachable here.
   $('updates-go').hidden = !u.release || show;
@@ -2168,13 +2166,105 @@ async function loadChangelog() {
 
 $('changelog').ontoggle = e => { if (e.target.open) loadChangelog(); };
 
+const megabytes = n => `${(n / 1048576).toFixed(1)} MB`;
+
+function downloadLine(p) {
+  if (!p || !p.done) return 'Starting the download…';
+  return p.total ? `${megabytes(p.done)} of ${megabytes(p.total)}` : `${megabytes(p.done)} downloaded`;
+}
+
+// renderBanner fills the banner for the offer, the install's progress or
+// its failure. Only the step's own buttons show.
+function renderBanner(u) {
+  const rel = u.release;
+  const phase = u.phase;
+  const busy = installing.includes(phase);
+  const failed = phase === 'failed';
+  $('update-banner').dataset.phase = busy || failed ? phase : 'available';
+
+  const titles = {
+    downloading: `Downloading Team Follow ${rel.version}`,
+    verifying: `Checking Team Follow ${rel.version}`,
+    installing: `Installing Team Follow ${rel.version}`,
+    restarting: `Restarting into Team Follow ${rel.version}`,
+    failed: `Team Follow ${rel.version} couldn’t be installed`,
+  };
+  $('update-title').textContent = titles[phase] ?? `Team Follow ${rel.version} is available`;
+  const released = longDate(rel.published);
+  const subs = {
+    downloading: 'Nothing changes until the download is complete and checked.',
+    verifying: 'Comparing the download with its published SHA-256 checksum.',
+    installing: 'Replacing Team Follow. This takes a moment.',
+    restarting: 'Team Follow closes and opens again in the new version.',
+    failed: '',
+  };
+  $('update-sub').textContent = subs[phase] ??
+    `You have ${u.currentVersion}.${released ? ` Released ${released}.` : ''} Update downloads it, checks it and restarts Team Follow.`;
+
+  const go = $('update-go');
+  go.hidden = busy;
+  go.querySelector('span').textContent = failed ? 'Try again' : 'Update';
+  $('update-cancel').hidden = !(phase === 'downloading' || phase === 'verifying');
+  $('update-releases').hidden = !failed;
+  $('update-later').hidden = busy;
+  $('update-skip').hidden = busy || failed;
+
+  $('update-progress').hidden = !busy;
+  if (busy) {
+    const bar = $('update-bar');
+    const p = u.progress;
+    const pct = phase === 'downloading' && p?.total ? Math.min(100, Math.round((p.done / p.total) * 100)) : null;
+    bar.toggleAttribute('data-busy', pct === null);
+    if (pct === null) bar.removeAttribute('aria-valuenow'); else bar.setAttribute('aria-valuenow', String(pct));
+    bar.style.setProperty('--done', `${pct ?? 0}%`);
+    $('update-steps').textContent = phase === 'downloading' ? downloadLine(p) : phase === 'verifying' ? 'Download complete.' : '';
+  }
+
+  $('update-problem').hidden = !failed;
+  $('update-problem-text').textContent = failed ? u.problem : '';
+  const note = !failed && !busy && u.installNote;
+  $('update-install-note').hidden = !note;
+  $('update-install-note-text').textContent = note || '';
+  const warn = !failed && phase !== 'restarting' && u.warning;
+  $('update-warning').hidden = !warn;
+  $('update-warning-text').textContent = warn || '';
+  $('update-notes').hidden = busy || failed;
+  renderChanges(rel);
+}
+
+// renderAfterUpdate shows the step the new version needs: the Linux setcap
+// command with Copy, or the macOS Accessibility permission for Game mode.
+function renderAfterUpdate(u) {
+  const after = u.after;
+  $('update-after').hidden = !after;
+  if (!after) return;
+  $('update-after-title').textContent = after.setcap ? 'Allow Team Follow to read the game again' : 'Game mode may need Accessibility again';
+  $('update-after-sub').textContent = after.setcap
+    ? `Team Follow ${after.version} replaced its program, and Linux doesn’t carry the permission over. Run this once in a terminal, then restart Team Follow.`
+    : `Team Follow ${after.version} is a new app to macOS. If Game mode stops typing, allow Team Follow again in System Settings, Privacy & Security, Accessibility.`;
+  $('update-after-command').hidden = !after.setcap;
+  $('update-after-command-text').textContent = after.setcap || '';
+}
+
 async function openUpdate() {
   $('error').textContent = '';
-  try { await bridge.Update(); } catch (err) { $('error').textContent = String(err?.message ?? err); }
+  try { render(await bridge.Update()); } catch (err) { $('error').textContent = String(err?.message ?? err); }
 }
 
 $('update-go').onclick = openUpdate;
 $('updates-go').onclick = openUpdate;
+$('update-cancel').onclick = () => act(async () => bridge.CancelUpdate());
+$('update-releases').onclick = async () => {
+  $('error').textContent = '';
+  try { await bridge.OpenReleasesPage(); } catch (err) { $('error').textContent = String(err?.message ?? err); }
+};
+$('update-after-done').onclick = () => act(async () => bridge.DismissUpdateNotes());
+$('update-after-copy').onclick = async () => {
+  await copy($('update-after-command-text').textContent);
+  const text = $('update-after-copy').querySelector('span');
+  text.textContent = 'Copied';
+  setTimeout(() => { text.textContent = 'Copy'; }, 1500);
+};
 $('update-later').onclick = () => act(() => bridge.UpdateLater());
 $('update-skip').onclick = () => act(() => bridge.SkipUpdate());
 $('updates-check').onclick = () => act(() => bridge.CheckForUpdates());
@@ -2190,7 +2280,9 @@ $('updates-releases').onclick = async () => {
    game-mode|keyboard-ask|keyboard-linux|recent|recent-empty|recent-clear|
    recent-select|recent-select-confirm|blacklist|blacklist-empty|blacklist-off|
    update|update-open|update-warning|update-notes|update-later|update-skipped|
-   update-latest|update-offline|update-dev|whats-new|whats-new-older|
+   update-latest|update-offline|update-dev|update-downloading|update-verifying|
+   update-installing|update-failed|update-translocated|update-linux|update-after-linux|
+   update-after-mac|whats-new|whats-new-older|
    changelog|changelog-dev|
    menu-recent|menu-blacklist|menu-group|notes|notes-search|menu-note|
    note-add|note-edit|note-long|note-view;
@@ -2298,7 +2390,8 @@ function demoBridge() {
     whatsNew: {version: '0.7.0', since: '', changes: history.slice(3, 4), show: false}};
   // After updating from 0.7.0 to 0.9.0.
   const updated = {...updateIdle, currentVersion: '0.9.0', whatsNew: {version: '0.9.0', since: '0.7.0', changes, show: true}};
-  const updateOffer = {...updateIdle, phase: 'available', release: offer, prompt: true};
+  const updateOffer = {...updateIdle, phase: 'available', release: offer, prompt: true, progress: null, problem: '', installNote: '', after: null};
+  const macNote = 'After updating, macOS may ask you again to allow Team Follow under Accessibility for Game mode.';
   // Notes: sample BattleTags only, keyed lower-case as the Go side keeps them.
   const notes = Object.fromEntries([
     ['Arthas#1123', 'Carries in Legion TD. Calls the waves early and builds Elves.', 60 * 5],
@@ -2384,6 +2477,17 @@ function demoBridge() {
       message: 'Team Follow couldn’t check for updates. Check your internet connection and try again.'}},
     'update-dev': {update: {...updateIdle, supported: false, currentVersion: 'v0.7.0-3-gabc1234-dirty', lastChecked: null,
       message: 'Updates are off in development builds. Download releases from GitHub.', whatsNew: null}},
+    'update-downloading': {update: {...updateOffer, phase: 'downloading', progress: {done: 5662310, total: 13212057}}},
+    'update-verifying': {update: {...updateOffer, phase: 'verifying', progress: {done: 13212057, total: 13212057}}},
+    'update-installing': {update: {...updateOffer, phase: 'installing'}},
+    'update-failed': {update: {...updateOffer, phase: 'failed',
+      problem: 'The download didn’t match its published checksum, so nothing was installed. Team Follow 0.7.0 keeps running. You can also download the new version from the releases page.'}},
+    'update-translocated': {update: {...updateOffer, phase: 'failed', installNote: macNote,
+      problem: 'macOS is running Team Follow from a temporary copy, so it can’t update itself. Move Warcraft Team Follow to the Applications folder, open it from there and try again. Team Follow 0.7.0 keeps running. You can also download the new version from the releases page.'}},
+    'update-linux': {update: {...updateOffer, installNote: 'After updating, run the setcap step again so Team Follow can read the game.'}},
+    'update-after-linux': {update: {...updateIdle, currentVersion: '0.9.0', whatsNew: null,
+      after: {version: '0.9.0', setcap: "sudo setcap cap_sys_ptrace=ep '/home/player/Apps/wc3-team-follow/wc3-team-follow'", accessibility: false}}},
+    'update-after-mac': {update: {...updateIdle, currentVersion: '0.9.0', whatsNew: null, after: {version: '0.9.0', setcap: '', accessibility: true}}},
     'whats-new': {update: updated},
     'whats-new-older': {update: {...updated, whatsNew: {version: '0.9.0', since: '', changes: changes.slice(0, 1), show: true}}},
     changelog: {update: updated},
@@ -2403,6 +2507,7 @@ function demoBridge() {
   Object.assign(s, scenes[scene] || {});
   if (s.enabled) watch();
   const clone = () => structuredClone(s);
+  let demoInstall = 0;
   return {
     State: async () => clone(),
     ExecutablePath: async () => '/home/me/Apps/wc3-team-follow',
@@ -2431,7 +2536,26 @@ function demoBridge() {
     Changelog: async () => structuredClone(history),
     SkipUpdate: async () => { s.update = {...s.update, prompt: false, skipped: true}; return clone(); },
     SetCheckUpdates: async on => { s.update = {...s.update, checkAutomatically: on}; return clone(); },
-    Update: async () => {},
+    // The demo walks through the install's steps, then restarts; Cancel
+    // stops it.
+    Update: async () => {
+      const total = 13212057;
+      let done = 0;
+      s.update = {...s.update, phase: 'downloading', prompt: true, problem: '', progress: {done, total}};
+      clearInterval(demoInstall);
+      demoInstall = setInterval(() => {
+        done = Math.min(total, done + 1400000);
+        const u = s.update;
+        if (u.phase === 'downloading') s.update = done < total ? {...u, progress: {done, total}} : {...u, phase: 'verifying', progress: {done, total}};
+        else if (u.phase === 'verifying') s.update = {...u, phase: 'installing', progress: null};
+        else if (u.phase === 'installing') s.update = {...u, phase: 'restarting'};
+        else clearInterval(demoInstall);
+        render(clone());
+      }, 450);
+      return clone();
+    },
+    CancelUpdate: async () => { clearInterval(demoInstall); s.update = {...s.update, phase: 'available', progress: null}; return clone(); },
+    DismissUpdateNotes: async () => { s.update = {...s.update, after: null}; return clone(); },
     OpenReleasesPage: async () => {},
     ClearRecentPlayers: async () => { s.recent = []; s.lobbyTags = []; return clone(); },
     SetNote: async (tag, text) => {

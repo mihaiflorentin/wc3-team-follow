@@ -91,11 +91,19 @@
         <p id="update-sub" class="update-sub"></p>
       </div>
       <div class="update-actions">
-        <button type="button" id="update-go" class="primary small" aria-describedby="update-sub"><svg class="icon"><use href="#i-update"/></svg>Update</button>
+        <button type="button" id="update-go" class="primary small" aria-describedby="update-sub"><svg class="icon"><use href="#i-update"/></svg><span>Update</span></button>
+        <button type="button" id="update-cancel" class="ghost small" hidden>Cancel</button>
+        <button type="button" id="update-releases" class="ghost small" hidden>Releases page</button>
         <button type="button" id="update-later" class="ghost small">Later</button>
         <button type="button" id="update-skip" class="link">Skip this version</button>
       </div>
     </div>
+    <div id="update-progress" class="update-progress" hidden>
+      <div class="update-track" role="progressbar" id="update-bar" aria-labelledby="update-title" aria-valuemin="0" aria-valuemax="100"><span id="update-fill"></span></div>
+      <p id="update-steps" class="update-steps" aria-live="polite"></p>
+    </div>
+    <p id="update-problem" class="update-problem" role="alert" hidden><svg class="icon"><use href="#i-alert"/></svg><span id="update-problem-text"></span></p>
+    <p id="update-install-note" class="update-note" hidden><svg class="icon"><use href="#i-info"/></svg><span id="update-install-note-text"></span></p>
     <p id="update-warning" class="update-warning" hidden><svg class="icon"><use href="#i-alert"/></svg><span id="update-warning-text"></span></p>
     <details id="update-notes" class="update-notes">
       <summary><svg class="icon chev"><use href="#i-chevron"/></svg><span id="update-notes-label">What’s new</span><span id="update-teaser" class="update-teaser"></span></summary>
@@ -115,6 +123,23 @@
       </div>
     </div>
     <div id="whats-new-changes" class="changes" tabindex="0" aria-label="What’s new"></div>
+  </section>
+
+  <section id="update-after" class="update update-after" aria-labelledby="update-after-title" hidden>
+    <div class="update-head">
+      <span class="update-mark" aria-hidden="true"><svg class="icon"><use href="#i-lock"/></svg></span>
+      <div class="update-text">
+        <h2 id="update-after-title" class="update-title"></h2>
+        <p id="update-after-sub" class="update-sub"></p>
+      </div>
+      <div class="update-actions">
+        <button type="button" id="update-after-done" class="ghost small"><svg class="icon"><use href="#i-check"/></svg>Done</button>
+      </div>
+    </div>
+    <div id="update-after-command" class="command" hidden>
+      <code id="update-after-command-text"></code>
+      <button type="button" id="update-after-copy" class="ghost small"><svg class="icon"><use href="#i-copy"/></svg><span>Copy</span></button>
+    </div>
   </section>
 
   <section id="beacon" class="beacon" data-tone="off" aria-labelledby="status">

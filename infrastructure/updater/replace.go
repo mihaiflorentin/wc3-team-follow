@@ -57,6 +57,8 @@ func locateProgram(exe string) (target, error) {
 // locateBundle is the .app bundle around exe. An app macOS translocated
 // (opened straight from Downloads, run from a read-only copy) can't update.
 func locateBundle(exe string) (target, error) {
+	program, _ := locateProgram(exe)
+	exe = program.path
 	if strings.Contains(exe, "/AppTranslocation/") {
 		return target{}, problem{sentence: "macOS is running Team Follow from a temporary copy, so it can't update itself. " + moveToApplications}
 	}

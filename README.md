@@ -132,7 +132,21 @@ When the system blocks Team Follow from reading the game (Linux and macOS each n
 
 ### Updates
 
-Team Follow checks GitHub for a new version when it starts and every few hours. When one is out, a banner shows the version and what changed since yours, with **Update**, **Later** and **Skip this version**; it warns you first if updating would interrupt a lobby, a match, Auto-join or Auto-host. Nothing is downloaded until you choose Update, which opens the release's download page. The **Updates** section beside Activity shows your version and has **Check for updates** and a **Check automatically** switch.
+Team Follow checks GitHub for a new version when it starts and every few hours. When one is out, a banner shows the version and what changed since yours, with **Update**, **Later** and **Skip this version**; it warns you first if updating would interrupt a lobby, a match, Auto-join or Auto-host. Nothing is downloaded until you choose Update. The **Updates** section beside Activity shows your version and has **Check for updates** and a **Check automatically** switch.
+
+**Update** installs the new version for you and restarts Team Follow:
+
+1. It downloads the file for your system next to the app, with progress and a **Cancel** button.
+2. It checks the file against the SHA-256 checksum published with the release; a file that doesn't match is deleted and nothing is installed.
+3. It replaces the app: the program on Windows (the old one is kept as `wc3-team-follow.exe.old` until the next start, then removed), the whole `.app` on macOS, the program on Linux.
+4. It closes and opens again in the new version.
+
+If anything goes wrong, your version keeps running untouched and the banner says why, with a link to the releases page to update by hand. A few things to know:
+
+- Team Follow has to be able to write to its own folder. If it can't (for example `C:\Program Files` without administrator rights, or `/usr/local/bin`), update by hand.
+- **macOS:** run Team Follow from the Applications folder. Opened straight from Downloads, macOS runs a temporary copy that can't be updated, and the banner tells you to move it first. After an update, macOS may ask again for the Accessibility permission Game mode types with.
+- **Linux:** the setcap permission doesn't carry over to the new program. After the update, Team Follow shows the command again, with a Copy button.
+- Development builds never update.
 
 ![An update banner: Team Follow 0.9.0 is available, with Update, Later and Skip this version, and What's new listing the changes since your version](docs/screenshots/update.png)
 
@@ -148,7 +162,7 @@ Team Follow talks only to the game's own local menu service on `127.0.0.1`. To c
 
 It sends only an allowlist of commands, each one the game's own menu sends for the same purpose: Join Friend's commands for Auto-join, and Create Game's create button, the host's Start/Cancel and team controls, the friends list's Invite to game and the lobby chat box (for `!swap`) for Auto-host. Nothing starts a match unless the host turned on Start when full. The only keystrokes it ever sends are the Game mode command you entered, into the Warcraft III window while it is in front ([ADR 0007](docs/adr/0007-typing-in-the-match-chat-with-keystrokes.md)).
 
-Checking for updates asks GitHub's public API (`api.github.com`) over HTTPS for the latest stable release and its changelog. It sends nothing about you or the game, and you can turn automatic checks off ([ADR 0009](docs/adr/0009-self-update.md)).
+Checking for updates asks GitHub's public API (`api.github.com`) over HTTPS for the latest stable release and its changelog. It sends nothing about you or the game, and you can turn automatic checks off. Only when you choose Update does it download the release file from GitHub, and it installs it only if its SHA-256 matches the release's `checksums.txt` ([ADR 0009](docs/adr/0009-self-update.md)).
 
 Joining and hosting are enabled only on game builds that have been checked by hand (`[follow] verified_builds` in `config/config.toml`). On other builds Team Follow still watches, but Auto-join and Auto-host stay off.
 

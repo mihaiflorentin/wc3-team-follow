@@ -1140,6 +1140,7 @@ select {
 .update-text { flex: 1 1 260px; min-width: 0; }
 .update-title { display: block; font: 600 var(--step-1)/1.2 var(--display); font-stretch: 85%; }
 .update-sub { margin: 3px 0 0; color: var(--lichen); font-size: 12.5px; }
+.update-sub:empty { display: none; }
 .update-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .update-actions .primary { background: var(--update); }
 .update-actions .primary .icon { width: 14px; height: 14px; }
@@ -1156,6 +1157,57 @@ select {
   font-size: 13px;
 }
 .update-warning .icon { color: var(--away); margin-top: 2px; }
+
+/* The in-app update: the banner turns into the install's progress. The
+   inset bar stays the update colour while it runs and turns red when it
+   failed; the old version keeps running either way. */
+.update[data-phase="failed"] {
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--danger) 12%, transparent), transparent 60%),
+    var(--spruce-raised);
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+.update[data-phase="failed"] .update-mark { color: var(--danger); background: color-mix(in srgb, var(--danger) 18%, transparent); }
+.update-progress { margin-top: 12px; }
+.update-track {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--spruce-deep);
+}
+.update-track > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--done, 0%);
+  border-radius: inherit;
+  background: var(--update);
+  transition: width .2s linear;
+}
+/* No size to measure (checking, installing, restarting): a sweep. */
+.update-track[data-busy] > span { width: 32%; animation: update-sweep 1.3s ease-in-out infinite; }
+@keyframes update-sweep { from { left: -32%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) {
+  .update-track[data-busy] > span { animation: none; width: 100%; opacity: .55; }
+}
+.update-steps { margin: 6px 0 0; color: var(--lichen); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.update-problem, .update-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+.update-problem { padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.update-problem .icon { color: var(--danger); margin-top: 2px; flex: none; }
+.update-note { color: var(--lichen); }
+.update-note .icon { width: 14px; height: 14px; margin-top: 3px; flex: none; color: var(--update); }
+
+/* After an update: the step the new version needs (Linux setcap, macOS
+   Accessibility), until the player says Done. */
+.update-after .update-mark { color: var(--open); background: color-mix(in srgb, var(--open) 16%, transparent); }
+.update-after { box-shadow: inset 4px 0 0 var(--open); background: var(--spruce-raised); }
+.update-after .command { margin-top: 12px; }
 
 .update-notes { margin-top: 10px; }
 .update-notes > summary {

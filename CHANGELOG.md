@@ -15,7 +15,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Player menu.** Right-click any player name, or press Shift+F10 or the Menu key, to copy their BattleTag, add or remove them from your group, or add or remove them from the blacklist.
 - **Player notes.** Write a private note about any player from the player menu with **Add note**, then edit or read it in full later. Notes hold up to 500 characters, are kept on this computer only, and clearing the text deletes one. Players with a note show a note icon, and the search box finds note text too.
 
-- **Update check.** Team Follow tells you when a new version is out, with what changed since your version. Choose **Update** to open the download page, **Later** to hide the banner for now, or **Skip this version**. It warns you first when you're in a lobby or a match, or Auto-join or Auto-host is on.
+- **Update check.** Team Follow tells you when a new version is out, with what changed since your version. Choose **Update**, **Later** to hide the banner for now, or **Skip this version**. It warns you first when you're in a lobby or a match, or Auto-join or Auto-host is on.
+- **Update** installs the new version for you: it downloads it with progress and a Cancel button, checks it against its published checksum, replaces the app and restarts Team Follow. If anything goes wrong, your version keeps running and the banner says why, with a link to the releases page. On Linux it shows the setcap command to run again afterwards, and on macOS it reminds you that Game mode may need the Accessibility permission again.
 - An **Updates** section shows your version, with **Check for updates** and a switch to turn automatic checks off.
 - **What's new.** The first time you start a newer version, Team Follow shows what changed since the version you ran before. It works offline. Open it again any time from the Updates section, where the **Changelog** lists every version.
 
