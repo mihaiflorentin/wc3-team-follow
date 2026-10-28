@@ -57,9 +57,19 @@ func (s *Store) Load() (dto.Preferences, error) {
 		return dto.Preferences{}, fmt.Errorf("%w: %v", ErrUnreadable, err)
 	}
 	var saved fileShape
+	var host struct {
+		Host json.RawMessage `json:"host"`
+	}
 	decoder := json.NewDecoder(bytes.NewReader(content))
-	if err := decoder.Decode(&saved); err != nil || saved.Tags == nil || saved.IncludeTeam == nil {
+	if err := decoder.Decode(&saved); err != nil || saved.Tags == nil || saved.IncludeTeam == nil || json.Unmarshal(content, &host) != nil {
 		return dto.Preferences{}, fmt.Errorf("%w: unrecognized content", ErrUnreadable)
+	}
+	if saved.Host != nil {
+		// Settings saved before Game mode existed get its default delay.
+		saved.Host = &dto.HostSettings{GameModeDelaySeconds: dto.DefaultGameModeDelaySeconds}
+		if err := json.Unmarshal(host.Host, saved.Host); err != nil {
+			return dto.Preferences{}, fmt.Errorf("%w: unrecognized content", ErrUnreadable)
+		}
 	}
 	return dto.Preferences{Tags: saved.Tags, IncludeTeam: *saved.IncludeTeam, AskPassword: saved.AskPassword, MapsFolder: saved.MapsFolder, Host: saved.Host}, nil
 }
