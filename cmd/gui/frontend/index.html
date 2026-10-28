@@ -22,6 +22,7 @@
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m6 6 12 12"/></symbol>
   <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></symbol>
   <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.5v.01"/></symbol>
@@ -146,6 +147,7 @@
       <div class="tabs" role="tablist" aria-label="Who to show">
         <button type="button" role="tab" id="tab-friends" data-tab="friends" aria-controls="panel-friends" aria-selected="true">Friends <span id="online-count" class="tab-count"></span></button>
         <button type="button" role="tab" id="tab-recent" data-tab="recent" aria-controls="panel-recent" aria-selected="false" tabindex="-1">Recent players <span id="recent-count" class="tab-count"></span></button>
+        <button type="button" role="tab" id="tab-blacklist" data-tab="blacklist" aria-controls="panel-blacklist" aria-selected="false" tabindex="-1">Blacklist <span id="blacklist-count" class="tab-count"></span></button>
       </div>
       <div class="picker-tools">
         <label class="search">
@@ -175,14 +177,35 @@
         <div id="panel-recent" role="tabpanel" aria-labelledby="tab-recent" class="tabpanel" hidden>
           <ul id="recent" class="people picker recent" aria-label="Recent players"></ul>
           <p id="recent-note" class="fine">Everyone who was in a lobby or match with you. Kept on this computer only.</p>
-          <div class="recent-foot">
+          <div class="recent-foot" id="recent-foot">
             <button type="button" id="recent-clear" class="link">Clear all</button>
             <div id="recent-confirm" class="recent-confirm" role="group" aria-labelledby="recent-confirm-text" hidden>
               <span id="recent-confirm-text"></span>
               <button type="button" id="recent-clear-yes" class="primary danger small">Clear</button>
               <button type="button" id="recent-clear-no" class="ghost small">Cancel</button>
             </div>
+            <button type="button" id="ban-select" class="link ban-select"><svg class="icon"><use href="#i-ban"/></svg>Select to blacklist</button>
           </div>
+          <div id="ban-bar" class="ban-bar" role="group" aria-labelledby="ban-bar-text" hidden>
+            <span id="ban-bar-text" aria-live="polite"></span>
+            <span class="ban-bar-actions">
+              <button type="button" id="ban-apply" class="primary danger small"></button>
+              <button type="button" id="ban-cancel" class="ghost small">Cancel</button>
+            </span>
+          </div>
+        </div>
+        <div id="panel-blacklist" role="tabpanel" aria-labelledby="tab-blacklist" class="tabpanel" hidden>
+          <div class="ban-options">
+            <label class="option-row"><span><strong>Auto-ban</strong><small>Bans these players when they join a lobby you host.</small></span><input type="checkbox" id="auto-ban" role="switch"></label>
+            <label class="option-row"><span><strong>Add players I ban to the blacklist</strong><small>When you ban someone from a lobby you host.</small></span><input type="checkbox" id="ban-manual" role="switch"></label>
+          </div>
+          <ul id="blacklist" class="people blacklist" aria-label="Blacklisted players"></ul>
+          <form id="ban-form" class="add" novalidate>
+            <label for="ban-tag" class="visually-hidden">BattleTag to blacklist</label>
+            <input id="ban-tag" placeholder="BattleTag, like Player#1234" maxlength="46" autocomplete="off" spellcheck="false" aria-describedby="ban-note">
+            <button type="submit" class="ghost"><svg class="icon"><use href="#i-plus"/></svg>Blacklist</button>
+          </form>
+          <p id="ban-note" class="fine"></p>
         </div>
       </div>
     </section>

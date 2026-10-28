@@ -14,8 +14,9 @@ Commands the app may send, enforced by `infrastructure/gamesocket`:
 | `RequestCancelTeamInvitations`, `TeamLeave`, `JoinFriendGameLobby { auroraId }` | One join attempt, in this order, as the game's own Join Friend does |
 | `SendGameListing`, `GetGameList` | Before answering the lobby confirmation: loads the custom game list that joining by name searches (without `SendGameListing` the list stays empty, checked live) |
 | `JoinGameByGameName { gameName, gamePass }` | Answering the game's lobby confirmation or password request |
+| `BanPlayerFromGameLobby { slot }` | Auto-ban: a blacklisted player in a lobby the player hosts (see Blacklist and auto-ban) |
 
-`SendGameLobbySetup` and `GetGameInfo` closed the game during development and must never be added.
+`SendGameLobbySetup` and `GetGameInfo` closed the game during development and must never be added. `KickPlayerFromGameLobby` isn't allowed either.
 
 ## The friends roster
 
@@ -32,6 +33,33 @@ Every `FriendsFriendData` snapshot replaces the roster: the whole Battle.net fri
 - **Saving:** `contract.RecentPlayers` (`recent-players.json`, written atomically next to `friends.json`). The companion saves at most every 5 seconds after a player or map was added or changed, at most once a minute when only last-seen times moved (each second in a match), and on shutdown. A failed save is logged and tried again. A missing or unreadable file loads as an empty list. Only `recent.saved` with a count is logged; no names.
 - **Clear all** (`Companion.ClearRecentPlayers`) removes the file and the list, including who is present now (the next lobby update records them again). It doesn't touch the follow group.
 - **Follow group:** ticking a recent player adds their BattleTag to `manualTags`, like Add by BattleTag; the 12-member limit is unchanged. Auto-join refuses to start with a group member who isn't a Battle.net friend (see Starting); Auto-host counts them for Same team and Start when full.
+
+## Blacklist and auto-ban
+
+`domain/follow/blacklist.go` (the list) and `domain/follow/ban.go` (banning), docs/adr/0008. The **Blacklist** tab in the People panel lists the blacklisted BattleTags with when each was added, adds one by BattleTag (checked as `Name#1234`), removes them, and holds the **Auto-ban** and **Add players I ban to the blacklist** switches. In Recent players, **Select to blacklist** turns the row checkboxes into a separate choice (red crosses, a red rail, "Who you follow doesn't change"); a bar shows "Blacklist N players" and Cancel, and asks to confirm before adding them. Escape steps back from the confirmation, then out of the choice. Blacklisted players show a Blacklisted badge and a struck-through avatar in Recent players and Friends, and can't be ticked to follow.
+
+- **The list:** `FollowState.blacklist` (`{tag, added}`, newest first, at most `dto.MaxBlacklist`, 500), matched case-insensitively. The player's own BattleTag (from the team or a lobby's `isSelf` slot) is refused. Adding a player removes them from the follow group; a blacklisted player can't be added to it. Saved in `friends.json` with `autoBan` and `blacklistManualBans`, both on by default.
+- **Who is banned:** in a `GameLobbySetup` with `isHost` true and Auto-ban on, an occupied human slot (`slotStatus` 2, `slotType` 0) whose non-empty `name` is blacklisted. Never the player's own slot, computers, open slots, or anyone in a lobby someone else hosts. It works in every lobby the player hosts, with or without Auto-host and Follow. A joining slot can first arrive with an empty `name`; nothing is decided until the BattleTag arrives.
+- **How often:** once per player while they stay in the lobby. A player who drops out of an update is forgotten, so a rejoin is banned again. Leaving the lobby, a match starting or a disconnect starts over.
+- **When not:** once `LobbyCountdown` reports `countdownLocked`, or once the match has started (match screens, `IsGameUIActive true`, loading). A running countdown that isn't locked doesn't stop a ban.
+- **Each ban** notes "Banned Player#1234 (on your blacklist)." in Activity.
+
+**The slot race.** `BanPlayerFromGameLobby` takes only a slot. If the blacklisted player leaves and someone takes the slot before the game handles the ban, the wrong person is banned. There is no safe way to ask the game for the lobby (`GetGameInfo` and `SendGameLobbySetup` close the game), so:
+
+1. A ban is chosen only while reading a `GameLobbySetup`, the newest, and never from a timer or an older one.
+2. The engine only marks it pending. The companion first handles every event already waiting on the socket (`GameSession.TryReceive`, without waiting for more), then calls `Engine.SendPendingBan`, which finds the player in the newest update: it bans their slot now (a player who moved is banned in the new slot), or nobody if they left.
+3. One ban is in flight at a time. The next waits for the game's confirmation, a lobby update without that player in that slot, or 3 seconds, and is then chosen from the next lobby update.
+4. The confirmation "Host banned player [X]" is checked against the player meant. If X isn't blacklisted, Activity says "Banned Player#5678 by mistake: Player#1234 left just before the ban." and the companion logs `follow.ban_mistake`. There is no unban command.
+
+**Bans by hand.** When the player bans someone from a lobby they host, the game sends the same "Host banned player [X]" line. With no ban of Team Follow's waiting and **Add players I ban to the blacklist** on, X joins the blacklist ("Added Player#1234 to your blacklist (you banned them).") and leaves the follow group, and the companion saves it. Text that isn't a BattleTag, the player's own tag, players already listed, and lines while the player isn't the host are ignored. The line is the English client's wording; on other client languages this does nothing.
+
+Live check (issue 16, macOS, game 3.0.1.24371, 2026-10-28):
+
+- The game's Ban menu item sends `BanPlayerFromGameLobby {slot}`, and Kick sends `KickPlayerFromGameLobby {slot}` (the game's menu script).
+- Sent by Team Follow while hosting, `BanPlayerFromGameLobby {slot: 2}` removed that player within 70 ms, without crashing the game. The game confirmed it with `ChatMessage` `source=gameChat`: "Host banned player [Name#1234]", then sent a `GameLobbySetup` without that slot.
+- A joining player's first `GameLobbySetup` slot can have an empty `name`; the BattleTag arrives in an update a few milliseconds later.
+- `GameLobbySetup` carries `isHost` (true when the local player hosts) and `playerHost`.
+- Not live-tested yet: a ban during an unlocked countdown, and the confirmation line on non-English clients.
 
 ## Watching
 

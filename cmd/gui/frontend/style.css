@@ -535,7 +535,97 @@ h2 .icon { color: var(--lichen); }
 /* Not a friend: the game doesn't say, so the dot is an empty ring. */
 [data-status="unknown"] .presence::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--offline); }
 
-.recent-foot { display: flex; align-items: center; min-height: 34px; margin-top: 10px; }
+.recent-foot { display: flex; align-items: center; gap: 12px; min-height: 34px; margin-top: 10px; }
+
+/* Blacklist ------------------------------------------------------------
+   Red (--danger) is the blacklist's one accent: a slashed avatar, the
+   Blacklisted badge, and the Recent players selection that feeds it. */
+
+.name-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ban-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+  font: 600 11px/1.5 var(--ui);
+}
+.ban-badge .icon { width: 11px; height: 11px; stroke-width: 2.4; }
+
+/* A blacklisted player's avatar is drained of colour and struck through. */
+.avatar.banned { --ring: color-mix(in srgb, var(--danger) 70%, var(--spruce-line)); background: hsl(var(--hue) 10% 27%); color: var(--lichen); }
+.avatar.banned::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, transparent calc(50% - 1.2px), var(--danger) calc(50% - 1.2px) calc(50% + 1.2px), transparent calc(50% + 1.2px));
+}
+
+.ban-select { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.ban-select .icon { width: 14px; height: 14px; }
+.ban-select:hover { color: var(--danger); }
+
+/* Selection mode: the checkboxes choose whom to blacklist, not whom to
+   follow, so they turn red and cross instead of tick, beside a red rail. */
+.picker.ban-mode { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--danger) 75%, transparent); }
+.ban-mode .pick input { border-color: color-mix(in srgb, var(--danger) 50%, var(--spruce-line)); }
+.ban-mode .pick input:checked { background: var(--danger); border-color: var(--danger); }
+.ban-mode .pick input:checked::after {
+  width: 10px;
+  height: 10px;
+  border: 0;
+  transform: none;
+  background:
+    linear-gradient(45deg, transparent 42%, var(--spruce-deep) 42% 58%, transparent 58%),
+    linear-gradient(-45deg, transparent 42%, var(--spruce-deep) 42% 58%, transparent 58%);
+}
+.ban-mode .pick[data-picked="true"] { background: color-mix(in srgb, var(--danger) 11%, transparent); }
+.ban-mode .pick:has(input:focus-visible) { outline-color: var(--danger); }
+
+.ban-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-height: 34px;
+  margin-top: 10px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 13%, var(--spruce-deep));
+  box-shadow: inset 3px 0 0 var(--danger);
+  font-size: 13px;
+}
+.ban-bar-actions { display: flex; gap: 8px; margin-left: auto; }
+
+.ban-options { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.ban-options .option-row { padding: 8px 12px; }
+
+.blacklist { height: 236px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -6px; padding: 0 6px; }
+.blacklist .person { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.blacklist .person:hover { background: var(--spruce-raised); }
+.blacklist .added { color: var(--lichen); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.blacklist .remove { display: inline-flex; align-items: center; gap: 5px; }
+.blacklist .remove .icon { width: 13px; height: 13px; }
+#ban-form { margin-top: 10px; }
+#ban-form button { display: inline-flex; align-items: center; gap: 6px; }
+#ban-tag[aria-invalid="true"] { border-color: var(--danger); }
+
+@media (max-width: 820px) {
+  .blacklist { height: 186px; }
+}
+@media (max-width: 480px) {
+  .blacklist .remove span { display: none; }
+  /* The badge keeps only its mark; the word stays for screen readers. */
+  .ban-badge { padding: 3px; }
+  .ban-badge-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .blacklist .remove { padding: 6px 8px; }
+  .tabs { gap: 14px; }
+}
 .recent-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .recent-confirm span { margin-right: 4px; }
 .primary.small { padding: 6px 12px; font-size: 12.5px; }
@@ -603,6 +693,7 @@ h2 .icon { color: var(--lichen); }
 .log li[data-kind="seen"] { --kind: var(--preview); }
 .log li[data-kind="pause"] { --kind: var(--game); }
 .log li[data-kind="problem"] { --kind: var(--danger); }
+.log li[data-kind="ban"] { --kind: var(--danger); }
 .log time { display: block; color: var(--lichen); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .log .text { font-size: 13px; line-height: 1.4; }
 .log .empty { display: block; padding: 4px 0; }

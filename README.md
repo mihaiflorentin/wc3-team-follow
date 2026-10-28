@@ -40,6 +40,20 @@ The **Recent players** tab lists everyone who was in a lobby or match with you (
 
 ![The Recent players tab: two players in your lobby, then earlier players with the map and when you last saw them](docs/screenshots/recent-players.png)
 
+### Blacklist
+
+The **Blacklist** tab keeps players out of every lobby you host. When one of them joins, Team Follow bans them with the game's own Ban, and Activity says who was banned. It works in lobbies Auto-host creates and in ones you create yourself, never in someone else's lobby, and stops once the countdown is locked or the match starts.
+- Add a player by BattleTag, remove anyone, and turn **Auto-ban** off for a while without losing the list.
+- **Add players I ban to the blacklist** (on by default): ban someone yourself in your lobby and they join the list. This reads the game's English confirmation, so it works only with the game in English.
+- In **Recent players**, **Select to blacklist** lets you tick several players and blacklist them together after you confirm. Picking them there doesn't change who you follow; blacklisting someone you follow takes them out of your group.
+- Blacklisted players carry a red **Blacklisted** badge. The list is kept on this computer only.
+
+The game's Ban names a slot, not a player, so Team Follow reads everything the game has already sent before banning and checks the game's confirmation; if someone else was banned because the player left at that instant, Activity says so by name.
+
+![The Blacklist tab: Auto-ban and Add players I ban switches, three blacklisted players with the date each was added, and Add by BattleTag](docs/screenshots/blacklist.png)
+
+![Recent players while choosing whom to blacklist: two players ticked with red crosses, one already blacklisted, and the Blacklist 2 players bar](docs/screenshots/recent-blacklist.png)
+
 Team Follow watches them straight away: their portraits show who is online, away or in Warcraft III, and Activity notes when one of them opens a lobby. Watching never joins anything.
 
 ![Watching a group of five friends: one has a lobby open, Auto-join is off](docs/screenshots/watching.png)

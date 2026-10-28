@@ -65,8 +65,8 @@ function hue(tag) {
   return h;
 }
 
-function avatar(tag, {badge = false} = {}) {
-  const node = el('span', 'avatar');
+function avatar(tag, {badge = false, banned = false} = {}) {
+  const node = el('span', banned ? 'avatar banned' : 'avatar');
   node.style.setProperty('--hue', hue(tag));
   node.setAttribute('aria-hidden', 'true');
   const letters = [...nameOf(tag)].filter(c => /\p{L}|\p{N}/u.test(c));
@@ -108,6 +108,25 @@ function presence(text, lobby) {
 }
 
 /* Derived state -------------------------------------------------------- */
+
+// isBlacklisted reports whether tag is on the blacklist.
+const isBlacklisted = (s, tag) => (s.blacklist ?? []).some(b => key(b.tag) === key(tag));
+
+// nameCell is a row's BattleTag, with the Blacklisted badge when it is on
+// the blacklist.
+function nameCell(tag, banned) {
+  const wrap = el('span', 'name-wrap');
+  const name = el('span', 'name', tag);
+  name.title = tag;
+  wrap.append(name);
+  if (banned) {
+    const badge = el('span', 'ban-badge');
+    badge.title = 'Blacklisted';
+    badge.append(icon('ban'), el('span', 'ban-badge-text', 'Blacklisted'));
+    wrap.append(badge);
+  }
+  return wrap;
+}
 
 function hasTargets(s) {
   return (s.includeTeam && s.team.some(m => !m.isSelf)) || s.manualTags.length > 0;
@@ -214,6 +233,7 @@ function render(s) {
   $('join-host-team').checked = Boolean(s.joinHostTeam);
   renderFriends(s);
   renderRecent(s);
+  renderBlacklist(s);
   renderLog(s);
 }
 
@@ -315,8 +335,9 @@ function pickRow(f, full) {
   box.type = 'checkbox';
   box.checked = f.selected;
   box.dataset.tag = f.battleTag;
-  box.disabled = !f.selected && full;
-  box.setAttribute('aria-label', `Follow ${f.battleTag}`);
+  const banned = isBlacklisted(state, f.battleTag);
+  box.disabled = (!f.selected && full) || banned;
+  box.setAttribute('aria-label', banned ? `${f.battleTag} is blacklisted` : `Follow ${f.battleTag}`);
   label.dataset.disabled = String(box.disabled);
   box.onchange = () => {
     const tags = box.checked
@@ -324,9 +345,7 @@ function pickRow(f, full) {
       : state.manualTags.filter(t => key(t) !== key(f.battleTag));
     changeGroup({tags});
   };
-  const name = el('span', 'name', f.battleTag);
-  name.title = f.battleTag;
-  label.append(box, avatar(f.battleTag, {badge: Boolean(f.open)}), name, presence(f.open ? 'Lobby open' : f.label, f.open ? f.lobby : ''));
+  label.append(box, avatar(f.battleTag, {badge: Boolean(f.open), banned}), nameCell(f.battleTag, banned), presence(f.open ? 'Lobby open' : f.label, f.open ? f.lobby : ''));
   li.append(label);
   return li;
 }
@@ -344,7 +363,7 @@ function renderFriends(s) {
 
   // Re-render only when something visible changed, so scrolling and focus
   // survive the once-a-second state updates.
-  const signature = JSON.stringify([s.connected, full, chosen, visible, query, showOffline, s.roster.length]);
+  const signature = JSON.stringify([s.connected, full, chosen, visible, query, showOffline, s.roster.length, s.blacklist]);
   if (signature !== pickerSignature) {
     pickerSignature = signature;
     const scroll = list.scrollTop;
@@ -389,7 +408,12 @@ function renderFriends(s) {
 
 const TAB_KEY = 'wtf.peopleTab';
 let tab = 'friends';
-try { if (localStorage.getItem(TAB_KEY) === 'recent') tab = 'recent'; } catch { /* storage blocked */ }
+try {
+  const saved = localStorage.getItem(TAB_KEY);
+  if (saved === 'recent' || saved === 'blacklist') tab = saved;
+} catch { /* storage blocked */ }
+
+const placeholders = {friends: 'Search your Battle.net friends', recent: 'Search recent players', blacklist: 'Search the blacklist'};
 
 const tabs = [...document.querySelectorAll('.tabs [role="tab"]')];
 
@@ -404,11 +428,12 @@ function selectTab(name, {focus = false} = {}) {
   }
   $('panel-friends').hidden = name !== 'friends';
   $('panel-recent').hidden = name !== 'recent';
+  $('panel-blacklist').hidden = name !== 'blacklist';
   $('show-offline-switch').hidden = name !== 'friends';
-  const placeholder = name === 'recent' ? 'Search recent players' : 'Search your Battle.net friends';
-  $('friend-search').placeholder = placeholder;
-  $('search-label').textContent = placeholder;
+  $('friend-search').placeholder = placeholders[name];
+  $('search-label').textContent = placeholders[name];
   closeClearConfirm();
+  if (name !== 'recent') leaveBanMode();
   if (state) render(state);
 }
 
@@ -454,26 +479,43 @@ function recentStatus(s, tag) {
 
 function recentRow(s, p, full) {
   const chosen = s.manualTags.some(t => key(t) === key(p.tag));
+  const banned = isBlacklisted(s, p.tag);
   const st = recentStatus(s, p.tag);
   const li = el('li');
   const label = el('label', 'pick');
   label.dataset.status = st.status;
-  label.dataset.selected = String(chosen);
   const box = document.createElement('input');
   box.type = 'checkbox';
-  box.checked = chosen;
   box.dataset.tag = p.tag;
-  box.disabled = !chosen && full;
-  box.setAttribute('aria-label', `Follow ${p.tag}`);
+  if (banMode) {
+    // Choosing whom to blacklist: the follow group stays as it is.
+    const picked = banPick.has(key(p.tag));
+    box.checked = picked;
+    box.disabled = banned;
+    box.setAttribute('aria-label', banned ? `${p.tag} is blacklisted` : `Blacklist ${p.tag}`);
+    label.dataset.selected = 'false';
+    label.dataset.picked = String(picked);
+    box.onchange = () => {
+      // A changed choice needs a new confirmation.
+      banConfirm = false;
+      if (box.checked) banPick.add(key(p.tag));
+      else banPick.delete(key(p.tag));
+      renderRecent(state);
+    };
+  } else {
+    box.checked = chosen;
+    box.disabled = (!chosen && full) || banned;
+    box.setAttribute('aria-label', banned ? `${p.tag} is blacklisted` : `Follow ${p.tag}`);
+    label.dataset.selected = String(chosen);
+    box.onchange = () => {
+      const tags = box.checked
+        ? [...state.manualTags, p.tag]
+        : state.manualTags.filter(t => key(t) !== key(p.tag));
+      changeGroup({tags});
+    };
+  }
   label.dataset.disabled = String(box.disabled);
-  box.onchange = () => {
-    const tags = box.checked
-      ? [...state.manualTags, p.tag]
-      : state.manualTags.filter(t => key(t) !== key(p.tag));
-    changeGroup({tags});
-  };
-  const name = el('span', 'name', p.tag);
-  name.title = p.tag;
+  const name = nameCell(p.tag, banned);
   const meta = el('span', 'meta');
   const map = el('span', 'map');
   map.append(icon('map'), document.createTextNode(p.map || 'Unknown map'));
@@ -482,7 +524,7 @@ function recentRow(s, p, full) {
   seen.dateTime = p.lastSeen;
   seen.title = new Date(p.lastSeen).toLocaleString();
   meta.append(map, seen);
-  label.append(box, avatar(p.tag, {badge: st.status === 'open'}), name, presence(st.label, st.lobby), meta);
+  label.append(box, avatar(p.tag, {badge: st.status === 'open', banned}), name, presence(st.label, st.lobby), meta);
   li.append(label);
   return li;
 }
@@ -499,12 +541,15 @@ function renderRecent(s) {
 
   if (tab === 'recent') {
     // Last seen is rounded to minutes, so this changes at most once a minute.
-    const signature = JSON.stringify([visible.map(p => [p.tag, p.map, lastSeen(p.lastSeen, false), recentStatus(s, p.tag)]), s.manualTags, full, query]);
+    const signature = JSON.stringify([visible.map(p => [p.tag, p.map, lastSeen(p.lastSeen, false), recentStatus(s, p.tag)]), s.manualTags, full, query,
+      s.blacklist, banMode, banConfirm, [...banPick]]);
     if (signature !== recentSignature) {
       recentSignature = signature;
       const scroll = list.scrollTop;
       const focused = document.activeElement?.dataset?.tag;
       list.replaceChildren();
+      list.classList.toggle('ban-mode', banMode);
+      list.setAttribute('aria-label', banMode ? 'Recent players: choose whom to blacklist' : 'Recent players');
       for (const p of visible) list.append(recentRow(s, p, full));
       if (!recent.length) list.append(el('li', 'empty', 'Players appear here after you’ve been in a lobby with them.'));
       else if (!visible.length) list.append(el('li', 'empty', `No recent player matches “${query}”.`));
@@ -519,6 +564,7 @@ function renderRecent(s) {
     : [];
   const note = $('recent-note');
   note.textContent = s.preferencesError
+    || (banMode ? 'Tick the players to keep out of lobbies you host. Who you follow doesn’t change.' : '')
     || (strangers.length
       ? `Auto-join follows only Battle.net friends into lobbies. Auto-host still counts ${strangers.length === 1 ? strangers[0] : 'these players'} for Same team and Start when full.`
       : full ? `You can follow up to ${MAX_TAGS} players. Untick someone to choose another.`
@@ -526,7 +572,188 @@ function renderRecent(s) {
   note.classList.toggle('error-note', Boolean(s.preferencesError));
   $('recent-clear').hidden = !recent.length || !$('recent-confirm').hidden;
   if (!recent.length) closeClearConfirm();
+  $('ban-select').hidden = !recent.length || !$('recent-confirm').hidden;
+  if (!recent.length) leaveBanMode();
+  renderBanBar();
 }
+
+/* Choosing recent players to blacklist ---------------------------------- */
+
+// banMode switches the Recent players checkboxes from the follow group to
+// a separate choice of players to blacklist; banPick holds that choice.
+let banMode = false;
+let banConfirm = false;
+const banPick = new Set();
+
+function renderBanBar() {
+  $('recent-foot').hidden = banMode;
+  $('ban-bar').hidden = !banMode;
+  if (!banMode) return;
+  const n = banPick.size;
+  const who = plural(n, 'player', 'players');
+  $('ban-bar-text').textContent = banConfirm
+    ? `Blacklist ${who}? They’re banned from lobbies you host${state.manualTags.some(t => banPick.has(key(t))) ? ' and leave who you follow' : ''}.`
+    : n ? `${who} chosen.` : 'Choose players to blacklist.';
+  $('ban-apply').textContent = banConfirm ? 'Blacklist' : n ? `Blacklist ${who}` : 'Blacklist';
+  $('ban-apply').disabled = !n;
+  $('ban-cancel').textContent = banConfirm ? 'Back' : 'Cancel';
+}
+
+function enterBanMode() {
+  closeClearConfirm();
+  banMode = true;
+  banConfirm = false;
+  banPick.clear();
+  renderRecent(state);
+  ($('recent').querySelector('input:not(:disabled)') ?? $('ban-cancel')).focus();
+}
+
+function leaveBanMode({focus = false} = {}) {
+  if (!banMode) return;
+  banMode = false;
+  banConfirm = false;
+  banPick.clear();
+  if (state) renderRecent(state);
+  if (focus) ($('ban-select').hidden ? $('tab-recent') : $('ban-select')).focus();
+}
+
+$('ban-select').onclick = enterBanMode;
+$('ban-cancel').onclick = () => {
+  if (banConfirm) {
+    banConfirm = false;
+    renderRecent(state);
+    $('ban-apply').focus();
+  } else {
+    leaveBanMode({focus: true});
+  }
+};
+$('ban-apply').onclick = async () => {
+  if (!banPick.size) return;
+  if (!banConfirm) {
+    banConfirm = true;
+    renderRecent(state);
+    $('ban-cancel').focus();
+    return;
+  }
+  const tags = (state.recent ?? []).map(p => p.tag).filter(t => banPick.has(key(t)));
+  if (await act(() => bridge.AddToBlacklist(tags))) leaveBanMode({focus: true});
+};
+// Escape steps back: from the confirmation to choosing, then out.
+$('panel-recent').addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !banMode) return;
+  event.preventDefault();
+  $('ban-cancel').click();
+});
+
+/* Blacklist ------------------------------------------------------------- */
+
+const TAG_PATTERN = /^[^\s#]{2,32}#\d{3,12}$/;
+
+// addedOn says when a player was blacklisted: "Added today", "Added
+// yesterday" or "Added 3 Oct".
+function addedOn(iso, now = new Date()) {
+  const then = new Date(iso);
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (then >= midnight) return 'Added today';
+  if (then >= new Date(midnight - 86400000)) return 'Added yesterday';
+  const opts = {day: 'numeric', month: 'short'};
+  if (then.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
+  return `Added ${then.toLocaleDateString([], opts)}`;
+}
+
+function blacklistRow(entry) {
+  const li = el('li');
+  const row = el('div', 'person');
+  row.dataset.status = 'banned';
+  const added = el('time', 'added', addedOn(entry.added));
+  added.dateTime = entry.added;
+  added.title = new Date(entry.added).toLocaleString();
+  const remove = el('button', 'ghost small remove');
+  remove.type = 'button';
+  remove.dataset.tag = entry.tag;
+  remove.append(icon('x'), el('span', '', 'Remove'));
+  remove.setAttribute('aria-label', `Remove ${entry.tag} from the blacklist`);
+  remove.onclick = async () => {
+    const rows = [...$('blacklist').querySelectorAll('button.remove')];
+    const next = rows[rows.indexOf(remove) + 1] ?? rows[rows.indexOf(remove) - 1];
+    if (await act(() => bridge.RemoveFromBlacklist(entry.tag))) {
+      const target = next && $('blacklist').querySelector(`button.remove[data-tag="${CSS.escape(next.dataset.tag)}"]`);
+      (target ?? $('ban-tag')).focus();
+    }
+  };
+  const name = el('span', 'name', entry.tag);
+  name.title = entry.tag;
+  row.append(avatar(entry.tag, {banned: true}), name, added, remove);
+  li.append(row);
+  return li;
+}
+
+let blacklistSignature = '';
+let banNoteError = '';
+
+function renderBlacklist(s) {
+  const entries = s.blacklist ?? [];
+  const count = $('blacklist-count');
+  count.textContent = entries.length ? String(entries.length) : '';
+  if (entries.length) $('tab-blacklist').setAttribute('aria-label', `Blacklist, ${plural(entries.length, 'player', 'players')}`);
+  else $('tab-blacklist').removeAttribute('aria-label');
+  $('auto-ban').checked = Boolean(s.autoBan);
+  $('ban-manual').checked = Boolean(s.blacklistManualBans);
+  if (tab !== 'blacklist') return;
+
+  const query = $('friend-search').value.trim().toLowerCase();
+  const visible = query ? entries.filter(b => key(b.tag).includes(query)) : entries;
+  const signature = JSON.stringify([visible.map(b => [b.tag, addedOn(b.added)]), query, entries.length]);
+  if (signature !== blacklistSignature) {
+    blacklistSignature = signature;
+    const list = $('blacklist');
+    const scroll = list.scrollTop;
+    const focused = document.activeElement?.dataset?.tag;
+    list.replaceChildren();
+    for (const b of visible) list.append(blacklistRow(b));
+    if (!entries.length) list.append(el('li', 'empty', 'Nobody is blacklisted. Add a BattleTag below, or choose players in Recent players.'));
+    else if (!visible.length) list.append(el('li', 'empty', `No blacklisted player matches “${query}”.`));
+    list.scrollTop = scroll;
+    if (focused) list.querySelector(`button.remove[data-tag="${CSS.escape(focused)}"]`)?.focus();
+  }
+  const note = $('ban-note');
+  note.textContent = banNoteError || s.preferencesError
+    || (s.autoBan ? 'Kept on this computer. Team Follow bans only in lobbies you host, never in someone else’s.'
+      : 'Auto-ban is off. These players can join your lobbies until you turn it on.');
+  note.classList.toggle('error-note', Boolean(banNoteError || s.preferencesError));
+  $('ban-tag').setAttribute('aria-invalid', String(Boolean(banNoteError)));
+}
+
+function banNote(message) {
+  banNoteError = message;
+  if (state) renderBlacklist(state);
+}
+
+$('ban-tag').oninput = () => { if (banNoteError) banNote(''); };
+$('ban-form').onsubmit = async event => {
+  event.preventDefault();
+  const tag = $('ban-tag').value.trim();
+  if (!TAG_PATTERN.test(tag)) {
+    banNote('Enter a full BattleTag, such as Player#1234.');
+    $('ban-tag').focus();
+    return;
+  }
+  if (isBlacklisted(state, tag)) {
+    banNote(`${tag} is already on your blacklist.`);
+    $('ban-tag').focus();
+    return;
+  }
+  try {
+    render(await bridge.AddToBlacklist([tag]));
+    $('ban-tag').value = '';
+    banNote('');
+  } catch (err) {
+    banNote(String(err?.message ?? err));
+  }
+  $('ban-tag').focus();
+};
+$('auto-ban').onchange = () => act(() => bridge.SetAutoBan($('auto-ban').checked));
+$('ban-manual').onchange = () => act(() => bridge.SetBlacklistManualBans($('ban-manual').checked));
 
 function openClearConfirm() {
   const n = state?.recent?.length ?? 0;
@@ -558,6 +785,8 @@ $('recent-clear-yes').onclick = async () => {
 
 // Activity icons, by what the line is about.
 const logKinds = [
+  [/by mistake/, 'problem', 'alert'],
+  [/^Banned |blacklist/, 'ban', 'ban'],
   [/^Asked to join|^Confirming|^Password sent/, 'join', 'enter'],
   [/^Joined /, 'joined', 'check'],
   [/opened a lobby|open lobby/, 'seen', 'eye'],
@@ -743,7 +972,8 @@ boot();
 
 // demoOpen opens a dialog in the demo page, for screenshots:
 // ?open=host-setup|maps|maps-search|report|close-games. The recent scenes
-// open the Recent players tab.
+// open the Recent players tab (recent-select and recent-select-confirm in
+// its blacklist selection), the blacklist scenes the Blacklist tab.
 async function demoOpen(what) {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   switch (what) {
@@ -781,6 +1011,23 @@ async function demoOpen(what) {
       selectTab('recent');
       await wait(50);
       openClearConfirm();
+      break;
+    case 'recent-select':
+    case 'recent-select-confirm':
+      selectTab('recent');
+      await wait(50);
+      enterBanMode();
+      banPick.add(key('Kelthuzad#6644'));
+      banPick.add(key('Anubarak#5102'));
+      banConfirm = what === 'recent-select-confirm';
+      renderRecent(state);
+      if (banConfirm) $('ban-cancel').focus();
+      else document.activeElement?.blur();
+      break;
+    case 'blacklist':
+    case 'blacklist-empty':
+    case 'blacklist-off':
+      selectTab('blacklist');
       break;
   }
 }
@@ -1164,7 +1411,8 @@ $('maps-choose').onclick = () => browser.selected && choose(browser.selected);
 /* Demo bridge: used only when the page runs outside the app, to preview
    the design in a browser. Pick a scene with ?scene=watching|first|live|
    paused|password|waiting|many|linux|unverified|host-waiting|host-lobby|
-   game-mode|keyboard-ask|keyboard-linux|recent|recent-empty|recent-clear;
+   game-mode|keyboard-ask|keyboard-linux|recent|recent-empty|recent-clear|
+   recent-select|recent-select-confirm|blacklist|blacklist-empty|blacklist-off;
    add &open=host-setup to see the Game mode group. */
 function demoBridge() {
   const scene = new URLSearchParams(location.search).get('scene') || 'watching';
@@ -1201,18 +1449,25 @@ function demoBridge() {
     ['Medivh#3310', 'Castle Fight', 0],
     ['Varimathras#2207', 'Castle Fight', 0],
     ['Arthas#1123', 'Castle Fight', 3],
+    ['Garrosh#7781', 'Castle Fight', 9],
     ['Kelthuzad#6644', 'Legion TD x20', 26],
     ['Jaina#2214', 'Legion TD x20', 26],
     ['Anubarak#5102', 'Footmen Frenzy 6.2', 190],
     ['Rexxar#4471', 'Island Defense 4.1', 60 * 26],
-    ['Garrosh#7781', 'Island Defense 4.1', 60 * 26],
     ['Alleria#4415', 'Green Circle TD 2020', 60 * 24 * 3],
     ['Zuljin#3087', 'Legion TD Mega 4.2', 60 * 24 * 12],
     ['Vereesa#9920', 'Element TD 5.5', 60 * 24 * 40],
     ['Rokhan#1500', '(4)Twisted Meadows', 60 * 24 * 41],
   ].map(([tag, map, mins]) => ({tag, map, lastSeen: at(mins)}));
+  // Blacklist: sample BattleTags only. Garrosh is also a recent player.
+  const blacklist = [
+    ['Garrosh#7781', 60 * 26],
+    ['Deathwing#6666', 60 * 24 * 9],
+    ['Mannoroth#1404', 60 * 24 * 33],
+  ].map(([tag, mins]) => ({tag, added: at(mins)}));
   const s = {
     recent, lobbyTags: ['Medivh#3310', 'Varimathras#2207'],
+    blacklist, autoBan: true, blacklistManualBans: true,
     connected: true, version: '3.0.1.24371', verifiedBuild: true, enabled: false, diagnostic: false,
     manualTags: ['Arthas#1123', 'Jaina#2214', 'Thrall#1820', 'Uther#5521'], includeTeam: true, joinHostTeam: true,
     status: '', screen: 'CUSTOM_LOBBIES', busy: false, queued: false, inMatch: false, paused: false, inMenus: true,
@@ -1268,6 +1523,12 @@ function demoBridge() {
     recent: {manualTags: ['Arthas#1123', 'Jaina#2214', 'Kelthuzad#6644'], busy: true, inMenus: false, screen: 'GAME_LOBBY'},
     'recent-empty': {recent: [], lobbyTags: []},
     'recent-clear': {},
+    'recent-select': {manualTags: ['Arthas#1123', 'Jaina#2214']},
+    'recent-select-confirm': {manualTags: ['Arthas#1123', 'Jaina#2214']},
+    blacklist: {log: [...s.log.slice(0, 2), {time: at(2), message: 'Your lobby “LTD with friends” is open. Press Start in Warcraft III when everyone’s in.'},
+      {time: at(1), message: 'Banned Garrosh#7781 (on your blacklist).'}, {time: at(0), message: 'Added Mannoroth#1404 to your blacklist (you banned them).'}]},
+    'blacklist-empty': {blacklist: []},
+    'blacklist-off': {autoBan: false},
   };
   Object.assign(s, scenes[scene] || {});
   if (s.enabled) watch();
@@ -1288,6 +1549,20 @@ function demoBridge() {
     },
     SubmitPassword: async () => { s.passwordRequest = null; return clone(); },
     ClearRecentPlayers: async () => { s.recent = []; s.lobbyTags = []; return clone(); },
+    AddToBlacklist: async tags => {
+      for (const tag of tags) {
+        if (!TAG_PATTERN.test(tag.trim())) throw new Error('Enter a full BattleTag, such as Player#1234.');
+        if (s.team.some(m => m.isSelf && key(m.battleTag) === key(tag))) throw new Error('You can’t blacklist yourself.');
+      }
+      const added = tags.filter(t => !isBlacklisted(s, t));
+      s.blacklist = [...added.map(tag => ({tag: tag.trim(), added: new Date().toISOString()})), ...s.blacklist];
+      s.manualTags = s.manualTags.filter(t => !isBlacklisted(s, t));
+      if (added.length) s.log.push({time: new Date().toISOString(), message: added.length === 1 ? `Added ${added[0]} to your blacklist.` : `Added ${added.length} players to your blacklist.`});
+      return clone();
+    },
+    RemoveFromBlacklist: async tag => { s.blacklist = s.blacklist.filter(b => key(b.tag) !== key(tag)); return clone(); },
+    SetAutoBan: async on => { s.autoBan = on; return clone(); },
+    SetBlacklistManualBans: async on => { s.blacklistManualBans = on; return clone(); },
     RequestKeyboardPermission: async () => { s.keyboard = {supported: true, permitted: true, reason: ''}; return clone(); },
     ConfigureHost: async cfg => {
       if (cfg.settings) s.host.settings = cfg.settings;
