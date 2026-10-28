@@ -640,7 +640,31 @@ function hostSummary(st) {
   if (!st.mapPath) return 'Create your lobby on a map, then wait for your group.';
   const extras = [st.private ? 'private' : 'public', st.startWhenFull && 'starts when full', st.sameTeam && 'same team', st.inviteGroup && 'invites your group']
     .filter(Boolean).join(', ');
-  return `${st.mapName}, “${st.gameName || 'no name yet'}”. ${extras.charAt(0).toUpperCase()}${extras.slice(1)}.`;
+  return `${st.mapName}, “${st.gameName || 'no name yet'}”. ${extras.charAt(0).toUpperCase()}${extras.slice(1)}.${gameModeSummary(st)}`;
+}
+
+function gameModeSummary(st) {
+  if (!st.gameMode) return '';
+  const secs = st.gameModeDelaySeconds ?? 5;
+  return secs ? ` Game mode ${st.gameMode} after ${secs} s.` : ` Game mode ${st.gameMode} right after loading.`;
+}
+
+// renderKeyboard shows, in Auto-host setup, whether Game mode can type on
+// this computer, with a button to allow it when the system asks first.
+function renderKeyboard(k) {
+  const kb = k ?? {supported: false, permitted: false, reason: ''};
+  const line = $('keyboard-line');
+  if (kb.supported && kb.permitted) {
+    line.dataset.state = 'ok';
+    $('keyboard-note').textContent = 'Team Follow may type on this computer.';
+  } else if (kb.supported) {
+    line.dataset.state = 'ask';
+    $('keyboard-note').textContent = kb.reason || 'Team Follow needs your permission to type in Warcraft III.';
+  } else {
+    line.dataset.state = 'off';
+    $('keyboard-note').textContent = kb.reason || 'Typing in the match chat isn’t supported on this computer yet.';
+  }
+  $('keyboard-allow').hidden = !(kb.supported && !kb.permitted);
 }
 
 function renderHost(s) {
@@ -653,6 +677,7 @@ function renderHost(s) {
   $('host-help').textContent = hostSummary(h.settings);
   $('host-setup').classList.toggle('needs-setup', !h.settings.mapPath || !h.settings.gameName);
   $('host-blocked').textContent = s.connected || !h.settings.mapPath ? reason : '';
+  renderKeyboard(s.keyboard);
   if (confirmFor === 'Auto-host' && (h.enabled || reason)) closeConfirm();
 }
 
@@ -680,6 +705,9 @@ function fillHostForm() {
   $('host-start-full').checked = Boolean(draft.startWhenFull);
   $('host-same-team').checked = Boolean(draft.sameTeam);
   $('host-invite').checked = Boolean(draft.inviteGroup);
+  $('game-mode').value = draft.gameMode || '';
+  $('game-mode-delay').value = String(draft.gameModeDelaySeconds ?? 5);
+  updateGameModeCount();
   $('host-error').textContent = '';
 }
 
@@ -687,13 +715,33 @@ function updateNameCount() {
   $('host-name-count').textContent = `${[...$('host-name').value].length}/31`;
 }
 
+function updateGameModeCount() {
+  const n = [...$('game-mode').value.trim()].length;
+  $('game-mode-count').textContent = n ? `${n}/100` : 'Off';
+}
+
+// gameModeDelay reads Seconds after loading, kept within 0 to 120.
+function gameModeDelay() {
+  const secs = Math.round(Number($('game-mode-delay').value));
+  return Number.isFinite(secs) ? Math.min(120, Math.max(0, secs)) : 5;
+}
+
 $('host-setup').onclick = () => {
   if (!state) return;
-  draft = {delaySeconds: 10, ...state.host.settings};
+  draft = {delaySeconds: 10, gameModeDelaySeconds: 5, ...state.host.settings};
   fillHostForm();
   $('host-dialog').showModal();
 };
 $('host-name').oninput = updateNameCount;
+$('game-mode').oninput = updateGameModeCount;
+$('keyboard-allow').onclick = async () => {
+  $('host-error').textContent = '';
+  try {
+    render(await bridge.RequestKeyboardPermission());
+  } catch (err) {
+    $('host-error').textContent = String(err?.message ?? err);
+  }
+};
 $('host-cancel').onclick = () => $('host-dialog').close();
 $('host-choose-map').onclick = () => openMapBrowser(entry => {
   draft.mapPath = entry.path;
@@ -715,6 +763,8 @@ $('host-form').onsubmit = async event => {
     startWhenFull: $('host-start-full').checked,
     sameTeam: $('host-same-team').checked,
     inviteGroup: $('host-invite').checked,
+    gameMode: $('game-mode').value.trim(),
+    gameModeDelaySeconds: gameModeDelay(),
   };
   try {
     render(await bridge.ConfigureHost({settings}));
@@ -918,7 +968,9 @@ $('maps-choose').onclick = () => browser.selected && choose(browser.selected);
 
 /* Demo bridge: used only when the page runs outside the app, to preview
    the design in a browser. Pick a scene with ?scene=watching|first|live|
-   paused|password|waiting|many|linux|unverified|host-waiting|host-lobby. */
+   paused|password|waiting|many|linux|unverified|host-waiting|host-lobby|
+   game-mode|keyboard-ask|keyboard-linux; add &open=host-setup to see the
+   Game mode group. */
 function demoBridge() {
   const scene = new URLSearchParams(location.search).get('scene') || 'watching';
   const now = Date.now();
@@ -938,7 +990,7 @@ function demoBridge() {
     ['Malfurion#2034', 'Offline', false, false, false, '', false],
   ].map(([battleTag, label, inGame, open, away, lobby = '', online = true]) => ({battleTag, label, inGame, open, away, lobby, online, selected: false}));
   const find = tag => roster.find(r => key(r.battleTag) === key(tag));
-  const hostDemo = {mapPath: '/Maps/Download/Legion TD x20.w3x', mapName: 'Legion TD x20', gameName: 'LTD with friends', private: false, visibility: 0, observers: 0, delaySeconds: 10, startWhenFull: false, sameTeam: false, inviteGroup: true};
+  const hostDemo = {mapPath: '/Maps/Download/Legion TD x20.w3x', mapName: 'Legion TD x20', gameName: 'LTD with friends', private: false, visibility: 0, observers: 0, delaySeconds: 10, startWhenFull: false, sameTeam: false, inviteGroup: true, gameMode: '', gameModeDelaySeconds: 5};
   const mapsRoot = '/Users/player/Library/Application Support/Blizzard/Warcraft III/Maps';
   const day = d => new Date(Date.UTC(2026, 0, 1) + d * 86400000).toISOString();
   const tree = {
@@ -958,6 +1010,7 @@ function demoBridge() {
       {battleTag: 'Sylvanas#9031', isFriend: true, status: 'In Warcraft III'},
     ],
     watched: [], friends: [], roster, lastJoin: null, mapsFolder: '',
+    keyboard: {supported: true, permitted: true, reason: ''},
     host: {enabled: false, phase: 'off', settings: hostDemo, players: 0, slots: 0, missing: [], offTeam: []},
     log: [
       {time: at(12), message: 'Connected to Warcraft III. Form a team in the game, or add friends here.'},
@@ -980,6 +1033,13 @@ function demoBridge() {
     'host-waiting': {host: {enabled: true, phase: 'waiting', createAt: new Date(now + 8000).toISOString(), settings: hostDemo, players: 0, slots: 0, missing: [], offTeam: []}},
     'host-lobby': {host: {enabled: true, phase: 'lobby', settings: {...hostDemo, startWhenFull: true, sameTeam: true}, players: 3, slots: 6, full: false, missing: ['Jaina#2214', 'Thrall#1820'], offTeam: ['Uther#5521']},
       log: [{time: at(1), message: 'Your lobby “LTD with friends” is open. It starts once it’s full and everyone you follow is in.'}, {time: at(0), message: 'Moving Uther#5521 to your team.'}]},
+    'game-mode': {host: {enabled: true, phase: 'match', settings: {...hostDemo, startWhenFull: true, gameMode: '-ar'}, players: 6, slots: 6, full: true, missing: [], offTeam: []},
+      busy: true, inMatch: true, inMenus: false, screen: 'DISABLED_SCREEN', status: 'Typed -ar in the game chat.',
+      log: [{time: at(2), message: 'The lobby is full and everyone’s in. Starting the game.'}, {time: at(1), message: 'The match started. Game mode types -ar in 5 seconds; keep Warcraft III in front.'}, {time: at(1), message: 'Typed -ar in the game chat.'}]},
+    'keyboard-ask': {host: {enabled: false, phase: 'off', settings: {...hostDemo, gameMode: '-ar'}, players: 0, slots: 0, missing: [], offTeam: []},
+      keyboard: {supported: true, permitted: false, reason: 'Team Follow needs permission to send keystrokes. Allow it in System Settings, Privacy & Security, Accessibility, then try again.'}},
+    'keyboard-linux': {host: {enabled: false, phase: 'off', settings: {...hostDemo, gameMode: '-ar', gameModeDelaySeconds: 0}, players: 0, slots: 0, missing: [], offTeam: []},
+      keyboard: {supported: false, permitted: false, reason: 'Typing in the match chat isn’t supported on Linux yet.'}},
     watching: {log: [{time: at(3), message: 'Connected to Warcraft III. Form a team in the game, or add friends here.'}, {time: at(1), message: 'Arthas#1123 opened a lobby: Footmen Frenzy 6.2.'}]},
     first: {manualTags: [], team: [{battleTag: 'Player#1234', isSelf: true, status: 'You'}], log: s.log.slice(0, 1)},
     live: {enabled: true},
@@ -1008,6 +1068,7 @@ function demoBridge() {
       return clone();
     },
     SubmitPassword: async () => { s.passwordRequest = null; return clone(); },
+    RequestKeyboardPermission: async () => { s.keyboard = {supported: true, permitted: true, reason: ''}; return clone(); },
     ConfigureHost: async cfg => {
       if (cfg.settings) s.host.settings = cfg.settings;
       if (cfg.enabled === false) s.host = {...s.host, enabled: false, phase: 'off'};
