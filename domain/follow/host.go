@@ -115,7 +115,40 @@ type hostState struct {
 	// heldFull is set once the player was told a full lobby is waiting
 	// for the group; it resets when the lobby isn't full.
 	heldFull bool
+	// swap is Same team's !swap state for this lobby.
+	swap swapState
+	// lobby is the latest GameLobbySetup, read again when a timer ends.
+	lobby map[string]any
 }
+
+// swapState throttles !swap: one at a time, each waiting for the lobby to
+// change or for swapTimeout, and none after maxSwaps without a change.
+type swapState struct {
+	// sentAt is when the pending swap was typed; zero when none is pending.
+	sentAt time.Time
+	// seats is the lobby's seating when it was typed.
+	seats string
+	// member is the group member the pending swap is for.
+	member string
+	// unanswered counts swaps after which the member still wasn't on the
+	// host's team.
+	unanswered int
+	// waiting holds when each member was first seen able to move into an
+	// open slot on the host's team, which only their own Team Follow can do.
+	waiting map[string]time.Time
+	// recheckAt is when a member's wait ends and the lobby is read again.
+	recheckAt time.Time
+}
+
+const (
+	// swapTimeout is how long a swap waits for the lobby to change.
+	swapTimeout = 5 * time.Second
+	// maxSwaps is how many unanswered swaps Same team types per lobby.
+	maxSwaps = 3
+	// selfMoveWait is how long the host waits for a member to move itself
+	// into an open slot on the host's team before swapping instead.
+	selfMoveWait = 10 * time.Second
+)
 
 // NormalizeHostSettings trims and checks the settings Auto-host needs.
 func NormalizeHostSettings(s dto.HostSettings) (dto.HostSettings, error) {
@@ -197,7 +230,7 @@ func (e *Engine) waitToHost() {
 	e.host.createAt = e.now().Add(time.Duration(e.host.settings.DelaySeconds) * time.Second)
 	e.host.startSent, e.host.countdown, e.host.locked = false, false, false
 	e.host.players, e.host.slots, e.host.full, e.host.missing, e.host.offTeam = 0, 0, false, nil, nil
-	e.host.moves, e.host.invited = nil, nil
+	e.host.moves, e.host.invited, e.host.swap, e.host.lobby = nil, nil, swapState{}, nil
 }
 
 func quote(s string) string { return "“" + s + "”" }
@@ -245,6 +278,20 @@ func (e *Engine) hostStep() {
 	case HostCreating:
 		if e.now().Sub(h.since) > createTimeout {
 			e.stopHost("The game didn't open the lobby. Check the map in Warcraft III; Auto-host is off.")
+		}
+	case HostLobby:
+		if !h.swap.sentAt.IsZero() && e.now().Sub(h.swap.sentAt) >= swapTimeout {
+			// The lobby didn't change: the swap went unanswered.
+			h.swap.sentAt = time.Time{}
+			if e.swapUnanswered() && h.lobby != nil {
+				e.lobbyUpdate(h.lobby)
+			}
+		}
+		if !h.swap.recheckAt.IsZero() && !e.now().Before(h.swap.recheckAt) {
+			h.swap.recheckAt = time.Time{}
+			if h.lobby != nil {
+				e.lobbyUpdate(h.lobby)
+			}
 		}
 	}
 }
@@ -310,7 +357,7 @@ func (e *Engine) hostReceive(kind string, p map[string]any) {
 func (e *Engine) lobbyOpened() {
 	h := &e.host
 	h.phase, h.startSent, h.countdown, h.locked = HostLobby, false, false, false
-	h.moves, h.invited = map[string]int{}, map[string]bool{}
+	h.moves, h.invited, h.swap = map[string]int{}, map[string]bool{}, swapState{}
 	if h.settings.StartWhenFull {
 		e.Note("Your lobby " + quote(h.settings.GameName) + " is open. It starts once it's full and everyone you follow is in.")
 	} else {
@@ -343,6 +390,7 @@ func (e *Engine) lobbyUpdate(p map[string]any) {
 	if !ok {
 		return
 	}
+	h.lobby = p
 	var players []lobbyPlayer
 	var openTeams []any
 	open := 0
@@ -375,7 +423,15 @@ func (e *Engine) lobbyUpdate(p map[string]any) {
 	h.full = open == 0 && h.players > 0
 
 	h.missing, h.offTeam = nil, nil
-	acted := false
+	// A pending swap waits for the lobby to change before anything else
+	// moves; once it changes, the swap counts as answered.
+	if !h.swap.sentAt.IsZero() && seating(players) != h.swap.seats {
+		h.swap.sentAt = time.Time{}
+		if pl := findPlayer(players, h.swap.member); pl == nil || self == nil || !sameNumber(pl.team, self.team) {
+			e.swapUnanswered()
+		}
+	}
+	acted := !h.swap.sentAt.IsZero()
 	for _, tag := range e.group() {
 		pl := findPlayer(players, tag)
 		switch {
@@ -478,6 +534,8 @@ func (e *Engine) bringTogether(players []lobbyPlayer, openTeams []any, self, pl 
 		e.moveSlot(self.slot, pl.team, "self", "Moving you to "+tag+"'s team.")
 	case pl.canMove && e.makeRoom(players, openTeams, self.team, pl.team, tag):
 	case self.canMove && e.makeRoom(players, openTeams, pl.team, self.team, tag):
+	case hasTeam(openTeams, self.team) && e.waitForSelfMove(tag):
+	case e.swapWithStranger(players, self, pl, tag):
 	default:
 		key := tagKey(tag) + ":stuck"
 		if e.host.moves[key] == 0 {
@@ -485,6 +543,105 @@ func (e *Engine) bringTogether(players []lobbyPlayer, openTeams []any, self, pl 
 			e.Note("You and " + tag + " can't be put on one team: the game only lets the host move itself and computers, and there's no open slot for that.")
 		}
 	}
+}
+
+// waitForSelfMove gives a member selfMoveWait to move into the open slot on
+// the host's team, which the game lets only their own Team Follow do, and
+// says so once. It reports false once the wait is over.
+func (e *Engine) waitForSelfMove(tag string) bool {
+	h := &e.host
+	if h.swap.waiting == nil {
+		h.swap.waiting = map[string]time.Time{}
+	}
+	key := tagKey(tag)
+	since, ok := h.swap.waiting[key]
+	if !ok {
+		since = e.now()
+		h.swap.waiting[key] = since
+		h.swap.recheckAt = since.Add(selfMoveWait)
+		e.Note("Waiting for " + tag + " to move to your team. Their Team Follow does that; the game's swap command can't use an open slot.")
+	}
+	return e.now().Sub(since) < selfMoveWait
+}
+
+// swapWithStranger types the game's own lobby command !swap to trade a
+// group member with a human on the host's team who isn't in the group.
+// !swap numbers the playable positions slot + 1 and only trades two
+// players: open slots and the map's computers are never targets (checked
+// live on 3.0.1.24371, docs/follow-behaviour.md). It reports false when
+// there is no such player.
+func (e *Engine) swapWithStranger(players []lobbyPlayer, self, pl lobbyPlayer, tag string) bool {
+	h := &e.host
+	if h.swap.unanswered >= maxSwaps {
+		// Already said once that the game didn't answer.
+		return true
+	}
+	if h.countdown || h.locked {
+		// Nothing is typed into a starting game.
+		return true
+	}
+	from, ok := position(pl.slot)
+	if !ok {
+		return false
+	}
+	group := e.group()
+	for _, other := range players {
+		to, ok := position(other.slot)
+		if !ok || !other.occupied || other.computer || other.self || !sameNumber(other.team, self.team) ||
+			slices.ContainsFunc(group, func(t string) bool { return findPlayer([]lobbyPlayer{other}, t) != nil }) {
+			continue
+		}
+		if e.sendChat(fmt.Sprintf("!swap %d %d", from, to)) != nil {
+			return false
+		}
+		h.swap.sentAt, h.swap.seats, h.swap.member = e.now(), seating(players), tag
+		e.Note("Asked the game to swap " + tag + " with " + other.name + ".")
+		return true
+	}
+	return false
+}
+
+// swapUnanswered counts a swap that didn't bring its member to the host's
+// team, and says once when Same team stops typing it in this lobby. It
+// reports whether more swaps may be typed.
+func (e *Engine) swapUnanswered() bool {
+	h := &e.host
+	h.swap.unanswered++
+	if h.swap.unanswered < maxSwaps {
+		return true
+	}
+	if h.swap.unanswered == maxSwaps {
+		e.Note(fmt.Sprintf("The game didn't answer the swap command %d times, so Team Follow stopped asking in this lobby. Move players yourself.", maxSwaps))
+	}
+	return false
+}
+
+// seating describes who sits where on which team, to tell whether the
+// lobby changed after a swap.
+func seating(players []lobbyPlayer) string {
+	var b strings.Builder
+	for _, pl := range players {
+		if pl.occupied {
+			fmt.Fprintf(&b, "%v=%s:%v;", pl.slot, tagKey(pl.name), pl.team)
+		}
+	}
+	return b.String()
+}
+
+// position is a slot's number in the game's !swap command: slot + 1.
+func position(slot any) (int, bool) {
+	n, ok := slot.(int)
+	if !ok {
+		f, isFloat := slot.(float64)
+		if !isFloat || f != float64(int(f)) {
+			return 0, false
+		}
+		n = int(f)
+	}
+	if n < 0 {
+		return 0, false
+	}
+	return n + 1, true
 }
 
 // moveSlot asks the game to move a slot to a team, the way the lobby's team
