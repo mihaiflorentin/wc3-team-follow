@@ -65,6 +65,9 @@ type FollowState struct {
 	Host HostState `json:"host"`
 	// MapsFolder is the folder the map browser opens.
 	MapsFolder string `json:"mapsFolder"`
+	// Keyboard says whether Game mode can type in the match chat on this
+	// computer.
+	Keyboard KeyboardStatus `json:"keyboard"`
 }
 
 // TeamMember is one player of the game's current team.
@@ -182,7 +185,17 @@ type HostSettings struct {
 	// InviteGroup invites everyone in the follow group who is in
 	// Warcraft III but not in the lobby, for friends without Team Follow.
 	InviteGroup bool `json:"inviteGroup"`
+	// GameMode is the chat command Team Follow types once in a match from
+	// a lobby Auto-host created, for example "-ar"; "" turns Game mode off.
+	GameMode string `json:"gameMode"`
+	// GameModeDelaySeconds is how long after the match starts GameMode is
+	// typed, 0 to 120 seconds.
+	GameModeDelaySeconds int `json:"gameModeDelaySeconds"`
 }
+
+// DefaultGameModeDelaySeconds is HostSettings.GameModeDelaySeconds when
+// none was saved.
+const DefaultGameModeDelaySeconds = 5
 
 // HostConfig changes Auto-host. Nil fields are left unchanged.
 type HostConfig struct {

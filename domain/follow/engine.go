@@ -167,6 +167,8 @@ type Engine struct {
 
 	// host is Auto-host.
 	host hostState
+	// chatLines are lines Game mode wants typed, for TakeChatLine.
+	chatLines []string
 
 	attempted      []string
 	presenceEpochs map[string]presenceEpoch
@@ -194,6 +196,7 @@ func NewEngine(send Sender, now func() time.Time, verified []string) *Engine {
 		counts:         map[string]int{},
 		presenceEpochs: map[string]presenceEpoch{},
 		seenOpen:       map[string]bool{},
+		host:           hostState{settings: dto.HostSettings{GameModeDelaySeconds: DefaultGameModeDelay}},
 	}
 }
 

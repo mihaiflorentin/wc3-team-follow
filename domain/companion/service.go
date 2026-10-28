@@ -55,6 +55,9 @@ type Ports struct {
 	Library   contract.MapLibrary
 	// Processes closes the game when the player asks for it.
 	Processes contract.GameProcesses
+	// Keyboard types Game mode's command in the match chat; nil means this
+	// build can't type.
+	Keyboard contract.GameKeyboard
 }
 
 type Service struct {
@@ -64,6 +67,7 @@ type Service struct {
 	maps      contract.MapsLocator
 	library   contract.MapLibrary
 	processes contract.GameProcesses
+	keyboard  contract.GameKeyboard
 	logger    *slog.Logger
 	opts      Options
 
@@ -84,6 +88,10 @@ type Service struct {
 	mapsFolder string
 	// lastStatus is the last status line written to the log.
 	lastStatus string
+	// gamePID is the connected game's process id, for typing.
+	gamePID int
+	// keyboardStatus is the keyboard's last reported status.
+	keyboardStatus dto.KeyboardStatus
 
 	subMu       sync.Mutex
 	subscribers map[int]func(dto.FollowState)
@@ -103,6 +111,7 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		maps:        ports.Maps,
 		library:     ports.Library,
 		processes:   ports.Processes,
+		keyboard:    ports.Keyboard,
 		logger:      logger,
 		opts:        opts,
 		subscribers: map[int]func(dto.FollowState){},
@@ -192,8 +201,11 @@ func (s *Service) Run(ctx context.Context) error {
 
 // step runs once a second: timers, roster refresh and discovery.
 func (s *Service) step(ctx context.Context) {
+	keyboard := s.readKeyboardStatus(ctx)
 	s.mu.Lock()
+	s.keyboardStatus = keyboard
 	s.engine.Tick()
+	s.typeChatLines(ctx)
 	s.logStatus()
 	s.refresh()
 	start := s.session == nil && !s.connecting && !s.closing && !s.opts.Now().Before(s.nextDiscovery)
@@ -248,7 +260,7 @@ func (s *Service) connect(ctx context.Context) {
 		s.notify()
 		return
 	}
-	s.session, s.hint, s.gameCount = session, "", 0
+	s.session, s.hint, s.gameCount, s.gamePID = session, "", 0, conn.PID
 	s.engine.Connection(true, conn.Version)
 	s.logStatus()
 	s.lastRefresh = time.Time{}
@@ -264,12 +276,7 @@ func (s *Service) connect(ctx context.Context) {
 // (discovery's errors are sentences starting with a capital letter), or a
 // generic hint for internal errors.
 func playerMessage(err error) string {
-	for e := err; e != nil; e = errors.Unwrap(e) {
-		if t := e.Error(); t != "" && t[0] >= 'A' && t[0] <= 'Z' {
-			return t
-		}
-	}
-	return "Waiting for Warcraft III."
+	return playerSentence(err, "Waiting for Warcraft III.")
 }
 
 // gameCount returns how many copies of the game a discovery error says are
@@ -315,6 +322,7 @@ func (s *Service) read(ctx context.Context, session contract.GameSession) {
 				s.logger.DebugContext(ctx, "companion.event", slog.String("type", ev.MessageType))
 			}
 			s.engine.Receive(ev)
+			s.typeChatLines(ctx)
 			if ev.MessageType == "GameLobbySetup" {
 				s.logLobby(ctx, ev)
 			}
@@ -346,6 +354,7 @@ func (s *Service) State() dto.FollowState {
 func (s *Service) snapshot() dto.FollowState {
 	state := s.engine.Snapshot()
 	state.MapsFolder = s.mapsFolder
+	state.Keyboard = s.keyboardStatus
 	state.PreferencesError = s.prefsError
 	if !state.Connected {
 		state.ConnectionHint = s.hint
@@ -672,4 +681,94 @@ func (s *Service) CloseGames(ctx context.Context) (dto.FollowState, error) {
 	}
 	s.notify()
 	return state, err
+}
+
+// noKeyboard is the status when this build has no way to type.
+var noKeyboard = dto.KeyboardStatus{Reason: "Typing in the game chat isn't supported on this system yet."}
+
+// readKeyboardStatus asks the keyboard whether it can type. It never
+// prompts and runs without s.mu.
+func (s *Service) readKeyboardStatus(ctx context.Context) dto.KeyboardStatus {
+	if s.keyboard == nil {
+		return noKeyboard
+	}
+	return s.keyboard.Status(ctx)
+}
+
+// RequestKeyboardPermission asks the system for the permission typing
+// needs, which may show a system prompt. The window calls it only when the
+// player clicks to allow typing.
+func (s *Service) RequestKeyboardPermission(ctx context.Context) (dto.FollowState, error) {
+	if s.keyboard == nil {
+		return s.State(), errors.New(noKeyboard.Reason)
+	}
+	err := s.keyboard.RequestPermission(ctx)
+	status := s.keyboard.Status(ctx)
+	s.mu.Lock()
+	s.keyboardStatus = status
+	state := s.snapshot()
+	s.mu.Unlock()
+	if err != nil {
+		s.logger.WarnContext(ctx, "keyboard.permission", slog.Any("error", err))
+		err = errors.New(playerSentence(err, "The permission to type couldn't be requested. Allow it in your system settings."))
+	} else {
+		s.logger.InfoContext(ctx, "keyboard.permission", slog.Bool("permitted", status.Permitted))
+	}
+	s.notify()
+	return state, err
+}
+
+// typeChatLines starts typing every line Game mode asked for. Typing takes
+// a second or two, so each line is typed in its own goroutine, off s.mu.
+// It runs with s.mu held.
+func (s *Service) typeChatLines(ctx context.Context) {
+	for {
+		line, ok := s.engine.TakeChatLine()
+		if !ok {
+			return
+		}
+		go s.typeChatLine(ctx, s.gamePID, line)
+	}
+}
+
+// typeChatLine types one line into the game and reports the result to the
+// engine. Nothing is retried.
+func (s *Service) typeChatLine(ctx context.Context, pid int, line string) {
+	defer s.guard("type")
+	failure := ""
+	status := s.readKeyboardStatus(ctx)
+	switch {
+	case !status.Supported || !status.Permitted:
+		failure = status.Reason
+		if failure == "" {
+			failure = "Team Follow isn't allowed to type on this computer."
+		}
+	default:
+		if err := s.keyboard.TypeLine(ctx, pid, line); err != nil {
+			s.logger.WarnContext(ctx, "gamemode.type", slog.Any("error", err))
+			failure = playerSentence(err, "Keep Warcraft III in front while Game mode types.")
+		}
+	}
+	if failure == "" {
+		s.logger.InfoContext(ctx, "gamemode.typed", slog.String("line", line))
+	} else {
+		s.logger.InfoContext(ctx, "gamemode.not_typed", slog.String("line", line), slog.String("reason", failure))
+	}
+	s.mu.Lock()
+	s.keyboardStatus = status
+	s.engine.ChatLineTyped(line, failure)
+	s.logStatus()
+	s.mu.Unlock()
+	s.notify()
+}
+
+// playerSentence returns the outermost error text written for players (a
+// sentence starting with a capital letter), or fallback.
+func playerSentence(err error, fallback string) string {
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		if t := e.Error(); t != "" && t[0] >= 'A' && t[0] <= 'Z' {
+			return t
+		}
+	}
+	return fallback
 }

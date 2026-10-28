@@ -53,7 +53,12 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve game processes: %w", err)
 		}
-		ports := companion.Ports{Discovery: discovery, Dialer: dialer, Prefs: prefs, Maps: locator, Library: library, Processes: processes}
+		keyboard, err := s.GameKeyboard()
+		if err != nil {
+			return nil, fmt.Errorf("resolve game keyboard: %w", err)
+		}
+		ports := companion.Ports{Discovery: discovery, Dialer: dialer, Prefs: prefs, Maps: locator, Library: library, Processes: processes,
+			Keyboard: keyboard}
 		return companion.New(ports, s.logger, companion.Options{
 			VerifiedBuilds:    cfg.VerifiedBuilds,
 			RefreshInterval:   refresh,

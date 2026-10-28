@@ -1,6 +1,6 @@
 # 6. Typing in the game chat
 
-Status: accepted (2026-10-28)
+Status: accepted (2026-10-28). Extended by ADR 0007 (the match chat, with keystrokes).
 
 ## Context
 

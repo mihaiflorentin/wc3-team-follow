@@ -887,3 +887,43 @@ select {
 .joincard .autojoin-option:has(input:focus-visible) { outline: 2px solid var(--preview); outline-offset: 4px; border-radius: 6px; }
 /* Options after the first share its divider, so they read as one group. */
 .joincard .autojoin-option + .autojoin-option { padding-top: 0; border-top: 0; }
+
+/* Auto-host setup: Game mode, typed in the match chat after loading. The
+   keyboard line says whether Team Follow may type on this computer. */
+.game-mode {
+  margin-top: 18px;
+  padding: 12px 12px 14px;
+  border-radius: 8px;
+  background: var(--spruce-deep);
+}
+.game-mode h3 { margin: 0; font: 600 15px/1.25 var(--display); font-stretch: 85%; color: var(--bone); }
+.game-mode > .fine { margin-top: 4px; line-height: 1.45; }
+.game-mode-row { display: grid; grid-template-columns: 1fr 150px; gap: 12px; }
+.game-mode .field { margin-top: 12px; }
+#game-mode { font-weight: 600; }
+.keyboard-line {
+  --dot: var(--online);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--lichen);
+}
+.keyboard-line::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot);
+}
+.keyboard-line span { flex: 1; min-width: 0; }
+.keyboard-line[data-state="ask"] { --dot: var(--open); color: var(--bone); }
+.keyboard-line[data-state="off"] { --dot: var(--offline); }
+.keyboard-line button { flex: none; }
+
+@media (max-width: 520px) {
+  .game-mode-row { grid-template-columns: 1fr; gap: 0; }
+}

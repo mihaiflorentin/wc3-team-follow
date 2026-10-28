@@ -253,6 +253,26 @@
       <label class="option-row"><span><strong>Same team</strong><small>Moves everyone you follow onto your team.</small></span><input type="checkbox" id="host-same-team" role="switch"></label>
       <label class="option-row"><span><strong>Auto-invite</strong><small>Invites people you follow who are in Warcraft III but not in your lobby, for friends without Team Follow.</small></span><input type="checkbox" id="host-invite" role="switch"></label>
     </div>
+
+    <section class="game-mode" aria-labelledby="game-mode-title">
+      <h3 id="game-mode-title">Game mode</h3>
+      <p class="fine">Typed once in the match chat after everyone has loaded, in matches from your Auto-host lobby. Team Follow types it with keystrokes while Warcraft III is in front. Leave the command empty to turn Game mode off.</p>
+      <div class="game-mode-row">
+        <label class="field">
+          <span class="field-label">Game mode command <span id="game-mode-count" class="count"></span></span>
+          <input id="game-mode" maxlength="100" autocomplete="off" spellcheck="false" placeholder="-ar">
+        </label>
+        <label class="field">
+          <span class="field-label">Seconds after loading</span>
+          <input id="game-mode-delay" type="number" min="0" max="120" step="1" inputmode="numeric">
+        </label>
+      </div>
+      <div id="keyboard-line" class="keyboard-line" data-state="ok">
+        <span id="keyboard-note"></span>
+        <button type="button" id="keyboard-allow" class="ghost small" hidden>Allow typing</button>
+      </div>
+    </section>
+
     <p class="fine">Other lobby options use the game's defaults: fast speed, teams locked and placed together.</p>
     <p id="host-error" class="error" role="alert"></p>
     <div class="row end">

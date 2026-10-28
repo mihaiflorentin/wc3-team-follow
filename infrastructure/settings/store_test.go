@@ -99,3 +99,32 @@ func TestMalformedFileFailsWithoutBeingOverwritten(t *testing.T) {
 		}
 	}
 }
+
+func TestHostSettingsRoundTripWithGameMode(t *testing.T) {
+	dir := t.TempDir()
+	host := dto.HostSettings{MapPath: "/maps/Castle Fight.w3x", MapName: "Castle Fight", GameName: "CF with friends", DelaySeconds: 10,
+		StartWhenFull: true, GameMode: "-ar", GameModeDelaySeconds: 12}
+	if err := settings.New(dir).Save(dto.Preferences{Tags: []string{"Player#1234"}, IncludeTeam: true, Host: &host}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := settings.New(dir).Load()
+	if err != nil || got.Host == nil || *got.Host != host {
+		t.Fatalf("loaded %+v, %v", got.Host, err)
+	}
+}
+
+func TestHostSettingsSavedBeforeGameModeGetTheDefaultDelay(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "settings", "friends.json")
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"tags":[],"includeTeam":true,"host":{"mapPath":"/maps/a.w3x","mapName":"a","gameName":"g","delaySeconds":10}}`
+	if err := os.WriteFile(file, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := settings.New(dir).Load()
+	if err != nil || got.Host == nil || got.Host.GameMode != "" || got.Host.GameModeDelaySeconds != 5 || got.Host.DelaySeconds != 10 {
+		t.Fatalf("loaded %+v, %v", got.Host, err)
+	}
+}

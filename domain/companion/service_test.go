@@ -16,6 +16,7 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/domain/companion"
 	"github.com/mihaiflorentin/wc3-team-follow/domain/follow"
 	mockgame "github.com/mihaiflorentin/wc3-team-follow/mock/game"
+	mockkeyboard "github.com/mihaiflorentin/wc3-team-follow/mock/keyboard"
 	mockmaps "github.com/mihaiflorentin/wc3-team-follow/mock/maps"
 	mockprefs "github.com/mihaiflorentin/wc3-team-follow/mock/preferences"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
@@ -31,6 +32,7 @@ type harness struct {
 	locator   *mockmaps.Locator
 	library   *mockmaps.Library
 	processes *mockgame.Processes
+	keyboard  *mockkeyboard.Keyboard
 }
 
 func newHarness(t *testing.T, prefs *mockprefs.Store) *harness {
@@ -40,10 +42,11 @@ func newHarness(t *testing.T, prefs *mockprefs.Store) *harness {
 		session:   mockgame.NewSession(),
 		prefs:     prefs,
 		processes: &mockgame.Processes{},
+		keyboard:  &mockkeyboard.Keyboard{Current: dto.KeyboardStatus{Supported: true, Permitted: true}},
 	}
 	h.locator = &mockmaps.Locator{Folders: []dto.MapsFolder{{Path: "/detected/Maps", Source: "test"}}, GamePrefix: "GAME:"}
 	h.library = &mockmaps.Library{Entries: []dto.MapEntry{{Name: "Legion TD", Path: "/detected/Maps/Legion TD.w3x"}, {Name: "Footmen Frenzy", Path: "/detected/Maps/ff.w3x"}}}
-	ports := companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library, Processes: h.processes}
+	ports := companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library, Processes: h.processes, Keyboard: h.keyboard}
 	h.svc = companion.New(ports, slog.New(slog.DiscardHandler), companion.Options{
 		VerifiedBuilds:    []string{build},
 		RefreshInterval:   5 * time.Second,

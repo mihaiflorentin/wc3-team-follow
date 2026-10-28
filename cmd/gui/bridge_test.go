@@ -78,6 +78,22 @@ func TestBridgePassesHostAndMapCalls(t *testing.T) {
 	}
 }
 
+func TestBridgePassesGameModeSettingsAndPermissionRequestsOn(t *testing.T) {
+	c := &mockcompanion.Companion{Current: dto.FollowState{Keyboard: dto.KeyboardStatus{Supported: true, Permitted: true}}}
+	b := gui.NewBridge(c, "", "", "")
+	settings := dto.HostSettings{GameName: "LTD", GameMode: "-ar", GameModeDelaySeconds: 7}
+	if _, err := b.ConfigureHost(dto.HostConfig{Settings: &settings}); err != nil || c.LastHost.Settings == nil || *c.LastHost.Settings != settings {
+		t.Fatalf("settings not passed on: %+v, %v", c.LastHost.Settings, err)
+	}
+	if c.PermissionCalls != 0 {
+		t.Fatal("asked for the keyboard permission on its own")
+	}
+	s, err := b.RequestKeyboardPermission()
+	if err != nil || c.PermissionCalls != 1 || !s.Keyboard.Permitted {
+		t.Fatalf("RequestKeyboardPermission = %+v, %v (calls %d)", s.Keyboard, err, c.PermissionCalls)
+	}
+}
+
 func TestBridgePassesCloseGamesOn(t *testing.T) {
 	c := &mockcompanion.Companion{Current: dto.FollowState{GameCount: 0, Status: "Closed 2 copies of Warcraft III."}}
 	s, err := gui.NewBridge(c, "", "", "").CloseGames()

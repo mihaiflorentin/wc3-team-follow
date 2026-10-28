@@ -119,6 +119,8 @@ type hostState struct {
 	swap swapState
 	// lobby is the latest GameLobbySetup, read again when a timer ends.
 	lobby map[string]any
+	// gameMode is Game mode's progress in the current match.
+	gameMode gameModeState
 }
 
 // swapState throttles !swap: one at a time, each waiting for the lobby to
@@ -164,7 +166,9 @@ func NormalizeHostSettings(s dto.HostSettings) (dto.HostSettings, error) {
 	case s.DelaySeconds < 0 || time.Duration(s.DelaySeconds)*time.Second > maxHostDelay:
 		return s, errors.New("Choose a delay between 0 seconds and 10 minutes.")
 	}
-	return s, nil
+	var err error
+	s.GameMode, s.GameModeDelaySeconds, err = normalizeGameMode(s.GameMode, s.GameModeDelaySeconds)
+	return s, err
 }
 
 // HostSettings returns the saved Auto-host settings.
@@ -231,6 +235,7 @@ func (e *Engine) waitToHost() {
 	e.host.startSent, e.host.countdown, e.host.locked = false, false, false
 	e.host.players, e.host.slots, e.host.full, e.host.missing, e.host.offTeam = 0, 0, false, nil, nil
 	e.host.moves, e.host.invited, e.host.swap, e.host.lobby = nil, nil, swapState{}, nil
+	e.host.gameMode = gameModeState{}
 }
 
 func quote(s string) string { return "“" + s + "”" }
@@ -293,6 +298,8 @@ func (e *Engine) hostStep() {
 				e.lobbyUpdate(h.lobby)
 			}
 		}
+	case HostMatch:
+		e.gameModeStep()
 	}
 }
 
@@ -316,6 +323,7 @@ func (e *Engine) hostReceive(kind string, p map[string]any) {
 		case slices.Contains(matchScreens, screen) && h.phase == HostLobby:
 			h.phase = HostMatch
 		case slices.Contains(scoreScreens, screen) && h.phase == HostMatch:
+			e.gameModeCancel()
 			e.waitToHost()
 			e.Note(fmt.Sprintf("Next lobby in %d seconds.", h.settings.DelaySeconds))
 		}
@@ -349,15 +357,18 @@ func (e *Engine) hostReceive(kind string, p map[string]any) {
 		}
 	case "ExitedGame":
 		if h.phase == HostMatch {
+			e.gameModeCancel()
 			e.waitToHost()
 		}
 	}
+	e.gameModeReceive(kind, p)
 }
 
 func (e *Engine) lobbyOpened() {
 	h := &e.host
 	h.phase, h.startSent, h.countdown, h.locked = HostLobby, false, false, false
 	h.moves, h.invited, h.swap = map[string]int{}, map[string]bool{}, swapState{}
+	h.gameMode = gameModeState{}
 	if h.settings.StartWhenFull {
 		e.Note("Your lobby " + quote(h.settings.GameName) + " is open. It starts once it's full and everyone you follow is in.")
 	} else {

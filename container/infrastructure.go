@@ -6,6 +6,7 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/config"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/discovery"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/gamesocket"
+	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/keyboard"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/maps"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/settings"
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
@@ -22,6 +23,7 @@ type InfrastructureContainer struct {
 	mapsLocator     lazy[contract.MapsLocator]
 	mapLibrary      lazy[contract.MapLibrary]
 	gameProcesses   lazy[contract.GameProcesses]
+	gameKeyboard    lazy[contract.GameKeyboard]
 }
 
 // MapsLocator returns the Maps folder locator for this operating system.
@@ -50,6 +52,14 @@ func (s *ServiceContainer) GameDiscovery() (contract.GameDiscovery, error) {
 func (s *ServiceContainer) GameProcesses() (contract.GameProcesses, error) {
 	return s.infrastructure.gameProcesses.get(func() (contract.GameProcesses, error) {
 		return discovery.NewProcesses(s.logger), nil
+	})
+}
+
+// GameKeyboard returns the keystroke input for this operating system, used
+// only to type a line in the match chat (docs/adr/0007). It needs no config.
+func (s *ServiceContainer) GameKeyboard() (contract.GameKeyboard, error) {
+	return s.infrastructure.gameKeyboard.get(func() (contract.GameKeyboard, error) {
+		return keyboard.New(), nil
 	})
 }
 

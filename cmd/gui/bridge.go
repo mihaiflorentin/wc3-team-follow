@@ -154,3 +154,10 @@ func (b *Bridge) SearchMaps(query string) (dto.MapListing, error) {
 func (b *Bridge) CloseGames() (dto.FollowState, error) {
 	return b.companion.CloseGames(b.context())
 }
+
+// RequestKeyboardPermission asks the system for the permission Game mode's
+// typing needs. The page calls it only when the player clicks to allow
+// typing.
+func (b *Bridge) RequestKeyboardPermission() (dto.FollowState, error) {
+	return b.companion.RequestKeyboardPermission(b.context())
+}
