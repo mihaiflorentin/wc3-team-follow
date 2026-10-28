@@ -6,6 +6,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 
 | Path | Holds |
 | --- | --- |
+| `changelog.go` | Embeds `CHANGELOG.md` for What's new; `main.go` hands it on as `cfg.App.Changelog`. |
 | `main.go` | Composition root: builds config, logger and container once, runs the CLI, closes the container. Opening the window on Windows and Linux first starts the crash supervisor. `console_windows.go` attaches the terminal for commands. |
 | `crashreport/` | Error dialog when the window stops because of an error: a supervisor process on Windows and Linux, in-process on macOS. Used only by `main.go`. |
 | `cmd/cli/` | Cobra commands. Wiring layer: resolves dependencies from the container and passes them on. Running with no command opens the window; `discover` checks game discovery; `say` types one chat line to check the game chat; `type` types one line in the match chat with keystrokes. |
@@ -25,6 +26,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `infrastructure/updater/` | Finds the newest stable release and its CHANGELOG.md through GitHub's REST API (`contract.Updater`, ADR 0009); HTTPS to GitHub's hosts only. |
 | `infrastructure/settings/` | `friends.json` (friends, Auto-host setup, blacklist, update settings), `recent-players.json` (`RecentPlayers`) and `notes.json` (`PlayerNotes`) in the per-user data folder. |
 | `mock/` | Hand-written test doubles, one package per contract group. |
+| `scripts/` | `release-tag.sh` classifies release tags; `releasenotes/` prints a release's notes from `CHANGELOG.md` for the release workflow. |
 | `packaging/` | App icon sources and renders (`icon/`), the Windows resource description (`windows/winres.json`), the macOS `Info.plist` and entitlements (`darwin/`), and the Linux `.desktop` entry (`linux/`). |
 | `docs/` | Living documentation; architectural decisions go in `docs/adr/`. |
 
@@ -136,7 +138,7 @@ Before finishing a change, run `make fmt`, `go vet ./...` and `go test ./...`.
 - Every change a player can notice adds a line under `## [Unreleased]` in the same commit, in the right group: `Added`, `Changed`, `Fixed`, `Removed` or `Security`. Internal work (refactors, tests, CI, docs for developers) gets no entry.
 - Write for players: what they can now do or what changed for them, in plain words and full sentences. No commit hashes, issue numbers, package names or protocol commands. Bold the feature name when an entry introduces a feature.
 - Never put a real BattleTag in it; use samples such as Player#1234.
-- Before tagging a release, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (the tag without the `v`, today's date), add a new empty `## [Unreleased]` above it, and update the compare links at the bottom. The release tag's version must have a matching section, or the release has no notes.
+- Before tagging a release, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (the tag without the `v`, today's date), add a new empty `## [Unreleased]` above it, and update the compare links at the bottom. The release tag's version must have a matching section, or the release workflow fails; check with `go run ./scripts/releasenotes -tag vX.Y.Z`. The section becomes the GitHub Release's notes, and the app shows it as What's new.
 - Never rewrite a released version's entries, except to fix a mistake.
 
 ## CI

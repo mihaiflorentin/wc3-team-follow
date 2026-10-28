@@ -1527,6 +1527,13 @@ async function demoOpen(what) {
     case 'update-notes':
       $('update-notes').open = true;
       break;
+    // The Changelog in the Updates section, scrolled into view.
+    case 'changelog':
+    case 'changelog-dev':
+      $('changelog').open = true;
+      await wait(100);
+      $('changelog').scrollIntoView({block: 'start'});
+      break;
     // The player menu, opened from the keyboard on a row or chip.
     case 'menu-recent':
     case 'menu-blacklist':
@@ -1999,7 +2006,9 @@ function changeEntry(entry) {
   return li;
 }
 
-function changeSection(section, open) {
+// changeSection is one version's entries, folded or open; current marks
+// the version this computer runs.
+function changeSection(section, open, current = false) {
   const box = el('details', 'change');
   box.open = open;
   const summary = el('summary');
@@ -2008,6 +2017,10 @@ function changeSection(section, open) {
     const time = el('time', 'change-date', longDate(section.date));
     time.dateTime = section.date;
     summary.append(time);
+  }
+  if (current) {
+    box.classList.add('change-current');
+    summary.append(el('span', 'change-badge', 'Your version'));
   }
   box.append(summary);
   for (const group of section.groups) {
@@ -2082,7 +2095,78 @@ function renderUpdate(s) {
   const auto = $('updates-auto');
   auto.checked = Boolean(u.supported && u.checkAutomatically);
   auto.disabled = !u.supported;
+  renderWhatsNew(u);
 }
+
+/* What's new: on the first start after an update, the changelog sections
+   since the version the player ran before, from the changelog built into
+   the app. The Updates section reopens it. */
+
+let whatsNewReopened = false;
+let whatsNewSignature = '';
+let runningVersion = '';
+
+function renderWhatsNew(u) {
+  runningVersion = u.supported ? u.currentVersion : '';
+  const w = u.whatsNew;
+  const link = $('whats-new-open');
+  link.hidden = !w;
+  const card = $('whats-new');
+  card.hidden = !w || !(w.show || whatsNewReopened);
+  if (!w) return;
+  link.querySelector('span').textContent = `What’s new in ${w.version}`;
+  $('whats-new-title').textContent = `What’s new in Team Follow ${w.version}`;
+  const versions = w.changes.length;
+  $('whats-new-sub').textContent = w.since
+    ? `You updated from ${w.since}.${versions > 1 ? ` Here’s what changed in ${versions} versions.` : ''}`
+    : 'Here’s what changed in this version.';
+  const signature = JSON.stringify(w.changes);
+  if (signature !== whatsNewSignature) {
+    whatsNewSignature = signature;
+    const box = $('whats-new-changes');
+    box.replaceChildren();
+    // The newest version is open; older ones fold away.
+    w.changes.forEach((section, i) => box.append(changeSection(section, i === 0)));
+  }
+}
+
+$('whats-new-close').onclick = async () => {
+  whatsNewReopened = false;
+  $('whats-new').hidden = true;
+  if (state?.update?.whatsNew?.show) await act(() => bridge.DismissWhatsNew());
+};
+$('whats-new-open').onclick = () => {
+  whatsNewReopened = true;
+  if (state) renderWhatsNew(state.update);
+  const card = $('whats-new');
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  card.scrollIntoView({block: 'start', behavior: still ? 'auto' : 'smooth'});
+  card.focus({preventScroll: true});
+};
+
+/* Changelog: every version built into the app, newest first, read once
+   when the player first opens it. */
+
+let changelogLoaded = false;
+
+async function loadChangelog() {
+  if (changelogLoaded) return;
+  changelogLoaded = true;
+  const list = $('changelog-list');
+  let sections = [];
+  try { sections = (await bridge.Changelog()) ?? []; } catch { sections = []; }
+  list.replaceChildren();
+  if (!sections.length) {
+    list.append(el('p', 'release-notes', 'The changelog isn’t available in this build.'));
+    return;
+  }
+  $('changelog-count').textContent = `${sections.length} versions`;
+  // The running version is open; without it, the newest.
+  const openVersion = sections.some(s => s.version === runningVersion) ? runningVersion : sections[0].version;
+  for (const section of sections) list.append(changeSection(section, section.version === openVersion, section.version === runningVersion));
+}
+
+$('changelog').ontoggle = e => { if (e.target.open) loadChangelog(); };
 
 async function openUpdate() {
   $('error').textContent = '';
@@ -2106,7 +2190,8 @@ $('updates-releases').onclick = async () => {
    game-mode|keyboard-ask|keyboard-linux|recent|recent-empty|recent-clear|
    recent-select|recent-select-confirm|blacklist|blacklist-empty|blacklist-off|
    update|update-open|update-warning|update-notes|update-later|update-skipped|
-   update-latest|update-offline|update-dev|
+   update-latest|update-offline|update-dev|whats-new|whats-new-older|
+   changelog|changelog-dev|
    menu-recent|menu-blacklist|menu-group|notes|notes-search|menu-note|
    note-add|note-edit|note-long|note-view;
    add &open=host-setup to see the Game mode group. */
@@ -2187,10 +2272,32 @@ function demoBridge() {
       ]},
     ]},
   ];
+  // The changelog built into the app: the sample above, then older ones.
+  const history = [...changes,
+    {version: '0.7.0', date: '2026-10-28', groups: [
+      {name: 'Added', entries: [
+        {spans: [b('Recent players.'), t(' The People panel has Friends and Recent players tabs.')]},
+        {spans: [t('The Friends tab shows how many friends are online.')]},
+      ]},
+    ]},
+    {version: '0.6.1', date: '2026-10-28', groups: [
+      {name: 'Added', entries: [{spans: [t('App icon for the Windows, macOS and Linux builds.')]}]},
+    ]},
+    {version: '0.6.0', date: '2026-10-28', groups: [
+      {name: 'Added', entries: [
+        {spans: [b('Game mode.'), t(' Auto-host can type a command such as '), c('-ar'), t(' in the match chat a few seconds after the match starts.')]},
+        {spans: [b('Join the host’s team'), t(' (Auto-join): moves you into an open slot on the host’s team.')]},
+      ]},
+      {name: 'Changed', entries: [{spans: [t('The window is simpler: the Your team card is gone.')]}]},
+    ]},
+  ];
   const page = 'https://github.com/mihaiflorentin/wc3-team-follow/releases';
   const offer = {version: '0.9.0', url: `${page}/tag/v0.9.0`, published: '2026-11-12T10:00:00Z', changes, notes: ''};
   const updateIdle = {supported: true, phase: 'idle', currentVersion: '0.7.0', checkAutomatically: true, release: null, prompt: false,
-    skipped: false, warning: '', message: '', lastChecked: at(40), releasesUrl: page};
+    skipped: false, warning: '', message: '', lastChecked: at(40), releasesUrl: page,
+    whatsNew: {version: '0.7.0', since: '', changes: history.slice(3, 4), show: false}};
+  // After updating from 0.7.0 to 0.9.0.
+  const updated = {...updateIdle, currentVersion: '0.9.0', whatsNew: {version: '0.9.0', since: '0.7.0', changes, show: true}};
   const updateOffer = {...updateIdle, phase: 'available', release: offer, prompt: true};
   // Notes: sample BattleTags only, keyed lower-case as the Go side keeps them.
   const notes = Object.fromEntries([
@@ -2276,7 +2383,12 @@ function demoBridge() {
     'update-offline': {update: {...updateIdle, checkAutomatically: false, lastChecked: null,
       message: 'Team Follow couldn’t check for updates. Check your internet connection and try again.'}},
     'update-dev': {update: {...updateIdle, supported: false, currentVersion: 'v0.7.0-3-gabc1234-dirty', lastChecked: null,
-      message: 'Updates are off in development builds. Download releases from GitHub.'}},
+      message: 'Updates are off in development builds. Download releases from GitHub.', whatsNew: null}},
+    'whats-new': {update: updated},
+    'whats-new-older': {update: {...updated, whatsNew: {version: '0.9.0', since: '', changes: changes.slice(0, 1), show: true}}},
+    changelog: {update: updated},
+    'changelog-dev': {update: {...updateIdle, supported: false, currentVersion: 'v0.7.0-3-gabc1234-dirty', lastChecked: null,
+      message: 'Updates are off in development builds. Download releases from GitHub.', whatsNew: null}},
     'menu-recent': {manualTags: ['Arthas#1123', 'Jaina#2214', 'Kelthuzad#6644']},
     'menu-blacklist': {},
     'menu-group': {},
@@ -2312,6 +2424,11 @@ function demoBridge() {
       return clone();
     },
     UpdateLater: async () => { s.update = {...s.update, prompt: false}; return clone(); },
+    DismissWhatsNew: async () => {
+      if (s.update.whatsNew) s.update = {...s.update, whatsNew: {...s.update.whatsNew, show: false}};
+      return clone();
+    },
+    Changelog: async () => structuredClone(history),
     SkipUpdate: async () => { s.update = {...s.update, prompt: false, skipped: true}; return clone(); },
     SetCheckUpdates: async on => { s.update = {...s.update, checkAutomatically: on}; return clone(); },
     Update: async () => {},

@@ -1226,6 +1226,25 @@ select {
 }
 .release-notes { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; color: var(--bone); }
 
+/* What's new: the update banner's strip after an update, with the changes
+   in view rather than folded, and one way out. The running version in the
+   changelog carries a badge in the same colour. */
+
+.whats-new:focus { outline: none; }
+.whats-new:focus-visible { outline: 2px solid var(--update); outline-offset: 2px; }
+.whats-new .changes { margin-top: 12px; }
+.change-badge {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: var(--update);
+  background: color-mix(in srgb, var(--update) 16%, transparent);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.change-current > summary .change-version { color: var(--update); }
+
 /* Updates section ------------------------------------------------------- */
 
 .updates h2 .icon { color: var(--update); }
@@ -1239,6 +1258,27 @@ select {
 .updates-auto { background: var(--spruce); }
 .updates-auto:has(input:disabled) { cursor: not-allowed; opacity: .6; }
 .updates-auto input:disabled { cursor: not-allowed; }
+.whats-new-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; }
+.whats-new-link .icon { width: 14px; height: 14px; color: var(--update); }
+.changelog { margin-top: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--spruce-line) 60%, transparent); }
+.changelog > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.changelog > summary::-webkit-details-marker { display: none; }
+.changelog > summary .count { margin-left: auto; font-weight: 400; }
+.changelog .chev { width: 13px; height: 13px; align-self: center; color: var(--lichen); transition: transform .15s; }
+.changelog[open] > summary .chev { transform: rotate(90deg); }
+.changelog .changes { max-height: min(420px, 55vh); padding: 4px 12px 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .changelog .chev, .update-notes .chev, .change .icon { transition: none; }
+}
 
 @media (max-width: 560px) {
   .update { padding: 12px 14px; }
