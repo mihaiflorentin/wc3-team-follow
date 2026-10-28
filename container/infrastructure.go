@@ -96,7 +96,7 @@ func (s *ServiceContainer) GameKeyboard() (contract.GameKeyboard, error) {
 // GameDialer returns the dialer for the game's menu socket.
 func (s *ServiceContainer) GameDialer() (contract.GameDialer, error) {
 	return s.infrastructure.gameDialer.get(func() (contract.GameDialer, error) {
-		return gamesocket.NewDialer(), nil
+		return gamesocket.NewDialer(s.logger), nil
 	})
 }
 

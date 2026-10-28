@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -57,7 +58,7 @@ func TestSessionSendsAllowedCommandsAndRejectsOthers(t *testing.T) {
 	port, _ := strconv.Atoi(server.URL[strings.LastIndex(server.URL, ":")+1:])
 
 	ctx := context.Background()
-	session, err := gamesocket.NewDialer().Dial(ctx, dto.GameConnection{Port: port, Session: "12345678901"})
+	session, err := gamesocket.NewDialer(slog.New(slog.DiscardHandler)).Dial(ctx, dto.GameConnection{Port: port, Session: "12345678901"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +97,7 @@ func TestSessionSendsTheLobbyChatMessage(t *testing.T) {
 	port, _ := strconv.Atoi(server.URL[strings.LastIndex(server.URL, ":")+1:])
 
 	ctx := context.Background()
-	session, err := gamesocket.NewDialer().Dial(ctx, dto.GameConnection{Port: port, Session: "12345678901"})
+	session, err := gamesocket.NewDialer(slog.New(slog.DiscardHandler)).Dial(ctx, dto.GameConnection{Port: port, Session: "12345678901"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +131,7 @@ func TestSessionSendsTheLobbyBanButNotKick(t *testing.T) {
 	port, _ := strconv.Atoi(server.URL[strings.LastIndex(server.URL, ":")+1:])
 
 	ctx := context.Background()
-	session, err := gamesocket.NewDialer().Dial(ctx, dto.GameConnection{Port: port, Session: "12345678901"})
+	session, err := gamesocket.NewDialer(slog.New(slog.DiscardHandler)).Dial(ctx, dto.GameConnection{Port: port, Session: "12345678901"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +163,7 @@ func TestTryReceiveReturnsWaitingEventsWithoutBlocking(t *testing.T) {
 	port, _ := strconv.Atoi(server.URL[strings.LastIndex(server.URL, ":")+1:])
 
 	ctx := context.Background()
-	session, err := gamesocket.NewDialer().Dial(ctx, dto.GameConnection{Port: port, Session: "12345678901"})
+	session, err := gamesocket.NewDialer(slog.New(slog.DiscardHandler)).Dial(ctx, dto.GameConnection{Port: port, Session: "12345678901"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,8 +199,62 @@ func TestTryReceiveReturnsWaitingEventsWithoutBlocking(t *testing.T) {
 	}
 }
 
+func TestCloseIsPromptWithAFullEventQueue(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ws, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = ws.CloseNow() }()
+		// More than the session queues, so its reader waits to hand one on.
+		for range 400 {
+			if ws.Write(r.Context(), websocket.MessageText, []byte(`{"messageType":"ChatMessage","payload":{}}`)) != nil {
+				return
+			}
+		}
+		_, _, _ = ws.Read(r.Context())
+	}))
+	defer server.Close()
+	port, _ := strconv.Atoi(server.URL[strings.LastIndex(server.URL, ":")+1:])
+
+	ctx := context.Background()
+	session, err := gamesocket.NewDialer(slog.New(slog.DiscardHandler)).Dial(ctx, dto.GameConnection{Port: port, Session: "12345678901"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Wait until the queue is full.
+	if _, err := session.Receive(ctx); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	done := make(chan struct{})
+	start := time.Now()
+	go func() {
+		_ = session.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Close never returned")
+	}
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("Close took %v with a full queue", took)
+	}
+	// The queued events drain, then the end of the session is reported.
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, _, err := session.TryReceive(); err != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("TryReceive reported no error after Close")
+		}
+	}
+}
+
 func TestDialRejectsPrivilegedPorts(t *testing.T) {
-	if _, err := gamesocket.NewDialer().Dial(context.Background(), dto.GameConnection{Port: 80}); err == nil {
+	if _, err := gamesocket.NewDialer(slog.New(slog.DiscardHandler)).Dial(context.Background(), dto.GameConnection{Port: 80}); err == nil {
 		t.Fatal("dialled port 80")
 	}
 }

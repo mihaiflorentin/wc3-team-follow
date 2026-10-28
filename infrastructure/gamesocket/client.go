@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"runtime/debug"
 	"time"
 
 	"github.com/coder/websocket"
@@ -59,13 +61,16 @@ var allowed = map[string]bool{
 var ErrNotAllowed = errors.New("unsupported game command")
 
 // Dialer opens sessions on 127.0.0.1 only.
-type Dialer struct{}
+type Dialer struct {
+	logger *slog.Logger
+}
 
-// NewDialer returns the game socket dialer.
-func NewDialer() contract.GameDialer { return Dialer{} }
+// NewDialer returns the game socket dialer. logger records a panic in a
+// session's reader goroutine.
+func NewDialer(logger *slog.Logger) contract.GameDialer { return Dialer{logger: logger} }
 
 // Dial connects to ws://127.0.0.1:<port>/webui-socket/<session>.
-func (Dialer) Dial(ctx context.Context, conn dto.GameConnection) (contract.GameSession, error) {
+func (d Dialer) Dial(ctx context.Context, conn dto.GameConnection) (contract.GameSession, error) {
 	if conn.Port < 1024 || conn.Port > 65535 {
 		return nil, fmt.Errorf("dial game: invalid port %d", conn.Port)
 	}
@@ -79,7 +84,7 @@ func (Dialer) Dial(ctx context.Context, conn dto.GameConnection) (contract.GameS
 	}
 	ws.SetReadLimit(readLimit)
 	readCtx, stop := context.WithCancel(context.Background())
-	s := &Session{ws: ws, events: make(chan dto.GameEvent, queued), stop: stop}
+	s := &Session{ws: ws, events: make(chan dto.GameEvent, queued), stop: stop, logger: d.logger}
 	go s.readAll(readCtx)
 	return s, nil
 }
@@ -91,12 +96,14 @@ type Session struct {
 	ws     *websocket.Conn
 	events chan dto.GameEvent
 	stop   context.CancelFunc
+	logger *slog.Logger
 	// err is why reading ended; set before events is closed.
 	err error
 }
 
 // readAll reads events until the connection ends, then closes events.
 func (s *Session) readAll(ctx context.Context) {
+	defer s.guard()
 	defer close(s.events)
 	for {
 		_, body, err := s.ws.Read(ctx)
@@ -110,6 +117,16 @@ func (s *Session) readAll(ctx context.Context) {
 			s.err = fmt.Errorf("receive: %w", ctx.Err())
 			return
 		}
+	}
+}
+
+// guard logs a panic in the reader goroutine with its stack, then lets it
+// crash the app as it would have anyway, so the log explains the crash.
+// Event payloads are never logged.
+func (s *Session) guard() {
+	if r := recover(); r != nil {
+		s.logger.Error("gamesocket.panic", slog.String("where", "read"), slog.Any("panic", r), slog.String("stack", string(debug.Stack())))
+		panic(r)
 	}
 }
 
@@ -181,8 +198,9 @@ func Decode(body []byte) dto.GameEvent {
 	return dto.GameEvent{MessageType: kind, Payload: payload}
 }
 
-// Close ends the session.
+// Close ends the session. The reader is stopped first, so it never waits
+// on a full event queue while the connection closes.
 func (s *Session) Close() error {
-	defer s.stop()
+	s.stop()
 	return s.ws.Close(websocket.StatusNormalClosure, "")
 }

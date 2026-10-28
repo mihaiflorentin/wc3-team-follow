@@ -37,7 +37,7 @@ Every accessor is a method returning `(T, error)`, where `T` is a `port/contract
 | `GameDiscovery()` | `discovery.New(logger)`, the implementation for this OS |
 | `GameProcesses()` | `discovery.NewProcesses(logger)`, the game process closer for this OS |
 | `GameKeyboard()` | `keyboard.New()`, the match chat keystroke input for this OS (ADR 0007); no config |
-| `GameDialer()` | `gamesocket.NewDialer()` |
+| `GameDialer()` | `gamesocket.NewDialer(logger)` |
 | `PreferenceStore()` | `settings.New(dir)` in `settings.DataDir(cfg.Storage)`; a missing `[storage]` is an error |
 | `RecentPlayers()` | `settings.NewRecentPlayers(dir)` in the same data folder; a missing `[storage]` is an error |
 | `PlayerNotes()` | `settings.NewPlayerNotes(dir)` in the same data folder; a missing `[storage]` is an error |

@@ -39,6 +39,7 @@ The window's **Report a problem** dialog shows the diagnostic report, the log fo
 | `follow.status`: every status line the engine sets | info | `domain/companion` |
 | `follow.configure` (what changed, or why it was refused), `follow.password` (sent or refused) | info | `domain/companion` |
 | `companion.panic` (with stack) in background work | error | `domain/companion` |
+| `gamesocket.panic` (with stack) in the game socket's reader goroutine | error | `infrastructure/gamesocket` |
 
 `GameListUpdate` and `GameListRemove` stream several times a second in Custom Games, so they are counted in diagnostics instead of logged.
 
