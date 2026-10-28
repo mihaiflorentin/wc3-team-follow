@@ -190,7 +190,22 @@ input, pre, .log, code { user-select: text; }
 .party { margin-top: 18px; }
 .party:has(.portraits:empty) { display: none; }
 .portraits { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; }
-.portraits li { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 60px; }
+.portraits li { width: 64px; }
+/* Each chip is a button that opens the player menu. */
+.portraits .chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 0 4px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+}
+.portraits .chip:hover, .portraits .chip[aria-expanded="true"] { background: color-mix(in srgb, var(--bone) 7%, transparent); }
+.portraits .chip[aria-expanded="true"] .tag { color: var(--bone); }
 .portraits .avatar { width: 46px; height: 46px; font-size: 15px; }
 .portraits .tag {
   max-width: 60px;
@@ -435,7 +450,7 @@ h2 .icon { color: var(--lichen); }
 
 .picker { max-height: 390px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -6px; padding: 0 6px; }
 
-.pick { grid-template-columns: 20px auto minmax(0, 1fr) auto; cursor: pointer; }
+.pick { grid-template-columns: 20px auto minmax(5.5em, 1fr) minmax(0, auto); cursor: pointer; }
 .pick:hover { background: var(--spruce-raised); }
 .pick[data-selected="true"] { background: color-mix(in srgb, var(--open) 9%, transparent); }
 .pick[data-disabled="true"] { cursor: not-allowed; opacity: .5; }
@@ -515,7 +530,7 @@ h2 .icon { color: var(--lichen); }
 
 /* Recent players: the Friends row, with the map and last seen beneath the
    name and the status. */
-.recent .pick { grid-template-columns: 20px auto minmax(0, 1fr) auto; row-gap: 1px; padding: 8px 6px; }
+.recent .pick { grid-template-columns: 20px auto minmax(5.5em, 1fr) minmax(0, auto); row-gap: 1px; padding: 8px 6px; }
 .recent .pick > input, .recent .pick > .avatar { grid-row: span 2; }
 .recent .meta {
   grid-column: 3 / -1;
@@ -1203,13 +1218,13 @@ select {
   background: var(--spruce-line);
 }
 .change-group li strong { color: var(--bone); font-weight: 650; }
-.change-group li code, .notes-text code {
+.change-group li code, .release-notes code {
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--spruce-raised);
   font: 12px ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace;
 }
-.notes-text { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; color: var(--bone); }
+.release-notes { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; color: var(--bone); }
 
 /* Updates section ------------------------------------------------------- */
 
@@ -1232,3 +1247,171 @@ select {
   .update-actions .link { margin-left: auto; }
   .change-group { margin-left: 0; }
 }
+/* Player menu ---------------------------------------------------------
+   One raised sheet for every player row and group chip. The head names the
+   player the way the lists do (avatar, name, #number); the items follow the
+   buttons' voice, with the blacklist action in the blacklist's red. */
+
+.player-menu {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: min(252px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--spruce-raised);
+  box-shadow: 0 0 0 1px var(--spruce-line), 0 16px 36px rgba(6, 12, 12, .55);
+  animation: menu-in .12s ease-out;
+}
+@keyframes menu-in {
+  from { opacity: 0; transform: scale(.96); }
+}
+
+.menu-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 8px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--spruce-line);
+}
+.menu-head .avatar { width: 32px; height: 32px; box-shadow: 0 0 0 2px var(--spruce-raised); }
+.menu-who { display: flex; flex-direction: column; min-width: 0; }
+.menu-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 15.5px/1.25 var(--display);
+  font-stretch: 85%;
+}
+.menu-number { margin-left: 1px; color: var(--lichen); font: 400 12.5px var(--ui); }
+.menu-standing { font-size: 11.5px; color: var(--lichen); }
+.menu-standing.chosen { color: var(--open); }
+.menu-standing.banned { color: var(--danger); }
+
+.player-menu [role="menu"] { list-style: none; margin: 0; padding: 0; }
+.menu-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.35;
+  cursor: pointer;
+  outline: none;
+}
+.menu-item .icon { width: 16px; height: 16px; margin-top: 1px; color: var(--lichen); }
+.menu-text { display: flex; flex-direction: column; min-width: 0; }
+.menu-text small { color: var(--lichen); font-size: 11.5px; }
+.menu-item:focus { background: var(--spruce-line); }
+.menu-item:focus .icon { color: var(--bone); }
+.menu-item:focus-visible { box-shadow: inset 2px 0 0 var(--preview); }
+.menu-item.danger, .menu-item.danger .icon { color: var(--danger); }
+.menu-item.danger:focus { background: color-mix(in srgb, var(--danger) 17%, transparent); }
+.menu-item[aria-disabled="true"] { cursor: not-allowed; color: var(--lichen); }
+.menu-item[aria-disabled="true"] .icon { opacity: .6; }
+.menu-sep { height: 1px; margin: 4px 6px; background: var(--spruce-line); }
+
+/* The line that confirms a menu action. */
+.toast {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 9px 16px 9px 12px;
+  border-radius: 999px;
+  background: var(--bone);
+  color: var(--spruce-deep);
+  font-weight: 600;
+  font-size: 13px;
+  box-shadow: 0 10px 28px rgba(6, 12, 12, .5);
+  transform: translate(-50%, 8px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .18s, transform .18s, visibility 0s .18s;
+}
+.toast span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast .icon { color: #2f8a55; stroke-width: 2.4; }
+.toast[data-show="true"] { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity .18s, transform .18s; }
+
+/* Player notes --------------------------------------------------------
+   The note icon sits quietly after a name, in the lists' secondary colour.
+   The popover is the player menu's sheet, a little wider, with the same
+   head; the note reads as plain prose and keeps its line breaks. */
+
+.note-mark { flex: none; display: inline-flex; color: var(--lichen); }
+.note-mark .icon { width: 13px; height: 13px; }
+
+.note-popover {
+  position: fixed;
+  z-index: 55;
+  top: 0;
+  left: 0;
+  width: min(320px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px 10px 10px;
+  border-radius: 12px;
+  background: var(--spruce-raised);
+  box-shadow: 0 0 0 1px var(--spruce-line), 0 16px 36px rgba(6, 12, 12, .55);
+  animation: menu-in .12s ease-out;
+}
+.note-popover .menu-head { padding: 8px 0 10px; margin-bottom: 10px; }
+
+.note-popover textarea {
+  display: block;
+  width: 100%;
+  min-height: 112px;
+  max-height: 45vh;
+  resize: vertical;
+  border: 1px solid var(--spruce-line);
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: var(--spruce);
+  color: var(--bone);
+  font: 13.5px/1.45 var(--ui);
+  user-select: text;
+}
+.note-popover textarea:focus-visible { outline: 2px solid var(--preview); outline-offset: 1px; }
+.note-popover textarea[aria-invalid="true"] { border-color: var(--danger); }
+.note-popover textarea[aria-invalid="true"]:focus-visible { outline-color: var(--danger); }
+.note-popover textarea::placeholder { color: color-mix(in srgb, var(--lichen) 75%, transparent); }
+
+.note-count {
+  display: block;
+  margin-top: 6px;
+  text-align: right;
+  color: var(--lichen);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.note-count[data-state="near"] { color: var(--open); }
+.note-count[data-state="over"] { color: var(--danger); font-weight: 600; }
+.note-error { margin: 6px 0 0; color: var(--danger); font-size: 12.5px; }
+.note-error:empty { display: none; }
+
+.note-body {
+  margin: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13.5px;
+  line-height: 1.5;
+  user-select: text;
+}
+.note-actions { margin-top: 12px; }
+.note-actions .icon { width: 14px; height: 14px; }
+.ghost.quiet-danger { background: transparent; color: var(--danger); padding-left: 6px; }
+.ghost.quiet-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 14%, transparent); }

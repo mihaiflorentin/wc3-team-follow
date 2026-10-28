@@ -32,6 +32,11 @@ type Companion struct {
 	CheckCalls int
 	LaterCalls int
 	SkipCalls  int
+	// NoteCalls counts SetNote calls; LastNoteTag and LastNoteText hold the
+	// last one's arguments.
+	NoteCalls    int
+	LastNoteTag  string
+	LastNoteText string
 }
 
 func (c *Companion) CheckForUpdates() (dto.FollowState, error) {
@@ -46,6 +51,12 @@ func (c *Companion) UpdateLater() dto.FollowState {
 
 func (c *Companion) SkipUpdate() (dto.FollowState, error) {
 	c.SkipCalls++
+	return c.Current, c.Err
+}
+
+func (c *Companion) SetNote(tag, text string) (dto.FollowState, error) {
+	c.NoteCalls++
+	c.LastNoteTag, c.LastNoteText = tag, text
 	return c.Current, c.Err
 }
 

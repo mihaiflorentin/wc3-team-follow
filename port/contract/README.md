@@ -12,6 +12,8 @@ This folder holds interfaces only. The data they accept and return are DTOs in `
 | `GameProcesses` | outbound | `infrastructure/discovery` (`Processes`) | `mock/game` |
 | `GameCounter` | outbound (implemented by a discovery error) | `infrastructure/discovery` | `mock/game` (`CountedError`) |
 | `PreferenceStore` | outbound | `infrastructure/settings` | `mock/preferences` |
+| `RecentPlayers` | outbound | `infrastructure/settings` | `mock/recent` |
+| `PlayerNotes` | outbound | `infrastructure/settings` | `mock/notes` |
 
 Each contract has:
 

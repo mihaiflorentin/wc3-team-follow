@@ -19,6 +19,7 @@ import (
 	mockgame "github.com/mihaiflorentin/wc3-team-follow/mock/game"
 	mockkeyboard "github.com/mihaiflorentin/wc3-team-follow/mock/keyboard"
 	mockmaps "github.com/mihaiflorentin/wc3-team-follow/mock/maps"
+	mocknotes "github.com/mihaiflorentin/wc3-team-follow/mock/notes"
 	mockprefs "github.com/mihaiflorentin/wc3-team-follow/mock/preferences"
 	mockrecent "github.com/mihaiflorentin/wc3-team-follow/mock/recent"
 	mockupdater "github.com/mihaiflorentin/wc3-team-follow/mock/updater"
@@ -38,6 +39,7 @@ type harness struct {
 	keyboard  *mockkeyboard.Keyboard
 	recent    *mockrecent.Store
 	updater   *mockupdater.Updater
+	notes     *mocknotes.Store
 	// skew moves the service's clock ahead of the real one, in nanoseconds.
 	skew atomic.Int64
 }
@@ -51,7 +53,16 @@ func newHarness(t *testing.T, prefs *mockprefs.Store) *harness {
 // test can restart the companion on the same store.
 func newHarnessWith(t *testing.T, prefs *mockprefs.Store, recent *mockrecent.Store, tune ...func(*companion.Options)) *harness {
 	t.Helper()
+	return newHarnessWithNotes(t, prefs, recent, mocknotes.New(nil), tune...)
+}
+
+// newHarnessWithNotes builds the harness around recent players and notes
+// stores, so a test can restart the companion on the same stores. tune
+// changes the options, such as the build version for update checks.
+func newHarnessWithNotes(t *testing.T, prefs *mockprefs.Store, recent *mockrecent.Store, notes *mocknotes.Store, tune ...func(*companion.Options)) *harness {
+	t.Helper()
 	h := &harness{
+		notes:     notes,
 		discovery: &mockgame.Discovery{Conn: dto.GameConnection{Port: 5000, Session: "12345678901", Version: build}},
 		session:   mockgame.NewSession(),
 		prefs:     prefs,
@@ -62,7 +73,7 @@ func newHarnessWith(t *testing.T, prefs *mockprefs.Store, recent *mockrecent.Sto
 	}
 	h.locator = &mockmaps.Locator{Folders: []dto.MapsFolder{{Path: "/detected/Maps", Source: "test"}}, GamePrefix: "GAME:"}
 	h.library = &mockmaps.Library{Entries: []dto.MapEntry{{Name: "Legion TD", Path: "/detected/Maps/Legion TD.w3x"}, {Name: "Footmen Frenzy", Path: "/detected/Maps/ff.w3x"}}}
-	ports := companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library, Processes: h.processes, Keyboard: h.keyboard, Recent: h.recent, Updater: h.updater}
+	ports := companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library, Processes: h.processes, Keyboard: h.keyboard, Recent: h.recent, Notes: h.notes, Updater: h.updater}
 	opts := companion.Options{
 		VerifiedBuilds:    []string{build},
 		RefreshInterval:   5 * time.Second,
@@ -292,7 +303,7 @@ func TestLogsNeverContainTheSessionOrPasswords(t *testing.T) {
 		session:   mockgame.NewSession(),
 		prefs:     mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}),
 	}
-	h.svc = companion.New(companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: h.prefs, Maps: &mockmaps.Locator{}, Library: &mockmaps.Library{}, Keyboard: &mockkeyboard.Keyboard{}, Recent: mockrecent.New()},
+	h.svc = companion.New(companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: h.prefs, Maps: &mockmaps.Locator{}, Library: &mockmaps.Library{}, Keyboard: &mockkeyboard.Keyboard{}, Recent: mockrecent.New(), Notes: mocknotes.New(nil)},
 		slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		companion.Options{VerifiedBuilds: []string{build}, RefreshInterval: 5 * time.Second, DiscoveryInterval: 10 * time.Second})
 	h.run(t)

@@ -54,6 +54,30 @@ The game's Ban names a slot, not a player, so Team Follow reads everything the g
 
 ![Recent players while choosing whom to blacklist: two players ticked with red crosses, one already blacklisted, and the Blacklist 2 players bar](docs/screenshots/recent-blacklist.png)
 
+### Player menu
+
+Right-click any player in Friends, Recent players or Blacklist, or a portrait in your group, to act on them in one step:
+- **Copy BattleTag** puts their full BattleTag on the clipboard, ready to paste in the game or a chat.
+- **Add to group** or **Remove from group** changes who you follow, like ticking them in the list.
+- **Add to blacklist** or **Remove from blacklist**; blacklisting someone you follow takes them out of your group.
+- **Add note**, or **Edit note** and **View note** once you have one (see Player notes).
+
+The menu shows only the actions that apply, and a short line confirms each one. From the keyboard, Shift+F10 or the Menu key opens it on the focused row; the arrow keys move, Enter chooses, and Esc closes it. Nothing is sent to the game.
+
+![The player menu on a recent player in your group: Copy BattleTag, Remove from group, and Add to blacklist, which also takes them out of your group](docs/screenshots/player-menu.png)
+
+![The player menu on a blacklisted player, at a narrow window width: Copy BattleTag and Remove from blacklist](docs/screenshots/player-menu-blacklist.png)
+
+### Player notes
+
+Keep a private note about anyone you play with: who carries in Legion TD, who leaves early, whose friend they are. Right-click a player and choose **Add note**; later, **Edit note** or **View note** reads it in full. A note holds up to 500 characters, and clearing the text deletes it. Players with a note show a small note icon in every list, and the search box finds notes too. Notes are kept on this computer only and are never sent to the game.
+
+![Recent players with a note icon after three of the names](docs/screenshots/player-notes.png)
+
+![Editing a note about a recent player: the text, a 61 of 500 character count, and Delete, Cancel and Save](docs/screenshots/note-popover.png)
+
+![A note that's too long at a narrow window width: the count says it is 80 over the 500-character limit and Save is unavailable](docs/screenshots/note-popover-narrow.png)
+
 Team Follow watches them straight away: their portraits show who is online, away or in Warcraft III, and Activity notes when one of them opens a lobby. Watching never joins anything.
 
 ![Watching a group of five friends: one has a lobby open, Auto-join is off](docs/screenshots/watching.png)

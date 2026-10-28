@@ -112,13 +112,31 @@ function presence(text, lobby) {
 // isBlacklisted reports whether tag is on the blacklist.
 const isBlacklisted = (s, tag) => (s.blacklist ?? []).some(b => key(b.tag) === key(tag));
 
-// nameCell is a row's BattleTag, with the Blacklisted badge when it is on
-// the blacklist.
-function nameCell(tag, banned) {
+// noteOf returns the player's note about tag, or undefined.
+const noteOf = (s, tag) => s.notes?.[key(tag)];
+
+// matchesPlayer reports whether a search finds tag, by its BattleTag or by
+// the player's note about it. query is lower-cased.
+const matchesPlayer = (s, tag, query) => key(tag).includes(query) || Boolean(noteOf(s, tag)?.text.toLowerCase().includes(query));
+
+// noteMark is the small icon on a row whose player has a note.
+function noteMark() {
+  const mark = el('span', 'note-mark');
+  mark.setAttribute('role', 'img');
+  mark.setAttribute('aria-label', 'Has a note');
+  mark.title = 'You have a note about this player';
+  mark.append(icon('note'));
+  return mark;
+}
+
+// nameCell is a row's BattleTag, with the note icon when the player has a
+// note and the Blacklisted badge when it is on the blacklist.
+function nameCell(tag, banned, noted = false) {
   const wrap = el('span', 'name-wrap');
   const name = el('span', 'name', tag);
   name.title = tag;
   wrap.append(name);
+  if (noted) wrap.append(noteMark());
   if (banned) {
     const badge = el('span', 'ban-badge');
     badge.title = 'Blacklisted';
@@ -126,6 +144,21 @@ function nameCell(tag, banned) {
     wrap.append(badge);
   }
   return wrap;
+}
+
+// lockBox makes a checkbox unavailable without disabling it, so it stays
+// focusable and the player menu still opens on its row from the keyboard.
+function lockBox(box, locked) {
+  box.setAttribute('aria-disabled', String(locked));
+  if (locked) box.addEventListener('click', event => event.preventDefault());
+}
+
+// markPlayer makes row a player row: right-click, Shift+F10 or the Menu key
+// on it opens the player menu for tag, and focus returns to target.
+function markPlayer(row, target, tag) {
+  row.dataset.player = tag;
+  target.dataset.tag = tag;
+  target.setAttribute('aria-keyshortcuts', 'Shift+F10');
 }
 
 function hasTargets(s) {
@@ -272,16 +305,34 @@ function renderSteps(s) {
   steps.querySelector('[data-step="people"] .step-text').textContent = n ? `${plural(n, 'friend', 'friends')} chosen` : 'Choose friends to follow';
 }
 
+let partySignature = '';
+
+// renderParty draws the group bar. Each chip is a button that opens the
+// player menu; it is redrawn only when the group changes, so focus stays.
 function renderParty(s) {
   const list = $('party');
-  list.replaceChildren();
   const members = group(s);
-  for (const m of members) {
-    const li = el('li');
-    li.dataset.status = m.status;
-    li.title = m.lobby ? `${m.tag}: lobby “${m.lobby}”` : m.tag;
-    li.append(avatar(m.tag, {badge: m.status === 'open'}), el('span', 'tag', nameOf(m.tag)));
-    list.append(li);
+  const signature = JSON.stringify(members);
+  if (signature !== partySignature) {
+    partySignature = signature;
+    const focused = list.contains(document.activeElement) ? document.activeElement.dataset.tag : '';
+    list.replaceChildren();
+    for (const m of members) {
+      const li = el('li');
+      li.dataset.status = m.status;
+      const chip = el('button', 'chip');
+      chip.type = 'button';
+      chip.title = m.lobby ? `${m.tag}: lobby “${m.lobby}”` : m.tag;
+      chip.setAttribute('aria-label', m.lobby ? `${m.tag}, lobby ${m.lobby}` : m.tag);
+      chip.setAttribute('aria-haspopup', 'menu');
+      chip.setAttribute('aria-expanded', 'false');
+      markPlayer(chip, chip, m.tag);
+      chip.onclick = () => openPlayerMenu(m.tag, chip);
+      chip.append(avatar(m.tag, {badge: m.status === 'open'}), el('span', 'tag', nameOf(m.tag)));
+      li.append(chip);
+      list.append(li);
+    }
+    if (focused) list.querySelector(`[data-tag="${CSS.escape(focused)}"]`)?.focus();
   }
   const open = members.filter(m => m.status === 'open').length;
   $('party-note').textContent = !members.length ? ''
@@ -337,16 +388,18 @@ function pickRow(f, full) {
   box.checked = f.selected;
   box.dataset.tag = f.battleTag;
   const banned = isBlacklisted(state, f.battleTag);
-  box.disabled = (!f.selected && full) || banned;
+  const locked = (!f.selected && full) || banned;
+  lockBox(box, locked);
   box.setAttribute('aria-label', banned ? `${f.battleTag} is blacklisted` : `Follow ${f.battleTag}`);
-  label.dataset.disabled = String(box.disabled);
+  label.dataset.disabled = String(locked);
+  markPlayer(label, box, f.battleTag);
   box.onchange = () => {
     const tags = box.checked
       ? [...state.manualTags, f.battleTag]
       : state.manualTags.filter(t => key(t) !== key(f.battleTag));
     changeGroup({tags});
   };
-  label.append(box, avatar(f.battleTag, {badge: Boolean(f.open), banned}), nameCell(f.battleTag, banned), presence(f.open ? 'Lobby open' : f.label, f.open ? f.lobby : ''));
+  label.append(box, avatar(f.battleTag, {badge: Boolean(f.open), banned}), nameCell(f.battleTag, banned, Boolean(noteOf(state, f.battleTag))), presence(f.open ? 'Lobby open' : f.label, f.open ? f.lobby : ''));
   li.append(label);
   return li;
 }
@@ -359,12 +412,12 @@ function renderFriends(s) {
   const showOffline = $('show-offline').checked;
   const full = s.manualTags.length >= MAX_TAGS;
   const {chosen, others} = pickerRows(s);
-  const visible = others.filter(f => (query ? key(f.battleTag).includes(query) : showOffline || f.online));
+  const visible = others.filter(f => (query ? matchesPlayer(s, f.battleTag, query) : showOffline || f.online));
   const hiddenOffline = others.filter(f => !f.online).length;
 
   // Re-render only when something visible changed, so scrolling and focus
   // survive the once-a-second state updates.
-  const signature = JSON.stringify([s.connected, full, chosen, visible, query, showOffline, s.roster.length, s.blacklist]);
+  const signature = JSON.stringify([s.connected, full, chosen, visible, query, showOffline, s.roster.length, s.blacklist, s.notes]);
   if (signature !== pickerSignature) {
     pickerSignature = signature;
     const scroll = list.scrollTop;
@@ -414,7 +467,7 @@ try {
   if (saved === 'recent' || saved === 'blacklist') tab = saved;
 } catch { /* storage blocked */ }
 
-const placeholders = {friends: 'Search your Battle.net friends', recent: 'Search recent players', blacklist: 'Search the blacklist'};
+const placeholders = {friends: 'Search your friends and notes', recent: 'Search recent players and notes', blacklist: 'Search the blacklist and notes'};
 
 const tabs = [...document.querySelectorAll('.tabs [role="tab"]')];
 
@@ -492,7 +545,7 @@ function recentRow(s, p, full) {
     // Choosing whom to blacklist: the follow group stays as it is.
     const picked = banPick.has(key(p.tag));
     box.checked = picked;
-    box.disabled = banned;
+    lockBox(box, banned);
     box.setAttribute('aria-label', banned ? `${p.tag} is blacklisted` : `Blacklist ${p.tag}`);
     label.dataset.selected = 'false';
     label.dataset.picked = String(picked);
@@ -505,7 +558,7 @@ function recentRow(s, p, full) {
     };
   } else {
     box.checked = chosen;
-    box.disabled = (!chosen && full) || banned;
+    lockBox(box, (!chosen && full) || banned);
     box.setAttribute('aria-label', banned ? `${p.tag} is blacklisted` : `Follow ${p.tag}`);
     label.dataset.selected = String(chosen);
     box.onchange = () => {
@@ -515,8 +568,9 @@ function recentRow(s, p, full) {
       changeGroup({tags});
     };
   }
-  label.dataset.disabled = String(box.disabled);
-  const name = nameCell(p.tag, banned);
+  label.dataset.disabled = box.getAttribute('aria-disabled');
+  markPlayer(label, box, p.tag);
+  const name = nameCell(p.tag, banned, Boolean(noteOf(s, p.tag)));
   const meta = el('span', 'meta');
   const map = el('span', 'map');
   map.append(icon('map'), document.createTextNode(p.map || 'Unknown map'));
@@ -537,13 +591,13 @@ function renderRecent(s) {
   const recent = s.recent ?? [];
   const query = $('friend-search').value.trim().toLowerCase();
   const full = s.manualTags.length >= MAX_TAGS;
-  const visible = query ? recent.filter(p => key(p.tag).includes(query) || p.map.toLowerCase().includes(query)) : recent;
+  const visible = query ? recent.filter(p => matchesPlayer(s, p.tag, query) || p.map.toLowerCase().includes(query)) : recent;
   $('recent-count').textContent = recent.length ? String(recent.length) : '';
 
   if (tab === 'recent') {
     // Last seen is rounded to minutes, so this changes at most once a minute.
     const signature = JSON.stringify([visible.map(p => [p.tag, p.map, lastSeen(p.lastSeen, false), recentStatus(s, p.tag)]), s.manualTags, full, query,
-      s.blacklist, banMode, banConfirm, [...banPick]]);
+      s.blacklist, s.notes, banMode, banConfirm, [...banPick]]);
     if (signature !== recentSignature) {
       recentSignature = signature;
       const scroll = list.scrollTop;
@@ -606,7 +660,7 @@ function enterBanMode() {
   banConfirm = false;
   banPick.clear();
   renderRecent(state);
-  ($('recent').querySelector('input:not(:disabled)') ?? $('ban-cancel')).focus();
+  ($('recent').querySelector('input:not([aria-disabled="true"])') ?? $('ban-cancel')).focus();
 }
 
 function leaveBanMode({focus = false} = {}) {
@@ -662,7 +716,7 @@ function addedOn(iso, now = new Date()) {
   return `Added ${then.toLocaleDateString([], opts)}`;
 }
 
-function blacklistRow(entry) {
+function blacklistRow(s, entry) {
   const li = el('li');
   const row = el('div', 'person');
   row.dataset.status = 'banned';
@@ -682,9 +736,9 @@ function blacklistRow(entry) {
       (target ?? $('ban-tag')).focus();
     }
   };
-  const name = el('span', 'name', entry.tag);
-  name.title = entry.tag;
+  const name = nameCell(entry.tag, false, Boolean(noteOf(s, entry.tag)));
   row.append(avatar(entry.tag, {banned: true}), name, added, remove);
+  markPlayer(row, remove, entry.tag);
   li.append(row);
   return li;
 }
@@ -703,15 +757,15 @@ function renderBlacklist(s) {
   if (tab !== 'blacklist') return;
 
   const query = $('friend-search').value.trim().toLowerCase();
-  const visible = query ? entries.filter(b => key(b.tag).includes(query)) : entries;
-  const signature = JSON.stringify([visible.map(b => [b.tag, addedOn(b.added)]), query, entries.length]);
+  const visible = query ? entries.filter(b => matchesPlayer(s, b.tag, query)) : entries;
+  const signature = JSON.stringify([visible.map(b => [b.tag, addedOn(b.added), noteOf(s, b.tag)?.text ?? '']), query, entries.length]);
   if (signature !== blacklistSignature) {
     blacklistSignature = signature;
     const list = $('blacklist');
     const scroll = list.scrollTop;
     const focused = document.activeElement?.dataset?.tag;
     list.replaceChildren();
-    for (const b of visible) list.append(blacklistRow(b));
+    for (const b of visible) list.append(blacklistRow(s, b));
     if (!entries.length) list.append(el('li', 'empty', 'Nobody is blacklisted. Add a BattleTag below, or choose players in Recent players.'));
     else if (!visible.length) list.append(el('li', 'empty', `No blacklisted player matches “${query}”.`));
     list.scrollTop = scroll;
@@ -816,6 +870,443 @@ function renderLog(s) {
     list.append(li);
   }
 }
+
+/* Player menu ------------------------------------------------------------
+   One menu for every player row (Friends, Recent players, Blacklist) and
+   group chip. Right-click, Shift+F10 or the Menu key opens it; the arrow
+   keys, Home and End move, Enter or Space chooses, and Esc or Tab closes
+   it and puts focus back on the row. Its items come in groups split by a
+   line: the player's note first, then the general actions, then the
+   blacklist. */
+
+// playerMenuGroups lists the actions that apply to tag right now. Each item
+// is {label, icon, run, danger, disabled, hint}.
+function playerMenuGroups(s, tag) {
+  const k = key(tag);
+  const self = s.team.some(m => m.isSelf && key(m.battleTag) === k);
+  const chosen = s.manualTags.some(t => key(t) === k);
+  // Members of the game team are followed through it, not through a choice
+  // made here, so there is nothing to add or remove for them.
+  const viaTeam = s.includeTeam && s.team.some(m => !m.isSelf && key(m.battleTag) === k);
+  const banned = isBlacklisted(s, tag);
+  const full = s.manualTags.length >= MAX_TAGS;
+
+  const notes = noteOf(s, tag)
+    ? [{label: 'Edit note', icon: 'pencil', run: () => openNote(tag, 'edit')}, {label: 'View note', icon: 'note', run: () => openNote(tag, 'view')}]
+    : [{label: 'Add note', icon: 'note-add', run: () => openNote(tag, 'edit')}];
+  const general = [{label: 'Copy BattleTag', icon: 'copy', run: () => copyTag(tag)}];
+  if (chosen) {
+    general.push({label: 'Remove from group', icon: 'user-minus', run: () => changeMenuGroup(tag, false)});
+  } else if (!self && !viaTeam && !banned) {
+    general.push({label: 'Add to group', icon: 'user-plus', run: () => changeMenuGroup(tag, true),
+      disabled: full, hint: full ? `Your group is full (${MAX_TAGS})` : ''});
+  }
+  const groups = [notes, general];
+  if (banned) groups.push([{label: 'Remove from blacklist', icon: 'unban', run: () => unblacklist(tag)}]);
+  else if (!self) groups.push([{label: 'Add to blacklist', icon: 'ban', danger: true, run: () => blacklist(tag), hint: chosen ? 'Also leaves your group' : ''}]);
+  return groups;
+}
+
+async function changeMenuGroup(tag, add) {
+  const tags = add ? [...state.manualTags, tag] : state.manualTags.filter(t => key(t) !== key(tag));
+  if (await changeGroup({tags})) toast(add ? `Added ${tag} to your group` : `Removed ${tag} from your group`);
+}
+
+async function blacklist(tag) {
+  banPick.delete(key(tag));
+  if (await act(() => bridge.AddToBlacklist([tag]))) toast(`Blacklisted ${tag}`);
+}
+
+async function unblacklist(tag) {
+  if (await act(() => bridge.RemoveFromBlacklist(tag))) toast(`Removed ${tag} from the blacklist`);
+}
+
+// copyTag puts tag on the clipboard: the app's own clipboard in the window,
+// the browser's in the demo page.
+async function copyTag(tag) {
+  let ok = false;
+  try {
+    if (window.runtime?.ClipboardSetText) ok = (await window.runtime.ClipboardSetText(tag)) !== false;
+    else if (navigator.clipboard) ok = (await navigator.clipboard.writeText(tag), true);
+  } catch { ok = false; }
+  if (ok) toast(`Copied ${tag}`);
+  else $('error').textContent = `Couldn’t copy ${tag} to the clipboard.`;
+}
+
+let toastTimer = 0;
+
+// toast confirms an action in a short line at the bottom of the window;
+// the hidden status line beside it is what screen readers read out.
+function toast(text) {
+  const node = $('toast');
+  node.replaceChildren(icon('check'), el('span', '', text));
+  $('announce').textContent = '';
+  setTimeout(() => { $('announce').textContent = text; }, 50);
+  node.dataset.show = 'true';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { node.dataset.show = 'false'; }, 2400);
+}
+
+const menu = {tag: '', origin: null, scope: null, order: [], keyboardAt: 0};
+
+const menuItems = () => [...$('player-menu').querySelectorAll('[role="menuitem"]')];
+
+// openPlayerMenu opens the menu for tag. origin is the element focus goes
+// back to; at is the pointer position, or null to place it by origin.
+function openPlayerMenu(tag, origin, at = null) {
+  if (!state) return;
+  closePlayerMenu();
+  closeNote({focus: false});
+  const banned = isBlacklisted(state, tag);
+  const chosen = state.manualTags.some(t => key(t) === key(tag));
+  const box = $('player-menu');
+
+  // The head repeats who the menu is for; the menu's label says it too.
+  const head = el('div', 'menu-head');
+  head.setAttribute('aria-hidden', 'true');
+  const [name, number] = tag.split('#');
+  const who = el('span', 'menu-who');
+  const line = el('span', 'menu-name', name);
+  if (number) line.append(el('span', 'menu-number', `#${number}`));
+  who.append(line);
+  const standing = banned ? 'Blacklisted' : chosen ? 'In your group' : '';
+  if (standing) who.append(el('span', `menu-standing ${banned ? 'banned' : 'chosen'}`, standing));
+  head.append(avatar(tag, {banned}), who);
+
+  const list = el('ul');
+  list.setAttribute('role', 'menu');
+  list.setAttribute('aria-label', `Actions for ${tag}`);
+  for (const items of playerMenuGroups(state, tag)) {
+    if (!items.length) continue;
+    if (list.children.length) {
+      const sep = el('li', 'menu-sep');
+      sep.setAttribute('role', 'separator');
+      list.append(sep);
+    }
+    for (const item of items) {
+      const li = el('li', item.danger ? 'menu-item danger' : 'menu-item');
+      li.setAttribute('role', 'menuitem');
+      li.tabIndex = -1;
+      if (item.disabled) li.setAttribute('aria-disabled', 'true');
+      const text = el('span', 'menu-text', item.label);
+      if (item.hint) text.append(el('small', '', item.hint));
+      li.append(icon(item.icon), text);
+      li.onclick = () => chooseItem(li, item);
+      li.onmousemove = () => { if (document.activeElement !== li) li.focus(); };
+      list.append(li);
+    }
+  }
+  list.onkeydown = menuKeys;
+  box.replaceChildren(head, list);
+
+  anchorTo(tag, origin);
+  if (origin?.hasAttribute('aria-expanded')) origin.setAttribute('aria-expanded', 'true');
+  box.hidden = false;
+  placeMenu(box, origin, at);
+  menuItems()[0]?.focus();
+}
+
+// anchorTo remembers the row a menu or popover for tag was opened on, so
+// focus can go back to it, or to its neighbour when the lists redraw.
+function anchorTo(tag, origin) {
+  menu.tag = tag;
+  menu.origin = origin;
+  menu.scope = origin?.closest('ul') ?? null;
+  menu.order = menu.scope ? [...menu.scope.querySelectorAll('[data-tag]')].map(n => n.dataset.tag) : [];
+}
+
+// placeMenu keeps the menu inside the window: below and right of the point
+// when there is room, flipped above or to the left when not.
+function placeMenu(box, origin, at) {
+  const margin = 8;
+  let x, y, above;
+  if (at) {
+    ({x, y} = at);
+    above = y;
+  } else {
+    const r = (origin.closest('[data-player]') ?? origin).getBoundingClientRect();
+    x = r.left + Math.min(40, r.width / 2);
+    y = r.bottom + 4;
+    above = r.top - 4;
+  }
+  const w = box.offsetWidth;
+  const h = box.offsetHeight;
+  let left = x;
+  let top = y;
+  let fromX = 'left';
+  let fromY = 'top';
+  if (left + w > innerWidth - margin) {
+    left = Math.max(x - w, margin);
+    fromX = 'right';
+  }
+  if (top + h > innerHeight - margin) {
+    top = above - h >= margin ? above - h : innerHeight - margin - h;
+    fromY = 'bottom';
+  }
+  box.style.left = `${Math.max(margin, Math.min(left, innerWidth - margin - w))}px`;
+  box.style.top = `${Math.max(margin, Math.min(top, innerHeight - margin - h))}px`;
+  box.style.transformOrigin = `${fromY} ${fromX}`;
+}
+
+// closePlayerMenu closes the menu; with focus, focus goes back to the row.
+function closePlayerMenu({focus = false} = {}) {
+  const box = $('player-menu');
+  if (box.hidden) return;
+  box.hidden = true;
+  box.replaceChildren();
+  if (menu.origin?.hasAttribute('aria-expanded')) menu.origin.setAttribute('aria-expanded', 'false');
+  if (focus) focusPlayer();
+}
+
+// focusPlayer focuses the row the menu was opened on. When a list redrew,
+// it finds the row again by BattleTag; when the row is gone, its neighbour,
+// else the selected tab.
+function focusPlayer() {
+  const {origin, scope, order, tag} = menu;
+  if (origin?.isConnected && origin.getClientRects().length) return origin.focus();
+  const find = t => (scope?.isConnected ? scope.querySelector(`[data-tag="${CSS.escape(t)}"]`) : null);
+  const i = Math.max(order.indexOf(tag), 0);
+  const target = find(tag) ?? order.slice(i + 1).map(find).find(Boolean) ?? order.slice(0, i).reverse().map(find).find(Boolean);
+  (target ?? $(`tab-${tab}`)).focus();
+}
+
+// chooseItem runs an item: the menu closes and focus returns to the row,
+// and again once the lists have redrawn after the action.
+async function chooseItem(li, item) {
+  if (li.getAttribute('aria-disabled') === 'true') return;
+  closePlayerMenu({focus: true});
+  await item.run();
+  const active = document.activeElement;
+  if (!active || active === document.body || !menu.origin?.isConnected) focusPlayer();
+}
+
+function menuKeys(event) {
+  const items = menuItems();
+  const i = items.indexOf(document.activeElement);
+  const move = n => {
+    event.preventDefault();
+    items[(n + items.length) % items.length]?.focus();
+  };
+  switch (event.key) {
+    case 'ArrowDown': return move(i + 1);
+    case 'ArrowUp': return move(i - 1);
+    case 'Home': return move(0);
+    case 'End': return move(items.length - 1);
+    case 'Enter':
+    case ' ':
+      event.preventDefault();
+      return items[i]?.click();
+    case 'Escape':
+    case 'Tab':
+      event.preventDefault();
+      event.stopPropagation();
+      return closePlayerMenu({focus: true});
+  }
+  // A letter moves to the next item that starts with it.
+  if (event.key.length === 1 && /\S/.test(event.key)) {
+    const letter = event.key.toLowerCase();
+    const next = [...items.slice(i + 1), ...items.slice(0, i + 1)].find(li => li.textContent.trim().toLowerCase().startsWith(letter));
+    if (next) {
+      event.preventDefault();
+      next.focus();
+    }
+  }
+}
+
+document.addEventListener('keydown', event => {
+  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+  const row = document.activeElement?.closest?.('[data-player]');
+  if (!row) return;
+  event.preventDefault();
+  menu.keyboardAt = Date.now();
+  openPlayerMenu(row.dataset.player, document.activeElement);
+});
+
+document.addEventListener('contextmenu', event => {
+  if ($('player-menu').contains(event.target)) return event.preventDefault();
+  // Shift+F10 and the Menu key send this event too, after the keydown that
+  // already opened the menu.
+  if (Date.now() - menu.keyboardAt < 600) return event.preventDefault();
+  const row = event.target.closest?.('[data-player]');
+  if (!row) return;
+  event.preventDefault();
+  const target = row.matches('[data-tag]') ? row : row.querySelector('[data-tag]') ?? row;
+  const fromKeyboard = event.clientX === 0 && event.clientY === 0;
+  openPlayerMenu(row.dataset.player, target, fromKeyboard ? null : {x: event.clientX, y: event.clientY});
+});
+
+document.addEventListener('pointerdown', event => {
+  if (!$('player-menu').contains(event.target)) closePlayerMenu();
+}, true);
+document.addEventListener('scroll', event => {
+  if (!$('player-menu').contains(event.target)) closePlayerMenu();
+}, true);
+window.addEventListener('resize', () => closePlayerMenu());
+window.addEventListener('blur', () => closePlayerMenu());
+
+/* Player notes ------------------------------------------------------------
+   One popover for writing, editing and reading the player's private note
+   about someone, opened from the player menu. Notes stay on this computer;
+   they are shown as plain text only. Esc or Cancel closes it with focus
+   back on the row; Ctrl+Enter or Cmd+Enter saves. */
+
+// NOTE_MAX is the longest note, in characters; Go enforces the same limit
+// (dto.MaxNoteLength), and the textarea's data-max says it.
+const NOTE_MAX = Number($('note-text').dataset.max);
+const noteLength = text => [...text.trim()].length;
+
+const notePop = {tag: '', mode: '', saving: false, warned: false};
+
+// openNote opens the popover for tag: mode 'edit' writes or edits the note,
+// 'view' reads it. origin is the row to anchor to; it defaults to the row
+// the player menu was opened on.
+function openNote(tag, mode, origin = menu.tag === tag ? menu.origin : null) {
+  if (!state) return;
+  const note = noteOf(state, tag);
+  if (mode === 'view' && !note) mode = 'edit';
+  if (origin) anchorTo(tag, origin);
+  Object.assign(notePop, {tag, mode, saving: false, warned: false});
+
+  const box = $('note-popover');
+  const [name, number] = tag.split('#');
+  const who = el('span', 'menu-who');
+  const line = el('span', 'menu-name', name);
+  if (number) line.append(el('span', 'menu-number', `#${number}`));
+  const sub = mode === 'view' ? `Note, updated ${noteDate(note.updated)}` : note ? 'Editing your note' : 'New note, kept on this computer only';
+  who.append(line, el('span', 'menu-standing', sub));
+  $('note-head').replaceChildren(avatar(tag, {banned: isBlacklisted(state, tag)}), who);
+  box.setAttribute('aria-label', mode === 'view' ? `Your note about ${tag}` : `${note ? 'Edit' : 'Add'} a note about ${tag}`);
+
+  $('note-edit').hidden = mode !== 'edit';
+  $('note-view').hidden = mode !== 'view';
+  $('note-error').textContent = '';
+  if (mode === 'edit') {
+    $('note-text').value = note?.text ?? '';
+    $('note-delete').hidden = !note;
+    noteCount();
+  } else {
+    $('note-body').textContent = note.text;
+  }
+  box.hidden = false;
+  placeNote();
+  if (mode === 'edit') {
+    const area = $('note-text');
+    area.focus();
+    area.setSelectionRange(area.value.length, area.value.length);
+  } else {
+    $('note-to-edit').focus();
+  }
+}
+
+function placeNote() {
+  const box = $('note-popover');
+  if (box.hidden) return;
+  const origin = menu.origin?.isConnected ? menu.origin : null;
+  if (origin) placeMenu(box, origin, null);
+  else {
+    box.style.left = `${Math.max(8, (innerWidth - box.offsetWidth) / 2)}px`;
+    box.style.top = `${Math.max(8, (innerHeight - box.offsetHeight) / 3)}px`;
+  }
+}
+
+// noteDate says when a note was last saved: a day this year, else a date.
+function noteDate(when) {
+  const then = new Date(when);
+  if (Number.isNaN(then.getTime()) || then.getFullYear() < 2000) return 'earlier';
+  const opts = {day: 'numeric', month: 'short'};
+  if (then.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return then.toLocaleDateString([], opts);
+}
+
+// noteCount shows how many characters are left, and blocks saving past
+// the limit; screen readers hear it once when the note gets too long.
+function noteCount() {
+  const n = noteLength($('note-text').value);
+  const over = n > NOTE_MAX;
+  const count = $('note-count');
+  count.textContent = over ? `${n - NOTE_MAX} over the ${NOTE_MAX}-character limit` : `${n} / ${NOTE_MAX}`;
+  count.dataset.state = over ? 'over' : n > NOTE_MAX - 50 ? 'near' : '';
+  $('note-text').setAttribute('aria-invalid', String(over));
+  $('note-save').disabled = over || notePop.saving;
+  if (over && !notePop.warned) {
+    notePop.warned = true;
+    $('announce').textContent = `Notes can be at most ${NOTE_MAX} characters.`;
+  }
+  if (!over) notePop.warned = false;
+}
+
+// noteDirty reports whether the text differs from the saved note.
+const noteDirty = () => notePop.mode === 'edit' && $('note-text').value.trim() !== (noteOf(state, notePop.tag)?.text ?? '');
+
+function closeNote({focus = true} = {}) {
+  const box = $('note-popover');
+  if (box.hidden) return;
+  box.hidden = true;
+  notePop.mode = '';
+  if (focus) focusPlayer();
+}
+
+// saveNote saves text as the note about the popover's player; empty text
+// deletes it. Errors stay in the popover so nothing typed is lost.
+async function saveNote(text) {
+  const {tag} = notePop;
+  const had = Boolean(noteOf(state, tag));
+  text = text.trim();
+  if (!text && !had) return closeNote();
+  if (noteLength(text) > NOTE_MAX) return noteCount();
+  notePop.saving = true;
+  noteCount();
+  try {
+    render(await (text ? bridge.SetNote(tag, text) : bridge.DeleteNote(tag)));
+  } catch (err) {
+    notePop.saving = false;
+    noteCount();
+    $('note-error').textContent = String(err?.message ?? err);
+    return;
+  }
+  closeNote();
+  toast(text ? `Saved your note about ${tag}` : `Deleted your note about ${tag}`);
+}
+
+$('note-text').oninput = noteCount;
+$('note-edit').onsubmit = event => {
+  event.preventDefault();
+  saveNote($('note-text').value);
+};
+$('note-text').onkeydown = event => {
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    saveNote($('note-text').value);
+  }
+};
+$('note-delete').onclick = () => saveNote('');
+$('note-cancel').onclick = () => closeNote();
+$('note-close').onclick = () => closeNote();
+$('note-to-edit').onclick = () => openNote(notePop.tag, 'edit');
+
+// Esc closes; Tab stays inside the popover.
+$('note-popover').addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    return closeNote();
+  }
+  if (event.key !== 'Tab') return;
+  const stops = [...$('note-popover').querySelectorAll('textarea, button')].filter(n => !n.disabled && n.getClientRects().length);
+  const i = stops.indexOf(document.activeElement);
+  const next = event.shiftKey ? (i <= 0 ? stops.length - 1 : i - 1) : (i + 1) % stops.length;
+  event.preventDefault();
+  stops[next]?.focus();
+});
+
+// A click outside closes a note being read, or one with no changes; a
+// changed note stays open so nothing typed is lost.
+document.addEventListener('pointerdown', event => {
+  const box = $('note-popover');
+  if (box.hidden || box.contains(event.target) || $('player-menu').contains(event.target)) return;
+  if (!noteDirty()) closeNote({focus: false});
+}, true);
+window.addEventListener('resize', placeNote);
 
 /* Events --------------------------------------------------------------- */
 
@@ -974,7 +1465,9 @@ boot();
 // demoOpen opens a dialog in the demo page, for screenshots:
 // ?open=host-setup|maps|maps-search|report|close-games. The recent scenes
 // open the Recent players tab (recent-select and recent-select-confirm in
-// its blacklist selection), the blacklist scenes the Blacklist tab.
+// its blacklist selection), the blacklist scenes the Blacklist tab, the
+// menu scenes the player menu on a recent player, a blacklisted player, a
+// group chip or a player with a note, and the note scenes the note popover.
 async function demoOpen(what) {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   switch (what) {
@@ -1034,6 +1527,60 @@ async function demoOpen(what) {
     case 'update-notes':
       $('update-notes').open = true;
       break;
+    // The player menu, opened from the keyboard on a row or chip.
+    case 'menu-recent':
+    case 'menu-blacklist':
+    case 'menu-group': {
+      const [list, tag] = {
+        'menu-recent': ['recent', 'Kelthuzad#6644'],
+        'menu-blacklist': ['blacklist', 'Deathwing#6666'],
+        'menu-group': ['party', 'Thrall#1820'],
+      }[what];
+      if (list !== 'party') selectTab(list);
+      await wait(50);
+      const target = $(list).querySelector(`[data-tag="${CSS.escape(tag)}"]`);
+      if (!target) break;
+      target.closest('[data-player]').scrollIntoView({block: 'center'});
+      await wait(50);
+      openPlayerMenu(tag, target);
+      break;
+    }
+    // Notes: rows with the note icon, a search that matches note text, and
+    // the note popover adding, editing (one too long) and reading a note.
+    case 'notes':
+    case 'notes-search':
+      selectTab('recent');
+      if (what === 'notes-search') {
+        $('friend-search').value = 'carries';
+        $('friend-search').dispatchEvent(new Event('input'));
+      }
+      await wait(50);
+      $('recent').scrollIntoView({block: 'center'});
+      break;
+    case 'menu-note':
+    case 'note-add':
+    case 'note-edit':
+    case 'note-long':
+    case 'note-view': {
+      const tag = {'menu-note': 'Arthas#1123', 'note-add': 'Kelthuzad#6644', 'note-edit': 'Arthas#1123', 'note-long': 'Garrosh#7781', 'note-view': 'Jaina#2214'}[what];
+      selectTab('recent');
+      await wait(50);
+      const target = $('recent').querySelector(`[data-tag="${CSS.escape(tag)}"]`);
+      if (!target) break;
+      target.closest('[data-player]').scrollIntoView({block: 'center'});
+      await wait(50);
+      if (what === 'menu-note') {
+        openPlayerMenu(tag, target);
+        break;
+      }
+      anchorTo(tag, target);
+      openNote(tag, what === 'note-view' ? 'view' : 'edit', target);
+      if (what === 'note-long') {
+        $('note-text').value += ' He also leaves Legion TD when the first boss leaks. '.repeat(10);
+        noteCount();
+      }
+      break;
+    }
   }
 }
 
@@ -1488,7 +2035,7 @@ function renderChanges(release) {
     // The newest version is open; older ones fold away.
     changes.forEach((section, i) => box.append(changeSection(section, i === 0)));
   } else {
-    box.append(el('p', 'notes-text', release.notes?.trim() || 'This release has no notes.'));
+    box.append(el('p', 'release-notes', release.notes?.trim() || 'This release has no notes.'));
   }
   $('update-notes-label').textContent = changes.length > 1 ? `What’s new in ${changes.length} versions` : 'What’s new';
   $('update-teaser').textContent = teaser(changes);
@@ -1559,7 +2106,9 @@ $('updates-releases').onclick = async () => {
    game-mode|keyboard-ask|keyboard-linux|recent|recent-empty|recent-clear|
    recent-select|recent-select-confirm|blacklist|blacklist-empty|blacklist-off|
    update|update-open|update-warning|update-notes|update-later|update-skipped|
-   update-latest|update-offline|update-dev;
+   update-latest|update-offline|update-dev|
+   menu-recent|menu-blacklist|menu-group|notes|notes-search|menu-note|
+   note-add|note-edit|note-long|note-view;
    add &open=host-setup to see the Game mode group. */
 function demoBridge() {
   const scene = new URLSearchParams(location.search).get('scene') || 'watching';
@@ -1643,8 +2192,16 @@ function demoBridge() {
   const updateIdle = {supported: true, phase: 'idle', currentVersion: '0.7.0', checkAutomatically: true, release: null, prompt: false,
     skipped: false, warning: '', message: '', lastChecked: at(40), releasesUrl: page};
   const updateOffer = {...updateIdle, phase: 'available', release: offer, prompt: true};
+  // Notes: sample BattleTags only, keyed lower-case as the Go side keeps them.
+  const notes = Object.fromEntries([
+    ['Arthas#1123', 'Carries in Legion TD. Calls the waves early and builds Elves.', 60 * 5],
+    ['Jaina#2214', 'Friend of Thrall’s from the Sunday group.\nPlays every race; asks before picking random.\n\nGood at Footmen Frenzy, weaker at tower defense. Prefers voice chat on Discord and is usually on after 8 pm. Happy to host when the lobby fills slowly.', 60 * 24 * 2],
+    ['Garrosh#7781', 'Left three Castle Fight games in a row when losing.', 60 * 26],
+    ['Kaelthas#7710', 'Met in a Legion TD lobby. Plays well, quiet in chat.', 60 * 24 * 20],
+  ].map(([tag, text, mins]) => [key(tag), {text, updated: at(mins)}]));
   const s = {
     update: scene.startsWith('update') ? updateOffer : updateIdle,
+    notes,
     recent, lobbyTags: ['Medivh#3310', 'Varimathras#2207'],
     blacklist, autoBan: true, blacklistManualBans: true,
     connected: true, version: '3.0.1.24371', verifiedBuild: true, enabled: false, diagnostic: false,
@@ -1720,6 +2277,16 @@ function demoBridge() {
       message: 'Team Follow couldn’t check for updates. Check your internet connection and try again.'}},
     'update-dev': {update: {...updateIdle, supported: false, currentVersion: 'v0.7.0-3-gabc1234-dirty', lastChecked: null,
       message: 'Updates are off in development builds. Download releases from GitHub.'}},
+    'menu-recent': {manualTags: ['Arthas#1123', 'Jaina#2214', 'Kelthuzad#6644']},
+    'menu-blacklist': {},
+    'menu-group': {},
+    notes: {},
+    'notes-search': {},
+    'menu-note': {},
+    'note-add': {},
+    'note-edit': {},
+    'note-long': {},
+    'note-view': {},
   };
   Object.assign(s, scenes[scene] || {});
   if (s.enabled) watch();
@@ -1750,6 +2317,14 @@ function demoBridge() {
     Update: async () => {},
     OpenReleasesPage: async () => {},
     ClearRecentPlayers: async () => { s.recent = []; s.lobbyTags = []; return clone(); },
+    SetNote: async (tag, text) => {
+      text = text.trim();
+      if ([...text].length > NOTE_MAX) throw new Error(`A note can be at most ${NOTE_MAX} characters.`);
+      if (text) s.notes[key(tag)] = {text, updated: new Date().toISOString()};
+      else delete s.notes[key(tag)];
+      return clone();
+    },
+    DeleteNote: async tag => { delete s.notes[key(tag)]; return clone(); },
     AddToBlacklist: async tags => {
       for (const tag of tags) {
         if (!TAG_PATTERN.test(tag.trim())) throw new Error('Enter a full BattleTag, such as Player#1234.');

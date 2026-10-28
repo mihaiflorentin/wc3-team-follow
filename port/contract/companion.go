@@ -47,6 +47,10 @@ type Companion interface {
 	// SkipUpdate silences the release on offer for good; the next release is
 	// offered again.
 	SkipUpdate() (dto.FollowState, error)
+	// SetNote saves the player's private note about the player with tag;
+	// empty text deletes it. Notes hold at most dto.MaxNoteLength characters
+	// and stay on this computer.
+	SetNote(tag, text string) (dto.FollowState, error)
 	// Subscribe calls fn with every new state until the returned function
 	// is called.
 	Subscribe(fn func(dto.FollowState)) (unsubscribe func())

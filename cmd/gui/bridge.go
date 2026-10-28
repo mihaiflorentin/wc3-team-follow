@@ -165,6 +165,17 @@ func (b *Bridge) ClearRecentPlayers() (dto.FollowState, error) {
 	return b.companion.ClearRecentPlayers()
 }
 
+// SetNote saves the player's private note about tag; empty text deletes
+// it.
+func (b *Bridge) SetNote(tag, text string) (dto.FollowState, error) {
+	return b.companion.SetNote(tag, text)
+}
+
+// DeleteNote deletes the player's note about tag.
+func (b *Bridge) DeleteNote(tag string) (dto.FollowState, error) {
+	return b.companion.SetNote(tag, "")
+}
+
 // AddToBlacklist blacklists one or more BattleTags; they also leave the
 // follow group. The page confirms first when adding several.
 func (b *Bridge) AddToBlacklist(tags []string) (dto.FollowState, error) {
