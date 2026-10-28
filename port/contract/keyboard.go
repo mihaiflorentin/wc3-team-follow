@@ -18,6 +18,8 @@ type GameKeyboard interface {
 	// which may show a system prompt. Call it only when the player asks.
 	RequestPermission(ctx context.Context) error
 	// TypeLine opens the chat with Enter, waits for the chat box, types
-	// line and sends it with Enter. line has already passed follow.ChatLine.
+	// line and sends it with Enter. The caller passes one trimmed chat
+	// line of 1 to 100 printable ASCII characters; anything else is refused
+	// whole, without pressing a key.
 	TypeLine(ctx context.Context, pid int, line string) error
 }

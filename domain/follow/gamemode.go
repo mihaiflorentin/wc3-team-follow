@@ -13,7 +13,7 @@ const (
 	// saved.
 	DefaultGameModeDelay = dto.DefaultGameModeDelaySeconds
 	// MaxGameModeDelay is the longest Game mode delay, in seconds.
-	MaxGameModeDelay = 120
+	MaxGameModeDelay = dto.MaxGameModeDelaySeconds
 )
 
 // gameModeState is Game mode's progress in the current hosted match.

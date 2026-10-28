@@ -722,10 +722,12 @@ function updateGameModeCount() {
   $('game-mode-count').textContent = n ? `${n}/100` : 'Off';
 }
 
-// gameModeDelay reads Seconds after loading, kept within 0 to 120.
+// gameModeDelay reads Seconds after loading, kept within 0 and the field's
+// max (dto.MaxGameModeDelaySeconds, checked by cmd/gui/frontend_test.go).
 function gameModeDelay() {
-  const secs = Math.round(Number($('game-mode-delay').value));
-  return Number.isFinite(secs) ? Math.min(120, Math.max(0, secs)) : 5;
+  const field = $('game-mode-delay');
+  const secs = Math.round(Number(field.value));
+  return Number.isFinite(secs) ? Math.min(Number(field.max), Math.max(0, secs)) : 5;
 }
 
 $('host-setup').onclick = () => {

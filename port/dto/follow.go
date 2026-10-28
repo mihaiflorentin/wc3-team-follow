@@ -189,13 +189,19 @@ type HostSettings struct {
 	// a lobby Auto-host created, for example "-ar"; "" turns Game mode off.
 	GameMode string `json:"gameMode"`
 	// GameModeDelaySeconds is how long after the match starts GameMode is
-	// typed, 0 to 120 seconds.
+	// typed, in seconds, from 0 to MaxGameModeDelaySeconds.
 	GameModeDelaySeconds int `json:"gameModeDelaySeconds"`
 }
 
-// DefaultGameModeDelaySeconds is HostSettings.GameModeDelaySeconds when
-// none was saved.
-const DefaultGameModeDelaySeconds = 5
+const (
+	// DefaultGameModeDelaySeconds is HostSettings.GameModeDelaySeconds when
+	// none was saved.
+	DefaultGameModeDelaySeconds = 5
+	// MaxGameModeDelaySeconds is the longest HostSettings.GameModeDelaySeconds;
+	// a longer delay is shortened to it. The window's delay field uses the
+	// same limit (cmd/gui/frontend).
+	MaxGameModeDelaySeconds = 120
+)
 
 // HostConfig changes Auto-host. Nil fields are left unchanged.
 type HostConfig struct {
