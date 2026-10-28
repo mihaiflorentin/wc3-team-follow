@@ -67,7 +67,7 @@ func TestAPlayerBannedByHandIsSavedToTheBlacklist(t *testing.T) {
 	h := newHarness(t, prefs)
 	h.session.Push(hostedLobby("Player#1234"))
 	h.session.Push(dto.GameEvent{MessageType: "ChatMessage", Payload: map[string]any{"message": map[string]any{
-		"source": "gameChat", "content": "Host banned player [Player#1234]"}}})
+		"source": "gameChat", "sender": "Self", "content": "Host banned player [Player#1234]"}}})
 	h.run(t)
 	waitFor(t, "the saved blacklist", func() bool {
 		got, _ := prefs.Load()

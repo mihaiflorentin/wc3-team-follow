@@ -84,13 +84,16 @@ The window only: `cmd/gui/frontend/app.js` (`playerFacts`, `showTip`). One share
 
 **Bans by hand.** When the player bans someone from a lobby they host, the game sends the same "Host banned player [X]" line. With no ban of Team Follow's waiting and **Add players I ban to the blacklist** on, X joins the blacklist ("Added Player#1234 to your blacklist (you banned them).") and leaves the follow group, and the companion saves it. Text that isn't a BattleTag, the player's own tag, players already listed, and lines while the player isn't the host are ignored. The line is the English client's wording; on other client languages this does nothing.
 
+**Only the player's own lines.** Guests can type "Host banned player [X]" in the lobby chat too. A ban line counts (for the check in 4 and for bans by hand) only when the `ChatMessage`'s `message.sender` is the player: their BattleTag or its name part, any case, after an optional "<CLAN> " prefix. Any other sender, or none, is ignored entirely: no blacklist change, no warning, and a waiting ban stays waiting. The companion logs `follow.ban_line_ignored` with the sender only.
+
 Live check (issue 16, macOS, game 3.0.1.24371, 2026-10-28):
 
 - The game's Ban menu item sends `BanPlayerFromGameLobby {slot}`, and Kick sends `KickPlayerFromGameLobby {slot}` (the game's menu script).
 - Sent by Team Follow while hosting, `BanPlayerFromGameLobby {slot: 2}` removed that player within 70 ms, without crashing the game. The game confirmed it with `ChatMessage` `source=gameChat`: "Host banned player [Name#1234]", then sent a `GameLobbySetup` without that slot.
 - A joining player's first `GameLobbySetup` slot can have an empty `name`; the BattleTag arrives in an update a few milliseconds later.
 - `GameLobbySetup` carries `isHost` (true when the local player hosts) and `playerHost`.
-- Not live-tested yet: a ban during an unlocked countdown, and the confirmation line on non-English clients.
+- The confirmation showed in the lobby chat as "[Lobby] <host's name>: Host banned player [...]", sent as the local player. The game's menu script reads the sender from `message.sender` (display name, possibly prefixed "<CLAN> ").
+- Not live-tested yet: a ban during an unlocked countdown, the confirmation line on non-English clients, and the exact `message.sender` value of the confirmation (name only or full BattleTag; both are accepted).
 
 ## Watching
 

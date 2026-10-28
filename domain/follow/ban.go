@@ -61,6 +61,31 @@ func (e *Engine) TakeBanMistakes() []string {
 	return out
 }
 
+// TakeIgnoredBanLines returns, once, the senders of ban confirmations that
+// weren't sent as the player and were ignored, for the log. A sender is a
+// display name or BattleTag; "" is a line without one.
+func (e *Engine) TakeIgnoredBanLines() []string {
+	out := e.ignoredBanLines
+	e.ignoredBanLines = nil
+	return out
+}
+
+// clanPrefix is the "<CLAN> " the game may put before a sender's name.
+var clanPrefix = regexp.MustCompile(`^<[^<>]*>\s*`)
+
+// sentBySelf reports whether a chat line's sender is the player: their
+// BattleTag or its name part, in any case, after an optional clan prefix.
+// An unknown own tag or an empty sender is never the player.
+func (e *Engine) sentBySelf(sender string) bool {
+	name := tagKey(clanPrefix.ReplaceAllString(strings.TrimSpace(sender), ""))
+	self := tagKey(e.selfTag)
+	if name == "" || self == "" {
+		return false
+	}
+	short, _, _ := strings.Cut(self, "#")
+	return name == self || name == short
+}
+
 // blacklistedSlot reports whether slot x is an occupied human slot, not
 // the player's own, whose non-empty name is on the blacklist, and returns
 // that name.
@@ -180,11 +205,19 @@ func (e *Engine) SendPendingBan() {
 // player is warned, by name, since nothing can undo a ban. A confirmation
 // with no ban of ours waiting is the player's own ban (bannedByHand). The
 // line is the English client's; other languages don't match it.
+//
+// Anyone in the lobby can type the same text, so a line counts only when
+// the game sent it as the local player (the host): one with any other
+// sender, or none, is ignored and kept for TakeIgnoredBanLines.
 func (e *Engine) confirmBan(p map[string]any) {
 	m := object(p["message"])
 	content, _ := m["content"].(string)
 	match := bannedLine.FindStringSubmatch(strings.TrimSpace(content))
 	if m["source"] != "gameChat" || match == nil {
+		return
+	}
+	if sender, _ := m["sender"].(string); !e.sentBySelf(sender) {
+		e.ignoredBanLines = append(e.ignoredBanLines, strings.TrimSpace(sender))
 		return
 	}
 	b := &e.ban

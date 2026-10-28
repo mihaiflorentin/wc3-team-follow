@@ -460,6 +460,10 @@ func (s *Service) handle(ctx context.Context, ev dto.GameEvent) (loggedOut bool)
 	for _, warning := range s.engine.TakeBanMistakes() {
 		s.logger.WarnContext(ctx, "follow.ban_mistake", slog.String("warning", warning))
 	}
+	for _, sender := range s.engine.TakeIgnoredBanLines() {
+		// The sender only (a display name or BattleTag), never the line.
+		s.logger.WarnContext(ctx, "follow.ban_line_ignored", slog.String("sender", sender))
+	}
 	if s.engine.TakeBlacklistChanged() {
 		// A player banned by hand joined the blacklist.
 		if err := s.save(); err != nil {

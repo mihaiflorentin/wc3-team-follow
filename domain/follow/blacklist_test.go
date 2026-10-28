@@ -186,8 +186,71 @@ func TestBlacklistingTakesPlayersOutOfTheFollowGroup(t *testing.T) {
 	}
 }
 
-func banned(tag string) map[string]any {
-	return map[string]any{"message": map[string]any{"source": "gameChat", "type": "chat", "content": "Host banned player [" + tag + "]"}}
+// banned is the game's ban confirmation, sent as the local player (the
+// host), whose display name is the name part of Self#1111.
+func banned(tag string) map[string]any { return bannedBy("Self", tag) }
+
+// bannedBy is a lobby chat line "Host banned player [tag]" from sender;
+// "" leaves the sender out.
+func bannedBy(sender, tag string) map[string]any {
+	m := map[string]any{"source": "gameChat", "type": "chat", "content": "Host banned player [" + tag + "]"}
+	if sender != "" {
+		m["sender"] = sender
+	}
+	return map[string]any{"message": m}
+}
+
+func TestABanLineFromAGuestIsIgnored(t *testing.T) {
+	f := newFixture(t)
+	f.blacklist("Griefer#4242")
+	f.engine.TakeBlacklistChanged()
+	f.receive("GameLobbySetup", hosted(lobbyWith(seat{name: "Self#1111"}, seat{name: "Griefer#4242"}, seat{name: "Victim#1234"})))
+	// A guest types the confirmation text in the lobby chat, naming
+	// someone else, while our ban of Griefer#4242 waits for its own.
+	f.receive("ChatMessage", bannedBy("Victim#1234", "Victim#1234"))
+	f.receive("ChatMessage", bannedBy("Victim", "Victim#1234"))
+	s := f.state()
+	if len(s.Blacklist) != 1 || f.engine.TakeBlacklistChanged() {
+		t.Fatalf("a guest's line changed the blacklist: %+v", s.Blacklist)
+	}
+	if got := f.engine.TakeBanMistakes(); len(got) != 0 {
+		t.Fatalf("a guest's line raised a mistake: %v", got)
+	}
+	if got := f.engine.TakeIgnoredBanLines(); len(got) != 2 || got[0] != "Victim#1234" || got[1] != "Victim" {
+		t.Fatalf("ignored = %v", got)
+	}
+	// Our ban still waits: the real confirmation is checked against it.
+	f.receive("GameLobbySetup", hosted(lobbyWith(seat{name: "Self#1111"}, seat{name: "Victim#1234"}, seat{})))
+	f.receive("ChatMessage", banned("Victim#1234"))
+	if got := f.engine.TakeBanMistakes(); len(got) != 1 {
+		t.Fatalf("the waiting ban was touched by the guest's line: %v", got)
+	}
+}
+
+func TestABanLineWithoutASenderIsIgnored(t *testing.T) {
+	f := newFixture(t)
+	f.receive("GameLobbySetup", hosted(lobbyWith(seat{name: "Self#1111"}, seat{name: "Player#1234"})))
+	f.receive("ChatMessage", bannedBy("", "Player#1234"))
+	if got := f.state().Blacklist; len(got) != 0 {
+		t.Fatalf("blacklist = %+v", got)
+	}
+	if got := f.engine.TakeIgnoredBanLines(); len(got) != 1 || got[0] != "" {
+		t.Fatalf("ignored = %q", got)
+	}
+}
+
+func TestABanLineFromMeIsTrustedWithAnyCaseTagOrClan(t *testing.T) {
+	for _, sender := range []string{"Self", "self#1111", "<CLAN> Self", "<Ab> SELF#1111"} {
+		f := newFixture(t)
+		f.receive("GameLobbySetup", hosted(lobbyWith(seat{name: "Self#1111"}, seat{name: "Player#1234"})))
+		f.receive("ChatMessage", bannedBy(sender, "Player#1234"))
+		if got := f.state().Blacklist; len(got) != 1 {
+			t.Errorf("sender %q: blacklist = %+v", sender, got)
+		}
+		if got := f.engine.TakeIgnoredBanLines(); len(got) != 0 {
+			t.Errorf("sender %q: ignored = %v", sender, got)
+		}
+	}
 }
 
 func TestBansOnlyFromTheNewestLobbyUpdateNeverFromATimer(t *testing.T) {

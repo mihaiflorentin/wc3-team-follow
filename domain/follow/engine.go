@@ -166,6 +166,9 @@ type Engine struct {
 	blacklistChanged bool
 	// banMistakes are warnings about wrong bans, for TakeBanMistakes.
 	banMistakes []string
+	// ignoredBanLines are the senders of ban lines not sent as the player,
+	// for TakeIgnoredBanLines.
+	ignoredBanLines []string
 	// selfTag is the player's own BattleTag, once the team or a lobby
 	// showed it.
 	selfTag string
