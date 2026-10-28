@@ -31,6 +31,10 @@ type Companion interface {
 	// CloseGames closes every copy of Warcraft III this user runs, when the
 	// player asked for it and confirmed, then looks for the game again.
 	CloseGames(ctx context.Context) (dto.FollowState, error)
+	// RequestKeyboardPermission asks the system for the permission Game
+	// mode's typing needs, which may show a system prompt. Call it only when
+	// the player asks.
+	RequestKeyboardPermission(ctx context.Context) (dto.FollowState, error)
 	// Subscribe calls fn with every new state until the returned function
 	// is called.
 	Subscribe(fn func(dto.FollowState)) (unsubscribe func())

@@ -24,6 +24,8 @@ type Companion struct {
 	LastQuery    string
 	// CloseCalls counts CloseGames calls.
 	CloseCalls int
+	// PermissionCalls counts RequestKeyboardPermission calls.
+	PermissionCalls int
 }
 
 func (c *Companion) Run(ctx context.Context) error {
@@ -71,5 +73,10 @@ func (c *Companion) SearchMaps(_ context.Context, query string) (dto.MapListing,
 
 func (c *Companion) CloseGames(context.Context) (dto.FollowState, error) {
 	c.CloseCalls++
+	return c.Current, c.Err
+}
+
+func (c *Companion) RequestKeyboardPermission(context.Context) (dto.FollowState, error) {
+	c.PermissionCalls++
 	return c.Current, c.Err
 }
