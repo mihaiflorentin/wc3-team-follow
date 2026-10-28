@@ -9,6 +9,24 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
+func TestAFailedBanIsRetriedOnTheNextLobbyUpdate(t *testing.T) {
+	f := newFixture(t)
+	f.blacklist("Griefer#4242")
+	f.fail = follow.CmdBanPlayer
+	f.receive("GameLobbySetup", hosted(lobbyWith(seat{name: "Self#1111"}, seat{name: "Griefer#4242"})))
+	if got := f.bans(); len(got) != 1 {
+		t.Fatalf("first try: bans = %v", got)
+	}
+	if s := f.state().Status; strings.HasPrefix(s, "Banned") {
+		t.Fatalf("a failed ban was noted: %q", s)
+	}
+	f.fail = ""
+	f.receive("GameLobbySetup", hosted(lobbyWith(seat{name: "Self#1111"}, seat{name: "Griefer#4242"})))
+	if got := f.bans(); len(got) != 2 || got[1] != 1 {
+		t.Fatalf("not retried: bans = %v", got)
+	}
+}
+
 // hosted marks a lobby update as one the player hosts.
 func hosted(p map[string]any) map[string]any {
 	p["isHost"] = true

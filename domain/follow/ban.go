@@ -187,6 +187,8 @@ func (e *Engine) SendPendingBan() {
 		return
 	}
 	if !e.send(CmdBanPlayer, map[string]any{"slot": slot}) {
+		// Not sent: the next lobby update tries again.
+		delete(b.banned, tagKey(r.tag))
 		return
 	}
 	sent := banRequest{tag: r.tag, slot: slot, sentAt: e.now()}
