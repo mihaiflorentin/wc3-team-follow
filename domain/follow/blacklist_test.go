@@ -1,6 +1,7 @@
 package follow_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -316,11 +317,62 @@ func TestAnUnansweredBanStopsBlockingAfterAShortWait(t *testing.T) {
 	}
 }
 
+func TestMyOwnBanWhileAnAutoBanWaitsIsNotAMistake(t *testing.T) {
+	f := newFixture(t)
+	f.blacklist("Griefer#4242")
+	f.engine.TakeBlacklistChanged()
+	f.receive("GameLobbySetup", hosted(lobbyWith(seat{name: "Self#1111"}, seat{name: "Griefer#4242"}, seat{name: "Player#1234"})))
+	// The player bans Player#1234 by hand before the game answers our ban
+	// of slot 1, which still shows Griefer#4242.
+	f.receive("ChatMessage", banned("Player#1234"))
+	if got := f.engine.TakeBanMistakes(); len(got) != 0 {
+		t.Fatalf("a hand ban was taken for a mistake: %v", got)
+	}
+	s := f.state()
+	if len(s.Blacklist) != 2 || s.Blacklist[0].Tag != "Player#1234" || !f.engine.TakeBlacklistChanged() {
+		t.Fatalf("the hand ban wasn't added: %+v", s.Blacklist)
+	}
+	// Our ban still waits for its own confirmation, which is quiet.
+	f.receive("ChatMessage", banned("Griefer#4242"))
+	if got := f.engine.TakeBanMistakes(); len(got) != 0 {
+		t.Fatalf("mistakes = %v", got)
+	}
+	if s := f.state().Status; s != "Added Player#1234 to your blacklist (you banned them)." {
+		t.Fatalf("status = %q", s)
+	}
+}
+
+func TestMyOwnBanWhileAnAutoBanWaitsWithTheSwitchOffChangesNothing(t *testing.T) {
+	f := newFixture(t)
+	f.blacklist("Griefer#4242")
+	if err := f.engine.Configure(dto.FollowConfig{BlacklistManualBans: ptr(false)}); err != nil {
+		t.Fatal(err)
+	}
+	f.receive("GameLobbySetup", hosted(lobbyWith(seat{name: "Self#1111"}, seat{name: "Griefer#4242"}, seat{name: "Player#1234"})))
+	f.receive("ChatMessage", banned("Player#1234"))
+	// Then the slot changes hands and the game hits Player#5678: still
+	// checked against our waiting ban.
+	f.receive("GameLobbySetup", hosted(lobbyWith(seat{name: "Self#1111"}, seat{name: "Player#5678"}, seat{})))
+	f.receive("ChatMessage", banned("Player#5678"))
+	if got := f.engine.TakeBanMistakes(); len(got) != 1 || !strings.Contains(got[0], "Player#5678 by mistake") {
+		t.Fatalf("mistakes = %v", got)
+	}
+	if got := f.state().Blacklist; len(got) != 1 {
+		t.Fatalf("blacklist = %+v", got)
+	}
+}
+
 func TestWarnsWhenTheGameBannedSomeoneElse(t *testing.T) {
 	f := newFixture(t)
 	f.blacklist("Griefer#4242")
 	f.receive("GameLobbySetup", hosted(lobbyWith(seat{name: "Self#1111"}, seat{name: "Griefer#4242"})))
+	// Griefer#4242 left and Player#5678 took the slot before the game
+	// handled the ban.
+	f.receive("GameLobbySetup", hosted(lobbyWith(seat{name: "Self#1111"}, seat{name: "Player#5678"})))
 	f.receive("ChatMessage", banned("Player#5678"))
+	if got := f.state().Blacklist; len(got) != 1 {
+		t.Fatalf("the mistaken ban joined the blacklist: %+v", got)
+	}
 	want := "Banned Player#5678 by mistake: Griefer#4242 left just before the ban."
 	if s := f.state().Status; s != want {
 		t.Fatalf("status = %q", s)

@@ -129,11 +129,7 @@ func (e *Engine) banBlacklisted(p map[string]any) {
 	b.players = players
 	now := e.now()
 	b.awaiting = slices.DeleteFunc(b.awaiting, func(r banRequest) bool { return now.Sub(r.sentAt) >= banWait })
-	if r := b.sent; r != nil && (now.Sub(r.sentAt) >= banWait || !slices.ContainsFunc(players, func(raw any) bool {
-		x := object(raw)
-		name, _ := x["name"].(string)
-		return sameNumber(x["slot"], r.slot) && tagKey(name) == tagKey(r.tag)
-	})) {
+	if r := b.sent; r != nil && (now.Sub(r.sentAt) >= banWait || !e.holdsSlot(r.tag, r.slot)) {
 		b.sent = nil
 	}
 	present := map[string]bool{}
@@ -200,11 +196,13 @@ func (e *Engine) SendPendingBan() {
 }
 
 // confirmBan reads the game's ban confirmation in the lobby chat and checks
-// it against the bans still waiting for one. When the game banned someone
-// who isn't blacklisted, the slot changed hands just before the ban: the
-// player is warned, by name, since nothing can undo a ban. A confirmation
-// with no ban of ours waiting is the player's own ban (bannedByHand). The
-// line is the English client's; other languages don't match it.
+// it against the bans still waiting for one. A confirmation naming a player
+// we meant confirms that ban. One naming who the newest lobby update shows
+// in a slot we banned means the slot changed hands just before the ban:
+// unless that player is blacklisted too, the player is warned, by name,
+// since nothing can undo a ban. Any other confirmation is the player's own
+// ban (bannedByHand), and our bans keep waiting. The line is the English
+// client's; other languages don't match it.
 //
 // Anyone in the lobby can type the same text, so a line counts only when
 // the game sent it as the local player (the host): one with any other
@@ -224,13 +222,16 @@ func (e *Engine) confirmBan(p map[string]any) {
 	now := e.now()
 	b.awaiting = slices.DeleteFunc(b.awaiting, func(r banRequest) bool { return now.Sub(r.sentAt) >= banWait })
 	who := strings.TrimSpace(match[1])
-	if len(b.awaiting) == 0 {
-		e.bannedByHand(who)
-		return
-	}
 	i := slices.IndexFunc(b.awaiting, func(r banRequest) bool { return tagKey(r.tag) == tagKey(who) })
 	if i < 0 {
-		i = 0
+		// Not who we meant: ours only when the newest lobby update shows
+		// who in a slot one of our bans targeted. Otherwise the player
+		// banned someone by hand, and our bans keep waiting.
+		i = slices.IndexFunc(b.awaiting, func(r banRequest) bool { return e.holdsSlot(who, r.slot) })
+	}
+	if i < 0 {
+		e.bannedByHand(who)
+		return
 	}
 	meant := b.awaiting[i]
 	b.awaiting = slices.Delete(b.awaiting, i, i+1)
@@ -243,6 +244,15 @@ func (e *Engine) confirmBan(p map[string]any) {
 	warning := "Banned " + who + " by mistake: " + meant.tag + " left just before the ban."
 	e.banMistakes = append(e.banMistakes, warning)
 	e.Note(warning)
+}
+
+// holdsSlot reports whether the newest lobby update shows tag in slot.
+func (e *Engine) holdsSlot(tag string, slot any) bool {
+	return slices.ContainsFunc(e.ban.players, func(raw any) bool {
+		x := object(raw)
+		name, _ := x["name"].(string)
+		return sameNumber(x["slot"], slot) && tagKey(name) == tagKey(tag)
+	})
 }
 
 // bannedByHand adds a player the player banned by hand, in a lobby they
