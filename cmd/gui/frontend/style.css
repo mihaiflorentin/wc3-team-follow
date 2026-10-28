@@ -885,3 +885,5 @@ select {
 .joincard .autojoin-option input:checked { background: var(--online); }
 .joincard .autojoin-option input:checked::after { transform: translateX(14px); background: var(--bone); }
 .joincard .autojoin-option:has(input:focus-visible) { outline: 2px solid var(--preview); outline-offset: 4px; border-radius: 6px; }
+/* Options after the first share its divider, so they read as one group. */
+.joincard .autojoin-option + .autojoin-option { padding-top: 0; border-top: 0; }

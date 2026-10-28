@@ -211,6 +211,7 @@ function render(s) {
   renderActions(s);
   renderHost(s);
   $('ask-password').checked = Boolean(s.askPassword);
+  $('join-host-team').checked = Boolean(s.joinHostTeam);
   renderFriends(s);
   renderLog(s);
 }
@@ -442,6 +443,7 @@ $('confirm-no').onclick = closeConfirm;
 $('friend-search').oninput = () => render(state);
 $('show-offline').onchange = () => render(state);
 $('ask-password').onchange = event => configure({askPassword: event.target.checked});
+$('join-host-team').onchange = event => configure({joinHostTeam: event.target.checked});
 
 $('friend-form').onsubmit = async event => {
   event.preventDefault();
@@ -950,7 +952,7 @@ function demoBridge() {
   const entries = dir => (tree[dir] ?? []).map(([name, isFolder, d]) => ({name, isFolder, dir, modified: day(d), path: `${mapsRoot}/${dir ? dir + '/' : ''}${name}${isFolder ? '' : '.w3x'}`}));
   const s = {
     connected: true, version: '3.0.1.24371', verifiedBuild: true, enabled: false, diagnostic: false,
-    manualTags: ['Arthas#1123', 'Jaina#2214', 'Thrall#1820', 'Uther#5521'], includeTeam: true,
+    manualTags: ['Arthas#1123', 'Jaina#2214', 'Thrall#1820', 'Uther#5521'], includeTeam: true, joinHostTeam: true,
     status: '', screen: 'CUSTOM_LOBBIES', busy: false, queued: false, inMatch: false, paused: false, inMenus: true,
     joinPending: false, passwordRequest: null, preferencesError: '', connectionHint: '', gameCount: 0,
     team: [
@@ -980,6 +982,10 @@ function demoBridge() {
     'host-waiting': {host: {enabled: true, phase: 'waiting', createAt: new Date(now + 8000).toISOString(), settings: hostDemo, players: 0, slots: 0, missing: [], offTeam: []}},
     'host-lobby': {host: {enabled: true, phase: 'lobby', settings: {...hostDemo, startWhenFull: true, sameTeam: true}, players: 3, slots: 6, full: false, missing: ['Jaina#2214', 'Thrall#1820'], offTeam: ['Uther#5521']},
       log: [{time: at(1), message: 'Your lobby “LTD with friends” is open. It starts once it’s full and everyone you follow is in.'}, {time: at(0), message: 'Moving Uther#5521 to your team.'}]},
+    'host-swap': {host: {enabled: true, phase: 'lobby', settings: {...hostDemo, startWhenFull: true, sameTeam: true}, players: 6, slots: 6, full: true, missing: [], offTeam: ['Uther#5521']},
+      log: [{time: at(1), message: 'The lobby is full, but it won’t start until Uther#5521 are on your team. You can still press Start yourself.'}, {time: at(0), message: 'Asked the game to swap Uther#5521 with Player#5678.'}]},
+    'join-team': {enabled: true, paused: true, busy: true, inMenus: false, status: 'Moving you to Illidan#6602’s team.',
+      log: [{time: at(1), message: 'Joined Illidan#6602’s lobby. Follow stays on and is paused here.'}, {time: at(0), message: 'Moving you to Illidan#6602’s team.'}]},
     watching: {log: [{time: at(3), message: 'Connected to Warcraft III. Form a team in the game, or add friends here.'}, {time: at(1), message: 'Arthas#1123 opened a lobby: Footmen Frenzy 6.2.'}]},
     first: {manualTags: [], team: [{battleTag: 'Player#1234', isSelf: true, status: 'You'}], log: s.log.slice(0, 1)},
     live: {enabled: true},
@@ -1027,6 +1033,7 @@ function demoBridge() {
       if (cfg.tags) { s.manualTags = cfg.tags; s.enabled = false; }
       if ('includeTeam' in cfg) { s.includeTeam = cfg.includeTeam; s.enabled = false; }
       if ('askPassword' in cfg) s.askPassword = cfg.askPassword;
+      if ('joinHostTeam' in cfg) s.joinHostTeam = cfg.joinHostTeam;
       if ('diagnostic' in cfg && cfg.diagnostic !== s.diagnostic) { s.diagnostic = cfg.diagnostic; s.enabled = false; }
       if (cfg.enabled === false) s.enabled = false;
       if (cfg.enabled === true) { s.enabled = true; s.diagnostic = false; s.host = {...s.host, enabled: false, phase: 'off'}; watch(); }
