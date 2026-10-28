@@ -68,6 +68,12 @@ type FollowState struct {
 	// Keyboard says whether Game mode can type in the match chat on this
 	// computer.
 	Keyboard KeyboardStatus `json:"keyboard"`
+	// Recent lists the players seen in a lobby or match with the player,
+	// most recently seen first. Never nil.
+	Recent []RecentPlayer `json:"recent"`
+	// LobbyTags are the BattleTags of the other humans in the player's
+	// current lobby or match, for the Recent players status. Never nil.
+	LobbyTags []string `json:"lobbyTags"`
 }
 
 // TeamMember is one player of the game's current team.

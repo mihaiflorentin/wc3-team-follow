@@ -94,6 +94,18 @@ func TestBridgePassesGameModeSettingsAndPermissionRequestsOn(t *testing.T) {
 	}
 }
 
+func TestBridgePassesClearRecentPlayersOn(t *testing.T) {
+	c := &mockcompanion.Companion{Current: dto.FollowState{Recent: []dto.RecentPlayer{}}}
+	s, err := gui.NewBridge(c, "", "", "").ClearRecentPlayers()
+	if err != nil || c.ClearRecentCalls != 1 || s.Recent == nil {
+		t.Fatalf("ClearRecentPlayers = %+v, %v (calls %d)", s.Recent, err, c.ClearRecentCalls)
+	}
+	c.Err = errors.New("Recent players couldn't be cleared on this computer. Try again.")
+	if _, err := gui.NewBridge(c, "", "", "").ClearRecentPlayers(); err == nil || err.Error() != c.Err.Error() {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestBridgePassesCloseGamesOn(t *testing.T) {
 	c := &mockcompanion.Companion{Current: dto.FollowState{GameCount: 0, Status: "Closed 2 copies of Warcraft III."}}
 	s, err := gui.NewBridge(c, "", "", "").CloseGames()

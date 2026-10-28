@@ -35,6 +35,9 @@ type Companion interface {
 	// mode's typing needs, which may show a system prompt. Call it only when
 	// the player asks.
 	RequestKeyboardPermission(ctx context.Context) (dto.FollowState, error)
+	// ClearRecentPlayers forgets every recent player, on this computer too.
+	// The follow group stays as it is.
+	ClearRecentPlayers() (dto.FollowState, error)
 	// Subscribe calls fn with every new state until the returned function
 	// is called.
 	Subscribe(fn func(dto.FollowState)) (unsubscribe func())

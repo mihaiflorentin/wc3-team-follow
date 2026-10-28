@@ -155,6 +155,12 @@ func (b *Bridge) CloseGames() (dto.FollowState, error) {
 	return b.companion.CloseGames(b.context())
 }
 
+// ClearRecentPlayers forgets every recent player. The page asks the player
+// to confirm first.
+func (b *Bridge) ClearRecentPlayers() (dto.FollowState, error) {
+	return b.companion.ClearRecentPlayers()
+}
+
 // RequestKeyboardPermission asks the system for the permission Game mode's
 // typing needs. The page calls it only when the player clicks to allow
 // typing.

@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
@@ -96,11 +97,17 @@ func (s *Store) Save(prefs dto.Preferences) error {
 	if err != nil {
 		return fmt.Errorf("encode friends: %w", err)
 	}
-	dir := filepath.Dir(s.file)
+	return writeAtomic(s.file, content)
+}
+
+// writeAtomic replaces file with content through a temporary file in the
+// same folder, readable only by this user.
+func writeAtomic(file string, content []byte) error {
+	dir, name := filepath.Dir(file), filepath.Base(file)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create settings folder: %w", err)
 	}
-	tmp, err := os.CreateTemp(dir, "friends-*.tmp")
+	tmp, err := os.CreateTemp(dir, strings.TrimSuffix(name, filepath.Ext(name))+"-*.tmp")
 	if err != nil {
 		return fmt.Errorf("create temporary file: %w", err)
 	}
@@ -108,16 +115,16 @@ func (s *Store) Save(prefs dto.Preferences) error {
 	defer func() { _ = os.Remove(tmp.Name()) }()
 	if _, err := tmp.Write(append(content, '\n')); err != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("write friends: %w", err)
+		return fmt.Errorf("write %s: %w", name, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("write friends: %w", err)
+		return fmt.Errorf("write %s: %w", name, err)
 	}
 	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
-		return fmt.Errorf("protect friends file: %w", err)
+		return fmt.Errorf("protect %s: %w", name, err)
 	}
-	if err := os.Rename(tmp.Name(), s.file); err != nil {
-		return fmt.Errorf("replace friends file: %w", err)
+	if err := os.Rename(tmp.Name(), file); err != nil {
+		return fmt.Errorf("replace %s: %w", name, err)
 	}
 	return nil
 }

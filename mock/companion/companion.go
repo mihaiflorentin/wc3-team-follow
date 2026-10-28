@@ -26,6 +26,13 @@ type Companion struct {
 	CloseCalls int
 	// PermissionCalls counts RequestKeyboardPermission calls.
 	PermissionCalls int
+	// ClearRecentCalls counts ClearRecentPlayers calls.
+	ClearRecentCalls int
+}
+
+func (c *Companion) ClearRecentPlayers() (dto.FollowState, error) {
+	c.ClearRecentCalls++
+	return c.Current, c.Err
 }
 
 func (c *Companion) Run(ctx context.Context) error {

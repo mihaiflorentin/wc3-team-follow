@@ -31,8 +31,17 @@ const (
 var quietEvents = map[string]bool{"GameListUpdate": true, "GameListRemove": true}
 
 const (
-	loadFailed = "Saved friends couldn't be loaded. Add them again to save a new list."
-	saveFailed = "Your change couldn't be saved on this computer. Try again."
+	// recentSaveEvery is the shortest time between saves of the recent
+	// players after one was added or changed; recentTouchEvery after only
+	// last-seen times moved, as they do each second during a match.
+	recentSaveEvery  = 5 * time.Second
+	recentTouchEvery = time.Minute
+)
+
+const (
+	clearFailed = "Recent players couldn't be cleared on this computer. Try again."
+	loadFailed  = "Saved friends couldn't be loaded. Add them again to save a new list."
+	saveFailed  = "Your change couldn't be saved on this computer. Try again."
 )
 
 // Options tunes the service.
@@ -58,6 +67,8 @@ type Ports struct {
 	// Keyboard types Game mode's command in the match chat. It is required;
 	// on a system that can't type, its Status says so.
 	Keyboard contract.GameKeyboard
+	// Recent keeps the players seen in a lobby or match with the player.
+	Recent contract.RecentPlayers
 }
 
 type Service struct {
@@ -68,11 +79,15 @@ type Service struct {
 	library   contract.MapLibrary
 	processes contract.GameProcesses
 	keyboard  contract.GameKeyboard
+	recentDB  contract.RecentPlayers
 	logger    *slog.Logger
 	opts      Options
 
-	mu            sync.Mutex
-	engine        *follow.Engine
+	mu     sync.Mutex
+	engine *follow.Engine
+	recent *follow.Recent
+	// recentSavedAt is when the recent players were last saved.
+	recentSavedAt time.Time
 	session       contract.GameSession
 	connecting    bool
 	nextDiscovery time.Time
@@ -115,11 +130,18 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		library:     ports.Library,
 		processes:   ports.Processes,
 		keyboard:    ports.Keyboard,
+		recentDB:    ports.Recent,
 		logger:      logger,
 		opts:        opts,
 		subscribers: map[int]func(dto.FollowState){},
 	}
 	s.engine = follow.NewEngine(s.send, opts.Now, opts.VerifiedBuilds)
+	recent, err := s.recentDB.Load()
+	if err != nil {
+		logger.Warn("recent.load", slog.Any("error", err))
+		recent = nil
+	}
+	s.recent = follow.NewRecent(opts.Now, recent)
 
 	saved, err := s.prefs.Load()
 	if err == nil {
@@ -191,6 +213,8 @@ func (s *Service) Run(ctx context.Context) error {
 			s.logStatus()
 			s.logger.Info("companion.stop")
 			s.dropSession()
+			s.recent.End()
+			s.saveRecent(true)
 			s.mu.Unlock()
 			// Typing stops with ctx; wait for it to report, so nothing
 			// runs after Run returns.
@@ -217,6 +241,8 @@ func (s *Service) step(ctx context.Context) {
 	s.mu.Lock()
 	s.keyboardStatus = keyboard
 	s.engine.Tick()
+	s.recent.Tick()
+	s.saveRecent(false)
 	s.typeChatLines(ctx)
 	s.logStatus()
 	s.refresh()
@@ -313,6 +339,7 @@ func (s *Service) read(ctx context.Context, session contract.GameSession) {
 		if err != nil {
 			s.dropSession()
 			s.engine.Connection(false, "")
+			s.recent.End()
 			s.logStatus()
 			s.mu.Unlock()
 			s.logger.InfoContext(ctx, "companion.disconnected", slog.Any("error", err))
@@ -333,6 +360,7 @@ func (s *Service) read(ctx context.Context, session contract.GameSession) {
 				s.logger.DebugContext(ctx, "companion.event", slog.String("type", ev.MessageType))
 			}
 			s.engine.Receive(ev)
+			s.recent.Receive(ev)
 			s.typeChatLines(ctx)
 			if ev.MessageType == "GameLobbySetup" {
 				s.logLobby(ctx, ev)
@@ -367,6 +395,8 @@ func (s *Service) snapshot() dto.FollowState {
 	state.MapsFolder = s.mapsFolder
 	state.Keyboard = s.keyboardStatus
 	state.PreferencesError = s.prefsError
+	state.Recent = s.recent.Players()
+	state.LobbyTags = s.recent.Present()
 	if !state.Connected {
 		state.ConnectionHint = s.hint
 		state.GameCount = s.gameCount
@@ -658,6 +688,7 @@ func (s *Service) CloseGames(ctx context.Context) (dto.FollowState, error) {
 	s.closing = false
 	if count > 0 {
 		s.dropSession()
+		s.recent.End()
 		if s.engine.Connected() {
 			s.engine.Connection(false, "")
 		}
@@ -793,4 +824,49 @@ func playerSentence(err error, fallback string) string {
 		}
 	}
 	return fallback
+}
+
+// saveRecent writes the recent players when they changed: at most every
+// recentSaveEvery after a player or map changed, every recentTouchEvery
+// when only last-seen times moved, or at once when force is set. A failed
+// save is logged and tried again later. It runs with s.mu held.
+func (s *Service) saveRecent(force bool) {
+	changed, touched := s.recent.Unsaved()
+	if !changed && !touched {
+		return
+	}
+	every := recentTouchEvery
+	if changed {
+		every = recentSaveEvery
+	}
+	now := s.opts.Now()
+	if !force && now.Sub(s.recentSavedAt) < every {
+		return
+	}
+	s.recentSavedAt = now
+	players := s.recent.Players()
+	if err := s.recentDB.Save(players); err != nil {
+		s.logger.Warn("recent.save", slog.Any("error", err))
+		return
+	}
+	s.recent.MarkSaved()
+	s.logger.Debug("recent.saved", slog.Int("count", len(players)))
+}
+
+// ClearRecentPlayers forgets every recent player, on this computer too.
+// The follow group stays as it is.
+func (s *Service) ClearRecentPlayers() (dto.FollowState, error) {
+	s.mu.Lock()
+	err := s.recentDB.Clear()
+	if err != nil {
+		s.logger.Error("recent.clear", slog.Any("error", err))
+		err = errors.New(clearFailed)
+	} else {
+		s.recent.Clear()
+		s.logger.Info("recent.cleared")
+	}
+	state := s.snapshot()
+	s.mu.Unlock()
+	s.notify()
+	return state, err
 }

@@ -20,6 +20,7 @@ import (
 	mockkeyboard "github.com/mihaiflorentin/wc3-team-follow/mock/keyboard"
 	mockmaps "github.com/mihaiflorentin/wc3-team-follow/mock/maps"
 	mockprefs "github.com/mihaiflorentin/wc3-team-follow/mock/preferences"
+	mockrecent "github.com/mihaiflorentin/wc3-team-follow/mock/recent"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
@@ -34,11 +35,19 @@ type harness struct {
 	library   *mockmaps.Library
 	processes *mockgame.Processes
 	keyboard  *mockkeyboard.Keyboard
+	recent    *mockrecent.Store
 	// skew moves the service's clock ahead of the real one, in nanoseconds.
 	skew atomic.Int64
 }
 
 func newHarness(t *testing.T, prefs *mockprefs.Store) *harness {
+	t.Helper()
+	return newHarnessWith(t, prefs, mockrecent.New())
+}
+
+// newHarnessWith builds the harness around a recent players store, so a
+// test can restart the companion on the same store.
+func newHarnessWith(t *testing.T, prefs *mockprefs.Store, recent *mockrecent.Store) *harness {
 	t.Helper()
 	h := &harness{
 		discovery: &mockgame.Discovery{Conn: dto.GameConnection{Port: 5000, Session: "12345678901", Version: build}},
@@ -46,10 +55,11 @@ func newHarness(t *testing.T, prefs *mockprefs.Store) *harness {
 		prefs:     prefs,
 		processes: &mockgame.Processes{},
 		keyboard:  &mockkeyboard.Keyboard{Current: dto.KeyboardStatus{Supported: true, Permitted: true}},
+		recent:    recent,
 	}
 	h.locator = &mockmaps.Locator{Folders: []dto.MapsFolder{{Path: "/detected/Maps", Source: "test"}}, GamePrefix: "GAME:"}
 	h.library = &mockmaps.Library{Entries: []dto.MapEntry{{Name: "Legion TD", Path: "/detected/Maps/Legion TD.w3x"}, {Name: "Footmen Frenzy", Path: "/detected/Maps/ff.w3x"}}}
-	ports := companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library, Processes: h.processes, Keyboard: h.keyboard}
+	ports := companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library, Processes: h.processes, Keyboard: h.keyboard, Recent: h.recent}
 	h.svc = companion.New(ports, slog.New(slog.DiscardHandler), companion.Options{
 		VerifiedBuilds:    []string{build},
 		RefreshInterval:   5 * time.Second,
@@ -257,7 +267,7 @@ func TestLogsNeverContainTheSessionOrPasswords(t *testing.T) {
 		session:   mockgame.NewSession(),
 		prefs:     mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}),
 	}
-	h.svc = companion.New(companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: h.prefs, Maps: &mockmaps.Locator{}, Library: &mockmaps.Library{}, Keyboard: &mockkeyboard.Keyboard{}},
+	h.svc = companion.New(companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: h.prefs, Maps: &mockmaps.Locator{}, Library: &mockmaps.Library{}, Keyboard: &mockkeyboard.Keyboard{}, Recent: mockrecent.New()},
 		slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		companion.Options{VerifiedBuilds: []string{build}, RefreshInterval: 5 * time.Second, DiscoveryInterval: 10 * time.Second})
 	h.run(t)
