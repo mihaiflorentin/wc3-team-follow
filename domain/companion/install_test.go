@@ -83,6 +83,18 @@ func TestCancelStopsTheDownload(t *testing.T) {
 	}
 }
 
+func TestCancelUpdateNotifiesTheWindow(t *testing.T) {
+	// Not running, so no other change notifies meanwhile.
+	h := newUpdateHarness(t, updatePrefs(false, ""), "v0.7.0")
+	notified := 0
+	unsubscribe := h.svc.Subscribe(func(dto.FollowState) { notified++ })
+	defer unsubscribe()
+	h.svc.CancelUpdate()
+	if notified != 1 {
+		t.Fatalf("notified %d times", notified)
+	}
+}
+
 func TestDevelopmentBuildsNeverInstall(t *testing.T) {
 	h := newUpdateHarness(t, updatePrefs(true, ""), "dev")
 	h.run(t)

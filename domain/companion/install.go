@@ -94,6 +94,7 @@ func (s *Service) CancelUpdate() dto.FollowState {
 	}
 	state := s.snapshot()
 	s.mu.Unlock()
+	s.notify()
 	return state
 }
 
