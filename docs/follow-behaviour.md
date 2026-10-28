@@ -34,6 +34,17 @@ Every `FriendsFriendData` snapshot replaces the roster: the whole Battle.net fri
 - **Clear all** (`Companion.ClearRecentPlayers`) removes the file and the list, including who is present now (the next lobby update records them again). It doesn't touch the follow group.
 - **Follow group:** ticking a recent player adds their BattleTag to `manualTags`, like Add by BattleTag; the 12-member limit is unchanged. Auto-join refuses to start with a group member who isn't a Battle.net friend (see Starting); Auto-host counts them for Same team and Start when full.
 
+## Player menu
+
+The window only: `cmd/gui/frontend/app.js` (`playerMenuGroups`, `openPlayerMenu`). Nothing is sent to the game and no bridge method is new.
+
+- **Where:** every player row in Friends, Recent players and Blacklist, and every chip in the group bar. Right-click, Shift+F10 or the Menu key on the focused row opens it; a chip also opens it on click. Unavailable checkboxes (blacklisted, group full) are `aria-disabled` rather than disabled, so their rows stay reachable from the keyboard.
+- **Items, only those that apply:** Copy BattleTag (Wails `ClipboardSetText`, else `navigator.clipboard`); Remove from group for a `manualTags` member, else Add to group (`Configure` with the new `tags`, through the same path as ticking, so Auto-join is turned back on for the new group as before), unavailable with "Your group is full (12)" when full; Add to blacklist (`AddToBlacklist([tag])`, which also takes them out of the group; the item says so when they are in it) or Remove from blacklist (`RemoveFromBlacklist`). Members followed through the game team get no group item, blacklisted players no Add to group, and the player's own tag neither group nor blacklist items.
+- **Keyboard and focus:** ARIA `menu`/`menuitem`/`separator`, focus on the first item; the arrow keys (wrapping), Home, End and a first letter move; Enter or Space chooses; Esc or Tab closes. Focus returns to the row, found again by BattleTag after the lists redraw, or to its neighbour when the row left the list. A pointer press outside, scrolling, resizing or leaving the window closes it.
+- **Placement:** fixed, below and right of the pointer or row, flipped above or left when there's no room, and kept 8 px inside the window; it scrolls when the window is shorter than the menu.
+- **Confirmation:** a short line at the bottom ("Copied Player#1234", "Blacklisted Player#1234") and a polite status region for screen readers.
+- **Later items:** items come in groups split by a separator. Notes add their own group in front without changing the rest.
+
 ## Blacklist and auto-ban
 
 `domain/follow/blacklist.go` (the list) and `domain/follow/ban.go` (banning), docs/adr/0008. The **Blacklist** tab in the People panel lists the blacklisted BattleTags with when each was added, adds one by BattleTag (checked as `Name#1234`), removes them, and holds the **Auto-ban** and **Add players I ban to the blacklist** switches. In Recent players, **Select to blacklist** turns the row checkboxes into a separate choice (red crosses, a red rail, "Who you follow doesn't change"); a bar shows "Blacklist N players" and Cancel, and asks to confirm before adding them. Escape steps back from the confirmation, then out of the choice. Blacklisted players show a Blacklisted badge and a struck-through avatar in Recent players and Friends, and can't be ticked to follow.
