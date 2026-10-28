@@ -61,12 +61,28 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve recent players: %w", err)
 		}
+		updates, err := s.Updater()
+		if err != nil {
+			return nil, fmt.Errorf("resolve updater: %w", err)
+		}
+		checkEvery, err := time.ParseDuration(s.config.Updates.CheckInterval)
+		if err != nil {
+			return nil, fmt.Errorf("invalid updates.check_interval %q: %w", s.config.Updates.CheckInterval, err)
+		}
+		retryEvery, err := time.ParseDuration(s.config.Updates.RetryInterval)
+		if err != nil {
+			return nil, fmt.Errorf("invalid updates.retry_interval %q: %w", s.config.Updates.RetryInterval, err)
+		}
 		ports := companion.Ports{Discovery: discovery, Dialer: dialer, Prefs: prefs, Maps: locator, Library: library, Processes: processes,
-			Keyboard: keyboard, Recent: recent}
+			Keyboard: keyboard, Recent: recent, Updater: updates}
 		return companion.New(ports, s.logger, companion.Options{
-			VerifiedBuilds:    cfg.VerifiedBuilds,
-			RefreshInterval:   refresh,
-			DiscoveryInterval: discoveryEvery,
+			VerifiedBuilds:      cfg.VerifiedBuilds,
+			RefreshInterval:     refresh,
+			DiscoveryInterval:   discoveryEvery,
+			AppVersion:          s.config.App.Version,
+			UpdateInterval:      checkEvery,
+			UpdateRetryInterval: retryEvery,
+			ReleasesURL:         "https://github.com/" + s.config.Updates.Repository + "/releases",
 		}), nil
 	})
 }

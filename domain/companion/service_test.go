@@ -21,6 +21,7 @@ import (
 	mockmaps "github.com/mihaiflorentin/wc3-team-follow/mock/maps"
 	mockprefs "github.com/mihaiflorentin/wc3-team-follow/mock/preferences"
 	mockrecent "github.com/mihaiflorentin/wc3-team-follow/mock/recent"
+	mockupdater "github.com/mihaiflorentin/wc3-team-follow/mock/updater"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
@@ -36,6 +37,7 @@ type harness struct {
 	processes *mockgame.Processes
 	keyboard  *mockkeyboard.Keyboard
 	recent    *mockrecent.Store
+	updater   *mockupdater.Updater
 	// skew moves the service's clock ahead of the real one, in nanoseconds.
 	skew atomic.Int64
 }
@@ -47,7 +49,7 @@ func newHarness(t *testing.T, prefs *mockprefs.Store) *harness {
 
 // newHarnessWith builds the harness around a recent players store, so a
 // test can restart the companion on the same store.
-func newHarnessWith(t *testing.T, prefs *mockprefs.Store, recent *mockrecent.Store) *harness {
+func newHarnessWith(t *testing.T, prefs *mockprefs.Store, recent *mockrecent.Store, tune ...func(*companion.Options)) *harness {
 	t.Helper()
 	h := &harness{
 		discovery: &mockgame.Discovery{Conn: dto.GameConnection{Port: 5000, Session: "12345678901", Version: build}},
@@ -56,16 +58,21 @@ func newHarnessWith(t *testing.T, prefs *mockprefs.Store, recent *mockrecent.Sto
 		processes: &mockgame.Processes{},
 		keyboard:  &mockkeyboard.Keyboard{Current: dto.KeyboardStatus{Supported: true, Permitted: true}},
 		recent:    recent,
+		updater:   &mockupdater.Updater{},
 	}
 	h.locator = &mockmaps.Locator{Folders: []dto.MapsFolder{{Path: "/detected/Maps", Source: "test"}}, GamePrefix: "GAME:"}
 	h.library = &mockmaps.Library{Entries: []dto.MapEntry{{Name: "Legion TD", Path: "/detected/Maps/Legion TD.w3x"}, {Name: "Footmen Frenzy", Path: "/detected/Maps/ff.w3x"}}}
-	ports := companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library, Processes: h.processes, Keyboard: h.keyboard, Recent: h.recent}
-	h.svc = companion.New(ports, slog.New(slog.DiscardHandler), companion.Options{
+	ports := companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library, Processes: h.processes, Keyboard: h.keyboard, Recent: h.recent, Updater: h.updater}
+	opts := companion.Options{
 		VerifiedBuilds:    []string{build},
 		RefreshInterval:   5 * time.Second,
 		DiscoveryInterval: 10 * time.Second,
 		Now:               func() time.Time { return time.Now().Add(time.Duration(h.skew.Load())) },
-	})
+	}
+	for _, fn := range tune {
+		fn(&opts)
+	}
+	h.svc = companion.New(ports, slog.New(slog.DiscardHandler), opts)
 	return h
 }
 

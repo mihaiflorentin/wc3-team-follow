@@ -28,6 +28,25 @@ type Companion struct {
 	PermissionCalls int
 	// ClearRecentCalls counts ClearRecentPlayers calls.
 	ClearRecentCalls int
+	// CheckCalls, LaterCalls and SkipCalls count the update calls.
+	CheckCalls int
+	LaterCalls int
+	SkipCalls  int
+}
+
+func (c *Companion) CheckForUpdates() (dto.FollowState, error) {
+	c.CheckCalls++
+	return c.Current, c.Err
+}
+
+func (c *Companion) UpdateLater() dto.FollowState {
+	c.LaterCalls++
+	return c.Current
+}
+
+func (c *Companion) SkipUpdate() (dto.FollowState, error) {
+	c.SkipCalls++
+	return c.Current, c.Err
 }
 
 func (c *Companion) ClearRecentPlayers() (dto.FollowState, error) {

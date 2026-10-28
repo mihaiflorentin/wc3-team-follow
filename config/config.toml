@@ -35,3 +35,12 @@ width      = 1040
 height     = 760
 min_width  = 720
 min_height = 560
+
+[updates]
+# Team Follow checks GitHub Releases for a newer stable version and asks
+# before anything changes. Only GitHub's own hosts are contacted, over HTTPS.
+api_url        = "https://api.github.com"
+repository     = "mihaiflorentin/wc3-team-follow"
+check_interval = "6h"
+retry_interval = "30m"
+timeout        = "20s"

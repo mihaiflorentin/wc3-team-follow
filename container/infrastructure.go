@@ -1,7 +1,11 @@
 package container
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
+	"runtime"
+	"time"
 
 	"github.com/mihaiflorentin/wc3-team-follow/config"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/discovery"
@@ -9,6 +13,7 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/keyboard"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/maps"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/settings"
+	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/updater"
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
 )
 
@@ -25,6 +30,28 @@ type InfrastructureContainer struct {
 	gameProcesses   lazy[contract.GameProcesses]
 	gameKeyboard    lazy[contract.GameKeyboard]
 	recentPlayers   lazy[contract.RecentPlayers]
+	updater         lazy[contract.Updater]
+}
+
+// Updater returns the GitHub Releases client named by [updates]. It talks
+// only to GitHub's hosts over HTTPS (docs/adr/0009).
+func (s *ServiceContainer) Updater() (contract.Updater, error) {
+	return s.infrastructure.updater.get(func() (contract.Updater, error) {
+		cfg := s.config.Updates
+		if cfg == nil {
+			return nil, errors.New("missing [updates] config section")
+		}
+		if u, err := url.Parse(cfg.APIURL); err != nil || u.Scheme != "https" || u.Host == "" {
+			return nil, fmt.Errorf("invalid updates.api_url %q: it must be an HTTPS address", cfg.APIURL)
+		}
+		timeout, err := time.ParseDuration(cfg.Timeout)
+		if err != nil {
+			return nil, fmt.Errorf("invalid updates.timeout %q: %w", cfg.Timeout, err)
+		}
+		return updater.New(updater.NewClient(timeout), updater.Options{
+			APIURL: cfg.APIURL, Repository: cfg.Repository, Asset: updater.AssetName(runtime.GOOS, runtime.GOARCH),
+		}, s.logger), nil
+	})
 }
 
 // MapsLocator returns the Maps folder locator for this operating system.

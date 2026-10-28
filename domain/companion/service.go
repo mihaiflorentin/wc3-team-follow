@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/mihaiflorentin/wc3-team-follow/domain/follow"
+	"github.com/mihaiflorentin/wc3-team-follow/domain/update"
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
@@ -50,6 +51,16 @@ type Options struct {
 	VerifiedBuilds    []string
 	RefreshInterval   time.Duration
 	DiscoveryInterval time.Duration
+	// AppVersion is the running build's version; only a clean release
+	// version checks for updates.
+	AppVersion string
+	// UpdateInterval is the time between automatic update checks, and
+	// UpdateRetryInterval the wait after a failed one; zero uses 6 hours
+	// and 30 minutes.
+	UpdateInterval      time.Duration
+	UpdateRetryInterval time.Duration
+	// ReleasesURL is the releases page, for updating by hand.
+	ReleasesURL string
 	// Now reads the clock; nil uses time.Now.
 	Now func() time.Time
 }
@@ -69,6 +80,8 @@ type Ports struct {
 	Keyboard contract.GameKeyboard
 	// Recent keeps the players seen in a lobby or match with the player.
 	Recent contract.RecentPlayers
+	// Updater finds a newer release of Team Follow.
+	Updater contract.Updater
 }
 
 type Service struct {
@@ -80,12 +93,19 @@ type Service struct {
 	processes contract.GameProcesses
 	keyboard  contract.GameKeyboard
 	recentDB  contract.RecentPlayers
+	updater   contract.Updater
 	logger    *slog.Logger
 	opts      Options
 
 	mu     sync.Mutex
 	engine *follow.Engine
 	recent *follow.Recent
+	// updates decides when to check for a newer release and what to offer.
+	updates *update.Checker
+	// runCtx is Run's context, for checks the player starts; nil until Run.
+	runCtx context.Context
+	// checks tracks running update checks; Run waits for them.
+	checks sync.WaitGroup
 	// recentSavedAt is when the recent players were last saved.
 	recentSavedAt time.Time
 	session       contract.GameSession
@@ -131,6 +151,7 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		processes:   ports.Processes,
 		keyboard:    ports.Keyboard,
 		recentDB:    ports.Recent,
+		updater:     ports.Updater,
 		logger:      logger,
 		opts:        opts,
 		subscribers: map[int]func(dto.FollowState){},
@@ -143,7 +164,21 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 	}
 	s.recent = follow.NewRecent(opts.Now, recent)
 
+	if opts.UpdateInterval <= 0 {
+		opts.UpdateInterval = 6 * time.Hour
+	}
+	if opts.UpdateRetryInterval <= 0 {
+		opts.UpdateRetryInterval = 30 * time.Minute
+	}
+	s.opts = opts
+
 	saved, err := s.prefs.Load()
+	checkUpdates, skipped := true, ""
+	if err == nil {
+		checkUpdates, skipped = saved.CheckUpdates, saved.SkippedVersion
+	}
+	s.updates = update.New(update.Options{Version: opts.AppVersion, Interval: opts.UpdateInterval, RetryInterval: opts.UpdateRetryInterval,
+		ReleasesURL: opts.ReleasesURL, Now: opts.Now}, checkUpdates, skipped)
 	if err == nil {
 		err = s.engine.Configure(dto.FollowConfig{Tags: &saved.Tags, IncludeTeam: &saved.IncludeTeam, AskPassword: &saved.AskPassword,
 			JoinHostTeam: &saved.JoinHostTeam})
@@ -208,6 +243,9 @@ func (s *Service) Run(ctx context.Context) error {
 		slog.String("refresh_interval", s.opts.RefreshInterval.String()), slog.String("discovery_interval", s.opts.DiscoveryInterval.String()))
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
+	s.mu.Lock()
+	s.runCtx = ctx
+	s.mu.Unlock()
 	s.step(ctx)
 	for {
 		select {
@@ -224,6 +262,7 @@ func (s *Service) Run(ctx context.Context) error {
 			// Typing stops with ctx; wait for it to report, so nothing
 			// runs after Run returns.
 			s.typing.Wait()
+			s.checks.Wait()
 			return nil
 		case <-ticker.C:
 			s.step(ctx)
@@ -251,6 +290,9 @@ func (s *Service) step(ctx context.Context) {
 	s.typeChatLines(ctx)
 	s.logStatus()
 	s.refresh()
+	if s.updates.Due() && s.updates.Begin(false) {
+		s.startCheck(ctx, false)
+	}
 	start := s.session == nil && !s.connecting && !s.closing && !s.opts.Now().Before(s.nextDiscovery)
 	if start {
 		s.connecting = true
@@ -444,6 +486,8 @@ func (s *Service) snapshot() dto.FollowState {
 	state.PreferencesError = s.prefsError
 	state.Recent = s.recent.Players()
 	state.LobbyTags = s.recent.Present()
+	state.Update = s.updates.State(update.Activity{InLobby: state.Busy && !state.InMatch, InMatch: state.InMatch,
+		AutoJoin: state.Enabled, AutoHost: state.Host.Enabled})
 	if !state.Connected {
 		state.ConnectionHint = s.hint
 		state.GameCount = s.gameCount
@@ -455,8 +499,11 @@ func (s *Service) snapshot() dto.FollowState {
 func (s *Service) Configure(cfg dto.FollowConfig) (dto.FollowState, error) {
 	s.mu.Lock()
 	err := s.engine.Configure(cfg)
+	if err == nil && cfg.CheckUpdates != nil {
+		s.updates.SetAutomatic(*cfg.CheckUpdates)
+	}
 	s.logger.Info("follow.configure", configAttrs(cfg, err)...)
-	if err == nil && (cfg.Tags != nil || cfg.IncludeTeam != nil || cfg.AskPassword != nil || cfg.JoinHostTeam != nil ||
+	if err == nil && (cfg.Tags != nil || cfg.CheckUpdates != nil || cfg.IncludeTeam != nil || cfg.AskPassword != nil || cfg.JoinHostTeam != nil ||
 		cfg.Blacklist != nil || cfg.BlacklistAdd != nil || cfg.BlacklistRemove != nil || cfg.AutoBan != nil ||
 		cfg.BlacklistManualBans != nil) {
 		if saveErr := s.save(); saveErr != nil {
@@ -500,6 +547,9 @@ func configAttrs(cfg dto.FollowConfig, err error) []any {
 	}
 	if cfg.BlacklistManualBans != nil {
 		attrs = append(attrs, slog.Bool("blacklist_manual_bans", *cfg.BlacklistManualBans))
+	}
+	if cfg.CheckUpdates != nil {
+		attrs = append(attrs, slog.Bool("check_updates", *cfg.CheckUpdates))
 	}
 	if cfg.Diagnostic != nil {
 		attrs = append(attrs, slog.Bool("preview", *cfg.Diagnostic))
@@ -575,6 +625,7 @@ func (s *Service) save() error {
 		JoinHostTeam: s.engine.JoinHostTeam(),
 		MapsFolder:   s.mapsFolder, Host: &host,
 		Blacklist: s.engine.Blacklist(), AutoBan: s.engine.AutoBan(), BlacklistManualBans: s.engine.BlacklistManualBans(),
+		CheckUpdates: s.updates.Automatic(), SkippedVersion: s.updates.SkippedVersion(),
 	})
 }
 

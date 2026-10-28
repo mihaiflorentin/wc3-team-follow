@@ -38,6 +38,15 @@ type Companion interface {
 	// ClearRecentPlayers forgets every recent player, on this computer too.
 	// The follow group stays as it is.
 	ClearRecentPlayers() (dto.FollowState, error)
+	// CheckForUpdates starts an update check the player asked for; the
+	// answer arrives with a later state (ADR 0009).
+	CheckForUpdates() (dto.FollowState, error)
+	// UpdateLater hides the update banner until a newer release is found or
+	// the player checks again.
+	UpdateLater() dto.FollowState
+	// SkipUpdate silences the release on offer for good; the next release is
+	// offered again.
+	SkipUpdate() (dto.FollowState, error)
 	// Subscribe calls fn with every new state until the returned function
 	// is called.
 	Subscribe(fn func(dto.FollowState)) (unsubscribe func())

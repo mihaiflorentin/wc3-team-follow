@@ -17,7 +17,8 @@ import (
 func TestSaveAndLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	tags := []string{"One#1234", "Two#2345", "Three#3456"}
-	if err := settings.New(dir).Save(dto.Preferences{Tags: tags, IncludeTeam: false, JoinHostTeam: true, AutoBan: true, BlacklistManualBans: true}); err != nil {
+	if err := settings.New(dir).Save(dto.Preferences{Tags: tags, IncludeTeam: false, JoinHostTeam: true, AutoBan: true, BlacklistManualBans: true,
+		CheckUpdates: true}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := settings.New(dir).Load()

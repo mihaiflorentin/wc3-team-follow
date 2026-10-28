@@ -112,6 +112,57 @@ func TestCompanion_BuildsFromTheEmbeddedConfig(t *testing.T) {
 	}
 }
 
+func TestUpdater_ReportsAMissingUpdatesSection(t *testing.T) {
+	c := New(&config.Config{}, slog.New(slog.DiscardHandler))
+	if _, err := c.Updater(); err == nil {
+		t.Fatal("built the updater without [updates]")
+	}
+}
+
+func TestUpdater_RefusesAnAPIWithoutHTTPS(t *testing.T) {
+	c := New(&config.Config{Updates: &config.UpdatesConfig{APIURL: "http://api.github.com", Repository: "o/r", Timeout: "20s"}},
+		slog.New(slog.DiscardHandler))
+	if _, err := c.Updater(); err == nil {
+		t.Fatal("built an updater that talks plain HTTP")
+	}
+}
+
+func TestUpdater_BuildsFromTheEmbeddedConfig(t *testing.T) {
+	cfg, err := config.NewConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Updates == nil || cfg.Updates.APIURL != "https://api.github.com" || cfg.Updates.Repository != "mihaiflorentin/wc3-team-follow" {
+		t.Fatalf("[updates] = %+v", cfg.Updates)
+	}
+	c := New(cfg, slog.New(slog.DiscardHandler))
+	first, err := c.Updater()
+	if err != nil || first == nil {
+		t.Fatalf("Updater = %v, %v", first, err)
+	}
+	if second, _ := c.Updater(); second != first {
+		t.Fatal("Updater built twice")
+	}
+}
+
+func TestCompanion_GetsTheBuildVersionForUpdates(t *testing.T) {
+	t.Setenv(config.DataDirEnv, t.TempDir())
+	cfg, err := config.NewConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.App.Version = "v0.7.0"
+	c := New(cfg, slog.New(slog.DiscardHandler))
+	companion, err := c.Companion()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u := companion.State().Update; !u.Supported || u.CurrentVersion != "0.7.0" || !u.CheckAutomatically ||
+		u.ReleasesURL != "https://github.com/mihaiflorentin/wc3-team-follow/releases" {
+		t.Fatalf("update = %+v", u)
+	}
+}
+
 func TestGameProcesses_IsBuiltOnce(t *testing.T) {
 	c := New(&config.Config{}, slog.New(slog.DiscardHandler))
 	first, err := c.GameProcesses()
