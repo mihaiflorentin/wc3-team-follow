@@ -8,7 +8,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | --- | --- |
 | `main.go` | Composition root: builds config, logger and container once, runs the CLI, closes the container. Opening the window on Windows and Linux first starts the crash supervisor. `console_windows.go` attaches the terminal for commands. |
 | `crashreport/` | Error dialog when the window stops because of an error: a supervisor process on Windows and Linux, in-process on macOS. Used only by `main.go`. |
-| `cmd/cli/` | Cobra commands. Wiring layer: resolves dependencies from the container and passes them on. Running with no command opens the window; `discover` checks game discovery; `say` types one chat line to check the game chat. |
+| `cmd/cli/` | Cobra commands. Wiring layer: resolves dependencies from the container and passes them on. Running with no command opens the window; `discover` checks game discovery; `say` types one chat line to check the game chat; `type` types one line in the match chat with keystrokes. |
 | `cmd/gui/` | Driving desktop adapter: `Run(Deps, Options)` opens the Wails window; `Bridge` is the page's API. `frontend/` is plain HTML/CSS/JS, embedded. |
 | `container/` | `ServiceContainer`: lazy `(T, error)` accessors and `Close`. Used only by the wiring layer. |
 | `config/` | `config.toml` (embedded into the binary) and `NewConfig`. |
@@ -20,6 +20,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `infrastructure/discovery/` | Finds the game, menu port, session and version, and the Maps folders (`MapsLocator`, with Wine path translation). `Processes` closes the game's own processes when the player asks (`contract.GameProcesses`). `platform_<os>.go` per OS; portable parsing beside it. |
 | `infrastructure/maps/` | Lists and searches maps in a Maps folder (`MapLibrary`). |
 | `infrastructure/gamesocket/` | Loopback websocket to the game with the command allowlist. |
+| `infrastructure/keyboard/` | Types one line in the match chat with keystrokes (`contract.GameKeyboard`, ADR 0007): the sequence and its checks in `keyboard.go`, `SendInput` in `platform_windows.go`, `CGEventPost` in `platform_darwin.go`, not supported elsewhere yet. |
 | `infrastructure/settings/` | `friends.json` in the per-user data folder. |
 | `mock/` | Hand-written test doubles, one package per contract group. |
 | `packaging/darwin/` | `Info.plist` and entitlements for the macOS app bundle. |
@@ -40,6 +41,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 - The menu session, passwords and account ids are never logged, printed, saved or put in `FollowState` or `Diagnostics`.
 - The game socket sends only the allowlisted commands in `infrastructure/gamesocket`, each one the game's own menu sends for the same purpose: watching and Auto-join (`TeamGetInfo`, `FriendsGetFriends`, `RequestCancelTeamInvitations`, `TeamLeave`, `JoinFriendGameLobby`, `JoinGameByGameName`, `SendGameListing`, `GetGameList`) and Auto-host (`CreateLobby`, `LobbyStart`, `LobbyCancel`, `SetTeam`, `SendInviteToGame`) and Auto-host's chat line (`SendGameChatMessage`). `SendGameLobbySetup` and `GetGameInfo` crashed the game and must never be added.
 - Typing in the game chat (`SendGameChatMessage`, ADR 0006) goes only through `Engine.sendChat`, only for Auto-host's own lobby or match as host, and only one trimmed, non-empty line of at most 100 characters; anything else is rejected. Auto-join, watching and Auto-host's existing steps type nothing. The `say` command is the one manual exception, with the same limits (`follow.ChatLine`).
+- Keystrokes (ADR 0007) go only through `contract.GameKeyboard` (`infrastructure/keyboard`), only to the discovered game process and only while it is the window in front, checked before every key; the moment it isn't, or the context ends, typing stops and the error says the chat box may hold part of the line. Never bring the game forward, activate a window or steal focus. Only Enter and printable ASCII characters (no hotkeys, orders or Esc), one line of at most 100 characters, refused whole rather than cut short. Only Auto-host's own Game mode command, as host, after the player entered one and switched it on (off by default); the `type` command is the one manual exception. Keystrokes write no memory and inject no code. Linux isn't supported yet; never add uinput or portal input, which can't check the target.
 - Nothing starts a match unless the host switched on Start when full; Auto-host otherwise only creates the lobby.
 - Follow always starts off; nothing re-enables it automatically after a disconnect.
 
@@ -115,6 +117,7 @@ To add a dependency (an outbound adapter or a domain service):
 | `make package-darwin-arm64` | macOS `.app` and zip into `dist/` (macOS only). |
 | `make package-linux-amd64` | Linux tarball into `dist/` (Linux only, needs `libwebkit2gtk-4.1-dev`). |
 | `./bin/wc3-team-follow discover` | Find the running game; prints pid, version and port, never the session. |
+| `./bin/wc3-team-follow type [--delay 3s] [--ask-permission] -- "<text>"` | Type one line in the match chat with keystrokes after the delay, only while the game is in front; never brings it forward. For live checks. |
 | `./bin/wc3-team-follow say "<text>" [--wait 10s]` | Type one line in the game chat and print the game's events (names, chat lines, channel names only). For live checks. |
 
 Before finishing a change, run `make fmt`, `go vet ./...` and `go test ./...`.
@@ -134,6 +137,7 @@ Architectural decisions are recorded as ADRs in `docs/adr/`, one numbered file p
 - `0005`: closing the game's processes on request.
 - `0004`: crash dialog and window supervisor.
 - `0006`: typing in the game chat.
+- `0007`: typing in the match chat with keystrokes.
 
 ## Agent skills
 
