@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
@@ -52,6 +53,12 @@ type GitHub struct {
 	client *http.Client
 	opts   Options
 	logger *slog.Logger
+
+	mu sync.Mutex
+	// verified maps each file Download verified, not yet installed, to the
+	// SHA-256 checksums.txt published for it; Install checks the file
+	// against it again.
+	verified map[string]string
 }
 
 // New returns the updater. client should have a timeout.

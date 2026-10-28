@@ -249,6 +249,61 @@ func TestACancelledDownloadLeavesNothing(t *testing.T) {
 	}
 }
 
+// otherRelease is a well-formed release file for the running system whose
+// program isn't the published one.
+func otherRelease(t *testing.T) []byte {
+	t.Helper()
+	switch runtime.GOOS {
+	case "darwin":
+		return zipFiles(t, map[string]string{"Warcraft Team Follow.app/Contents/MacOS/wc3-team-follow": "other program"})
+	case "windows":
+		return zipFiles(t, map[string]string{"wc3-team-follow-windows-amd64.exe": "other program"})
+	default:
+		return tarFiles(t, map[string]string{"./wc3-team-follow": "other program"})
+	}
+}
+
+func TestInstallRefusesAFileSwappedAfterTheDownload(t *testing.T) {
+	in := fakeInstall(t)
+	u, rel, _ := serveRelease(t, in, in.release, "")
+	path, err := u.Download(context.Background(), rel, func(dto.UpdateProgress) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, otherRelease(t), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err = u.Install(context.Background(), path)
+	var p contract.UpdateProblem
+	if !errors.As(err, &p) || !strings.Contains(p.Problem(), "checksum") || installedProgram(t, in) != "old program" {
+		t.Fatalf("installed a swapped file: %v", err)
+	}
+	if len(leftovers(t, in)) != 0 {
+		t.Fatal("left a temporary folder")
+	}
+}
+
+func TestInstallRefusesAFilePlacedInAnUpdateFolder(t *testing.T) {
+	in := fakeInstall(t)
+	u, rel, _ := serveRelease(t, in, in.release, "")
+	// A real download shows where update folders go.
+	path, err := u.Download(context.Background(), rel, func(dto.UpdateProgress) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	planted, err := os.MkdirTemp(filepath.Dir(filepath.Dir(path)), ".wc3-team-follow-update-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(planted, in.asset)
+	if err := os.WriteFile(file, otherRelease(t), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Install(context.Background(), file); err == nil || installedProgram(t, in) != "old program" {
+		t.Fatalf("installed a file the updater didn't download: %v", err)
+	}
+}
+
 func TestInstallOnlyTakesItsOwnDownloads(t *testing.T) {
 	in := fakeInstall(t)
 	u, _, _ := serveRelease(t, in, in.release, "")

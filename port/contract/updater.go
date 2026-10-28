@@ -22,7 +22,9 @@ type Updater interface {
 	// file's path; on any error, a cancelled ctx included, nothing is kept.
 	Download(ctx context.Context, rel dto.Release, progress func(dto.UpdateProgress)) (string, error)
 	// Install unpacks a file Download verified and replaces the installed
-	// app with it. On error the installed app is as it was.
+	// app with it. It refuses any other path, and checks the file's SHA-256
+	// against the published checksum again first. On error the installed
+	// app is as it was.
 	Install(ctx context.Context, path string) error
 	// Cleanup removes what an earlier update left behind: the replaced
 	// program and temporary folders. It runs at every start.

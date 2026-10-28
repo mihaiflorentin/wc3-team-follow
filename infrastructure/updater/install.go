@@ -73,12 +73,21 @@ func (g *GitHub) Download(ctx context.Context, rel dto.Release, progress func(dt
 		return "", errChecksum
 	}
 	g.logger.InfoContext(ctx, "update.downloaded", slog.String("tag", rel.Tag), slog.Int64("bytes", got.size))
+	g.mu.Lock()
+	if g.verified == nil {
+		g.verified = map[string]string{}
+	}
+	g.verified[path] = want
+	g.mu.Unlock()
 	return path, nil
 }
 
 // Install unpacks a file Download verified and replaces the installed app.
-// It only installs from its own temporary folder beside the app. On error
-// the folder is removed and the installed app is as it was.
+// It only installs a file this updater downloaded into its own temporary
+// folder beside the app, and checks its SHA-256 against the published
+// checksum again first, so a file changed or placed there since is
+// refused. On error the folder is removed and the installed app is as it
+// was.
 func (g *GitHub) Install(ctx context.Context, path string) error {
 	t, err := g.locate()
 	if err != nil {
@@ -89,6 +98,19 @@ func (g *GitHub) Install(ctx context.Context, path string) error {
 		return fmt.Errorf("%s wasn't downloaded by the updater", filepath.Base(path))
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
+	g.mu.Lock()
+	want, ok := g.verified[path]
+	delete(g.verified, path)
+	g.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("%s wasn't downloaded by the updater", filepath.Base(path))
+	}
+	if got, err := fileSum(path); err != nil {
+		return err
+	} else if got != want {
+		g.logger.WarnContext(ctx, "update.checksum_mismatch", slog.String("asset", filepath.Base(path)), slog.String("stage", "install"))
+		return errChecksum
+	}
 	unpacked := filepath.Join(staging, "new")
 	if err := os.Mkdir(unpacked, 0o755); err != nil {
 		return fmt.Errorf("create unpack folder: %w", err)
@@ -101,6 +123,20 @@ func (g *GitHub) Install(ctx context.Context, path string) error {
 	}
 	g.logger.InfoContext(ctx, "update.replaced", slog.String("path", t.path))
 	return nil
+}
+
+// fileSum returns the hex SHA-256 of the file at path.
+func fileSum(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("open %s: %w", filepath.Base(path), err)
+	}
+	defer func() { _ = f.Close() }()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, f); err != nil {
+		return "", fmt.Errorf("read %s: %w", filepath.Base(path), err)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // Cleanup removes the replaced program and temporary folders an earlier
