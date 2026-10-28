@@ -25,6 +25,7 @@ type InfrastructureContainer struct {
 	gameProcesses   lazy[contract.GameProcesses]
 	gameKeyboard    lazy[contract.GameKeyboard]
 	recentPlayers   lazy[contract.RecentPlayers]
+	playerNotes     lazy[contract.PlayerNotes]
 }
 
 // MapsLocator returns the Maps folder locator for this operating system.
@@ -92,5 +93,17 @@ func (s *ServiceContainer) RecentPlayers() (contract.RecentPlayers, error) {
 			return nil, fmt.Errorf("resolve data folder: %w", err)
 		}
 		return settings.NewRecentPlayers(dir), nil
+	})
+}
+
+// PlayerNotes returns the player notes store, next to the friend selection
+// in the per-user data folder named by [storage].
+func (s *ServiceContainer) PlayerNotes() (contract.PlayerNotes, error) {
+	return s.infrastructure.playerNotes.get(func() (contract.PlayerNotes, error) {
+		dir, err := config.DataDir(s.config.Storage)
+		if err != nil {
+			return nil, fmt.Errorf("resolve data folder: %w", err)
+		}
+		return settings.NewPlayerNotes(dir), nil
 	})
 }

@@ -28,6 +28,17 @@ type Companion struct {
 	PermissionCalls int
 	// ClearRecentCalls counts ClearRecentPlayers calls.
 	ClearRecentCalls int
+	// NoteCalls counts SetNote calls; LastNoteTag and LastNoteText hold the
+	// last one's arguments.
+	NoteCalls    int
+	LastNoteTag  string
+	LastNoteText string
+}
+
+func (c *Companion) SetNote(tag, text string) (dto.FollowState, error) {
+	c.NoteCalls++
+	c.LastNoteTag, c.LastNoteText = tag, text
+	return c.Current, c.Err
 }
 
 func (c *Companion) ClearRecentPlayers() (dto.FollowState, error) {

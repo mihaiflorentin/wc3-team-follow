@@ -61,8 +61,12 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve recent players: %w", err)
 		}
+		notes, err := s.PlayerNotes()
+		if err != nil {
+			return nil, fmt.Errorf("resolve player notes: %w", err)
+		}
 		ports := companion.Ports{Discovery: discovery, Dialer: dialer, Prefs: prefs, Maps: locator, Library: library, Processes: processes,
-			Keyboard: keyboard, Recent: recent}
+			Keyboard: keyboard, Recent: recent, Notes: notes}
 		return companion.New(ports, s.logger, companion.Options{
 			VerifiedBuilds:    cfg.VerifiedBuilds,
 			RefreshInterval:   refresh,

@@ -38,6 +38,10 @@ type Companion interface {
 	// ClearRecentPlayers forgets every recent player, on this computer too.
 	// The follow group stays as it is.
 	ClearRecentPlayers() (dto.FollowState, error)
+	// SetNote saves the player's private note about the player with tag;
+	// empty text deletes it. Notes hold at most dto.MaxNoteLength characters
+	// and stay on this computer.
+	SetNote(tag, text string) (dto.FollowState, error)
 	// Subscribe calls fn with every new state until the returned function
 	// is called.
 	Subscribe(fn func(dto.FollowState)) (unsubscribe func())

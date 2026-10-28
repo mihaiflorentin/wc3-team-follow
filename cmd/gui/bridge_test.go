@@ -144,3 +144,20 @@ func TestBridgePassesCloseGamesOn(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestBridgePassesNotesOn(t *testing.T) {
+	c := &mockcompanion.Companion{Current: dto.FollowState{Notes: map[string]dto.PlayerNote{"arthas#1123": {Text: "Good healer."}}}}
+	b := gui.NewBridge(c, "", "", "")
+	if s, err := b.SetNote("Arthas#1123", "Good healer."); err != nil || s.Notes["arthas#1123"].Text != "Good healer." ||
+		c.LastNoteTag != "Arthas#1123" || c.LastNoteText != "Good healer." {
+		t.Fatalf("set: %q %q, %v", c.LastNoteTag, c.LastNoteText, err)
+	}
+	c.LastNoteText = "unchanged"
+	if _, err := b.DeleteNote("Jaina#2214"); err != nil || c.LastNoteTag != "Jaina#2214" || c.LastNoteText != "" || c.NoteCalls != 2 {
+		t.Fatalf("delete: %q %q (%d calls), %v", c.LastNoteTag, c.LastNoteText, c.NoteCalls, err)
+	}
+	c.Err = errors.New("A note can be at most 500 characters.")
+	if _, err := b.SetNote("Arthas#1123", "x"); err == nil || err.Error() != c.Err.Error() {
+		t.Fatalf("err = %v", err)
+	}
+}

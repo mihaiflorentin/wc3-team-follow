@@ -87,6 +87,9 @@ type FollowState struct {
 	// LobbyTags are the BattleTags of the other humans in the player's
 	// current lobby or match, for the Recent players status. Never nil.
 	LobbyTags []string `json:"lobbyTags"`
+	// Notes are the player's private notes about other players, keyed by
+	// lower-cased BattleTag. Never nil.
+	Notes map[string]PlayerNote `json:"notes"`
 	// Blacklist lists the players banned from lobbies the player hosts,
 	// most recently added first. Never nil.
 	Blacklist []BlacklistEntry `json:"blacklist"`

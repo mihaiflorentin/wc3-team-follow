@@ -40,6 +40,7 @@ const (
 
 const (
 	clearFailed = "Recent players couldn't be cleared on this computer. Try again."
+	noteFailed  = "Your note couldn't be saved on this computer. Try again."
 	loadFailed  = "Saved friends couldn't be loaded. Add them again to save a new list."
 	saveFailed  = "Your change couldn't be saved on this computer. Try again."
 )
@@ -69,6 +70,8 @@ type Ports struct {
 	Keyboard contract.GameKeyboard
 	// Recent keeps the players seen in a lobby or match with the player.
 	Recent contract.RecentPlayers
+	// Notes keeps the player's private notes about other players.
+	Notes contract.PlayerNotes
 }
 
 type Service struct {
@@ -80,6 +83,7 @@ type Service struct {
 	processes contract.GameProcesses
 	keyboard  contract.GameKeyboard
 	recentDB  contract.RecentPlayers
+	notesDB   contract.PlayerNotes
 	logger    *slog.Logger
 	opts      Options
 
@@ -88,6 +92,8 @@ type Service struct {
 	recent *follow.Recent
 	// recentSavedAt is when the recent players were last saved.
 	recentSavedAt time.Time
+	// notes are the player's notes, keyed by follow.NoteKey.
+	notes         map[string]dto.PlayerNote
 	session       contract.GameSession
 	connecting    bool
 	nextDiscovery time.Time
@@ -131,6 +137,7 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		processes:   ports.Processes,
 		keyboard:    ports.Keyboard,
 		recentDB:    ports.Recent,
+		notesDB:     ports.Notes,
 		logger:      logger,
 		opts:        opts,
 		subscribers: map[int]func(dto.FollowState){},
@@ -142,6 +149,12 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		recent = nil
 	}
 	s.recent = follow.NewRecent(opts.Now, recent)
+	notes, err := s.notesDB.Load()
+	if err != nil || notes == nil {
+		logger.Warn("notes.load", slog.Any("error", err))
+		notes = map[string]dto.PlayerNote{}
+	}
+	s.notes = notes
 
 	saved, err := s.prefs.Load()
 	if err == nil {
@@ -444,6 +457,7 @@ func (s *Service) snapshot() dto.FollowState {
 	state.PreferencesError = s.prefsError
 	state.Recent = s.recent.Players()
 	state.LobbyTags = s.recent.Present()
+	state.Notes = maps.Clone(s.notes)
 	if !state.Connected {
 		state.ConnectionHint = s.hint
 		state.GameCount = s.gameCount
@@ -930,5 +944,35 @@ func (s *Service) ClearRecentPlayers() (dto.FollowState, error) {
 	state := s.snapshot()
 	s.mu.Unlock()
 	s.notify()
+	return state, err
+}
+
+// SetNote saves the player's note about the player with tag, replacing any
+// earlier one; empty text deletes it. The note is checked by
+// follow.NoteText, kept on this computer only, and never logged.
+func (s *Service) SetNote(tag, text string) (dto.FollowState, error) {
+	text, err := follow.NoteText(tag, text)
+	s.mu.Lock()
+	if err == nil {
+		notes := maps.Clone(s.notes)
+		key := follow.NoteKey(tag)
+		if text == "" {
+			delete(notes, key)
+		} else {
+			notes[key] = dto.PlayerNote{Text: text, Updated: s.opts.Now()}
+		}
+		if saveErr := s.notesDB.Save(notes); saveErr != nil {
+			s.logger.Error("notes.save", slog.Any("error", saveErr))
+			err = errors.New(noteFailed)
+		} else {
+			s.notes = notes
+			s.logger.Info("notes.saved", slog.Int("count", len(notes)))
+		}
+	}
+	state := s.snapshot()
+	s.mu.Unlock()
+	if err == nil {
+		s.notify()
+	}
 	return state, err
 }
