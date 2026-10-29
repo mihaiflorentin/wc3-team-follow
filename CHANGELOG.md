@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-10-30
+
 ### Added
 
 - The **Scoreboard** has a search box to find a player, and shows 25 players per page.
@@ -119,7 +121,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A friends picker, watching before joining, and log files for reporting problems.
 - Warcraft Team Follow rebuilt in Go, with one app for Windows, macOS and Linux.
 
-[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.3...HEAD
+[0.9.3]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.8.0...v0.9.1
 [0.8.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.7.0...v0.8.0
