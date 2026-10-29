@@ -1,6 +1,7 @@
 package follow
 
 import (
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ import (
 // A score without those fields falls back to the lobby snapshot.
 type Ranking struct {
 	now     func() time.Time
+	logger  *slog.Logger
 	entries []dto.RankingEntry
 	lobby   *rankLobby
 	armed   bool
@@ -55,8 +57,10 @@ type rankSeat struct {
 const noTeam = -1
 
 // NewRanking returns a recorder holding the saved entries.
-func NewRanking(now func() time.Time, saved []dto.RankingEntry) *Ranking {
-	r := &Ranking{now: now}
+// logger gets one line per recorded player and per ignored score: BattleTags
+// and results only, never payloads.
+func NewRanking(now func() time.Time, saved []dto.RankingEntry, logger *slog.Logger) *Ranking {
+	r := &Ranking{now: now, logger: logger}
 	for _, e := range saved {
 		if strings.TrimSpace(e.Tag) == "" {
 			continue
@@ -99,22 +103,33 @@ func (r *Ranking) Receive(event dto.GameEvent, group []string) {
 	case "UpdateScoreInfo":
 		info := object(p["scoreInfo"])
 		won, ok := info["localPlayerWon"].(bool)
-		if !ok || !r.armed {
+		if !ok {
+			return
+		}
+		if !r.armed {
+			r.skipped("not armed")
 			return
 		}
 		lobby := r.lobby
 		r.End()
-		if !rankableMatch(info) {
+		if reason := unrankable(info); reason != "" {
+			r.skipped(reason)
 			return
 		}
 		if players := readScorePlayers(info); players.usable {
 			r.recordScore(lobby, players, won, group)
 			return
 		}
-		if lobby != nil {
-			r.record(lobby, won, group)
+		if lobby == nil {
+			r.skipped("no lobby")
+			return
 		}
+		r.record(lobby, won, group)
 	}
+}
+
+func (r *Ranking) skipped(reason string) {
+	r.logger.Info("ranking.skipped", slog.String("reason", reason))
 }
 
 // End disarms the match and forgets the lobby: the match is over without a
@@ -147,16 +162,15 @@ func (r *Ranking) MarkSaved() { r.changed = false }
 // part, from the lobby snapshot alone.
 func (r *Ranking) record(l *rankLobby, localWon bool, group []string) {
 	if l.selfObserver {
+		r.skipped("local player observed")
 		return
 	}
 	self := slices.IndexFunc(l.seats, func(s rankSeat) bool { return s.self })
-	if self < 0 {
+	if self < 0 || l.seats[self].team == noTeam {
+		r.skipped("local player unknown")
 		return
 	}
 	myTeam := l.seats[self].team
-	if myTeam == noTeam {
-		return
-	}
 	now := r.now()
 	counted := map[string]bool{}
 	for _, s := range l.seats {
@@ -179,7 +193,10 @@ func (r *Ranking) record(l *rankLobby, localWon bool, group []string) {
 			continue
 		}
 		counted[key] = true
-		r.add(s.name, win, now)
+		r.add(s.name, win, now, "lobby")
+	}
+	if len(counted) == 0 {
+		r.skipped("no group members")
 	}
 }
 
@@ -187,6 +204,7 @@ func (r *Ranking) record(l *rankLobby, localWon bool, group []string) {
 // who are the local player (the lobby's own seat) or in the group count.
 func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool, group []string) {
 	if l != nil && l.selfObserver {
+		r.skipped("local player observed")
 		return
 	}
 	localKey := ""
@@ -198,6 +216,10 @@ func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool, grou
 	local := slices.IndexFunc(sp.humans, func(p scorePlayer) bool { return localKey != "" && tagKey(p.tag) == localKey })
 	now := r.now()
 	counted := map[string]bool{}
+	source, othersSkipped := "flags", false
+	if !sp.finished {
+		source = "local-only"
+	}
 	for _, p := range sp.humans {
 		key := tagKey(p.tag)
 		isLocal := localKey != "" && key == localKey
@@ -218,10 +240,19 @@ func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool, grou
 			win = true
 		default:
 			// Unfinished: the others' outcome is unknown.
+			othersSkipped = true
 			continue
 		}
 		counted[key] = true
-		r.add(p.tag, win, now)
+		r.add(p.tag, win, now, source)
+	}
+	switch {
+	case len(counted) == 0 && othersSkipped:
+		r.skipped("unfinished, local player unknown, others unknown")
+	case len(counted) == 0:
+		r.skipped("no group members")
+	case othersSkipped:
+		r.skipped("unfinished, others unknown")
 	}
 }
 
@@ -229,7 +260,12 @@ func inGroup(group []string, key string) bool {
 	return slices.ContainsFunc(group, func(g string) bool { return tagKey(g) == key })
 }
 
-func (r *Ranking) add(tag string, win bool, now time.Time) {
+func (r *Ranking) add(tag string, win bool, now time.Time, source string) {
+	result := "loss"
+	if win {
+		result = "win"
+	}
+	r.logger.Info("ranking.recorded", slog.String("tag", tag), slog.String("result", result), slog.String("source", source))
 	i := r.index(tag)
 	if i < 0 {
 		r.entries = append(r.entries, dto.RankingEntry{Tag: tag})
@@ -298,17 +334,18 @@ func readRankLobby(p map[string]any) *rankLobby {
 	return l
 }
 
-// rankableMatch reports whether a score is for a live custom game: not a
-// replay, and of game type custom when it says.
-func rankableMatch(info map[string]any) bool {
+// unrankable gives the reason a score isn't for a custom-map game that was
+// played live, or "". A melee game hosted from Custom Games reports custom
+// too; ladder, ranked and campaign games and replays don't count.
+func unrankable(info map[string]any) string {
 	m := object(info["mapInfo"])
 	if isTrue(m["isReplay"]) {
-		return false
+		return "replay"
 	}
 	if t, ok := m["gameType"].(string); ok && t != "" && !strings.EqualFold(t, "custom") {
-		return false
+		return "not a custom game"
 	}
-	return true
+	return ""
 }
 
 type scorePlayer struct {

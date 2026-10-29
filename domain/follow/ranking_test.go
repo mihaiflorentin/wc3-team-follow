@@ -1,9 +1,12 @@
 package follow_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,7 +86,7 @@ func expectRanking(t *testing.T, r *follow.Ranking, want map[string][2]int) {
 var rankClock = time.Date(2026, 10, 30, 20, 0, 0, 0, time.UTC)
 
 func newRanking() *follow.Ranking {
-	return follow.NewRanking(func() time.Time { return rankClock }, nil)
+	return follow.NewRanking(func() time.Time { return rankClock }, nil, slog.New(slog.DiscardHandler))
 }
 
 var twoTeams = []rseat{
@@ -246,7 +249,7 @@ func TestRankingMatchesTagsWithoutRegardToCase(t *testing.T) {
 
 func TestRankingSavedEntriesCarryOn(t *testing.T) {
 	saved := []dto.RankingEntry{{Tag: "Arthas#1123", Wins: 4, Losses: 2, LastPlayed: rankClock.Add(-time.Hour)}}
-	r := follow.NewRanking(func() time.Time { return rankClock }, saved)
+	r := follow.NewRanking(func() time.Time { return rankClock }, saved, slog.New(slog.DiscardHandler))
 	record(r, []string{"arthas#1123"}, rlobby(twoTeams...), glue("LOADING_SCREEN"), score(true))
 	expectRanking(t, r, map[string][2]int{"Arthas#1123": {5, 2}, "Me#1111": {1, 0}})
 	if r.Entries()[0].Tag == "" || len(r.Entries()) != 2 {
@@ -374,4 +377,28 @@ func TestRankingNeedsAKnownLocalPlayerToRecordTheirResult(t *testing.T) {
 	r := newRanking()
 	feed(r, []string{"Arthas#1123"}, glue("LOADING_SCREEN"), scoreWith(false, nil, pl("Me#1111", 0, false), pl("Arthas#1123", 0, false)))
 	expectRanking(t, r, map[string][2]int{})
+}
+
+func TestRankingLogsEachRecordedPlayerAndEachSkippedScore(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	r := follow.NewRanking(func() time.Time { return rankClock }, nil, logger)
+	feed(r, []string{"Arthas#1123"}, rlobby(twoTeams...), glue("LOADING_SCREEN"), scoreWith(false, nil,
+		pl("Me#1111", 0, false), pl("Arthas#1123", 0, false)))
+	feed(r, nil, score(false)) // the duplicate
+	feed(r, nil, rlobby(twoTeams...), glue("LOADING_SCREEN"), scoreWith(true, map[string]any{"mapInfo": map[string]any{"isReplay": true}}))
+	out := buf.String()
+	for _, want := range []string{
+		`msg=ranking.recorded tag=Me#1111 result=loss source=local-only`,
+		`msg=ranking.skipped reason="unfinished, others unknown"`,
+		`msg=ranking.skipped reason="not armed"`,
+		`msg=ranking.skipped reason=replay`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Arthas") {
+		t.Errorf("an unrecorded player was logged:\n%s", out)
+	}
 }

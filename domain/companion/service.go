@@ -197,7 +197,7 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		logger.Warn("ranking.load", slog.Any("error", err))
 		ranked = nil
 	}
-	s.ranking = follow.NewRanking(opts.Now, ranked)
+	s.ranking = follow.NewRanking(opts.Now, ranked, logger)
 	notes, err := s.notesDB.Load()
 	if err != nil || notes == nil {
 		logger.Warn("notes.load", slog.Any("error", err))
