@@ -370,7 +370,8 @@
 
     <label class="field">
       <span class="field-label">Lobby name <span id="host-name-count" class="count"></span></span>
-      <input id="host-name" maxlength="31" autocomplete="off" spellcheck="false" placeholder="Name your lobby, like LTD with friends">
+      <input id="host-name" maxlength="31" autocomplete="off" spellcheck="false" placeholder="Name your lobby, like Legion TD #%d" aria-describedby="host-name-help">
+      <span id="host-name-help" class="fine">Type %d for the game number: 1 for the first lobby, then one more for each game that starts. Legion TD #%d becomes Legion TD #1, Legion TD #2…</span>
     </label>
 
     <div class="field-row">

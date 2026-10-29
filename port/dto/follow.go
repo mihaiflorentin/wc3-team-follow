@@ -290,6 +290,10 @@ type HostState struct {
 	Settings HostSettings `json:"settings"`
 	// Phase is off, waiting, creating, lobby or match.
 	Phase string `json:"phase"`
+	// LobbyName is the name of the open lobby, or of the next one: the
+	// settings' GameName with each %d replaced by the game number (1 when
+	// Auto-host is turned on, one more for each hosted game that starts).
+	LobbyName string `json:"lobbyName"`
 	// CreateAt is when the next lobby will be created, while waiting.
 	CreateAt *time.Time `json:"createAt,omitempty"`
 	// Players and Slots describe the open lobby.

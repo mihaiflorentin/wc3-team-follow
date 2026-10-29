@@ -1955,7 +1955,7 @@ const listNames = tags => {
 
 function hostHeadline(s) {
   const h = {...s.host, missing: s.host.missing ?? [], offTeam: s.host.offTeam ?? []};
-  const name = `“${h.settings.gameName}”`;
+  const name = `“${h.lobbyName || h.settings.gameName}”`;
   const map = h.settings.mapName;
   switch (h.phase) {
     case 'waiting': {
@@ -2661,7 +2661,7 @@ function demoBridge() {
     ['Malfurion#2034', 'Offline', false, false, false, '', false],
   ].map(([battleTag, label, inGame, open, away, lobby = '', online = true]) => ({battleTag, label, inGame, open, away, lobby, online, selected: false}));
   const find = tag => roster.find(r => key(r.battleTag) === key(tag));
-  const hostDemo = {mapPath: '/Maps/Download/Legion TD x20.w3x', mapName: 'Legion TD x20', gameName: 'LTD with friends', private: false, visibility: 0, observers: 0, delaySeconds: 10, startWhenFull: false, sameTeam: false, inviteGroup: true, gameMode: '', gameModeDelaySeconds: 5};
+  const hostDemo = {mapPath: '/Maps/Download/Legion TD x20.w3x', mapName: 'Legion TD x20', gameName: 'LTD with friends #%d', private: false, visibility: 0, observers: 0, delaySeconds: 10, startWhenFull: false, sameTeam: false, inviteGroup: true, gameMode: '', gameModeDelaySeconds: 5};
   const mapsRoot = '/Users/player/Library/Application Support/Blizzard/Warcraft III/Maps';
   const day = d => new Date(Date.UTC(2026, 0, 1) + d * 86400000).toISOString();
   const tree = {
@@ -2801,8 +2801,8 @@ function demoBridge() {
     ['Sylvanas-the-Dark-Lady#90310', 0, 2, 60 * 24 * 400],
   ].map(([tag, wins, losses, mins]) => ({tag, wins, losses, lastPlayed: at(mins)}));
   const scenes = {
-    'host-waiting': {host: {enabled: true, phase: 'waiting', createAt: new Date(now + 8000).toISOString(), settings: hostDemo, players: 0, slots: 0, missing: [], offTeam: []}},
-    'host-lobby': {host: {enabled: true, phase: 'lobby', settings: {...hostDemo, startWhenFull: true, sameTeam: true}, players: 3, slots: 6, full: false, missing: ['Jaina#2214', 'Thrall#1820'], offTeam: ['Uther#5521']},
+    'host-waiting': {host: {enabled: true, phase: 'waiting', createAt: new Date(now + 8000).toISOString(), settings: hostDemo, lobbyName: 'LTD with friends #3', players: 0, slots: 0, missing: [], offTeam: []}},
+    'host-lobby': {host: {enabled: true, phase: 'lobby', lobbyName: 'LTD with friends #3', settings: {...hostDemo, startWhenFull: true, sameTeam: true}, players: 3, slots: 6, full: false, missing: ['Jaina#2214', 'Thrall#1820'], offTeam: ['Uther#5521']},
       log: [{time: at(1), message: 'Your lobby “LTD with friends” is open. It starts once it’s full and everyone you follow is in.'}, {time: at(0), message: 'Moving Uther#5521 to your team.'}]},
     'host-swap': {host: {enabled: true, phase: 'lobby', settings: {...hostDemo, startWhenFull: true, sameTeam: true}, players: 6, slots: 6, full: true, missing: [], offTeam: ['Uther#5521']},
       log: [{time: at(1), message: 'The lobby is full, but it won’t start until Uther#5521 is on your team. You can still press Start yourself.'}, {time: at(0), message: 'Asked the game to swap Uther#5521 with Player#5678.'}]},

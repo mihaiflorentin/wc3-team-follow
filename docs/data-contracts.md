@@ -10,7 +10,7 @@ Ports (`port/contract`) and DTOs (`port/dto`) are the only types that cross laye
   - `GameCounter` is implemented by discovery's several-copies error; the companion reads it with `errors.As` to fill `FollowState.GameCount`, so the domain never imports the adapter or parses the message.
 - `port/dto/` (`package dto`): plain data between layers. There are no subfolders: the app has no HTTP API.
   - `follow.go`: `FollowConfig` (what the page sends), `FollowState` (what it renders), `TeamMember`, `WatchedMember`, `Friend` (one Battle.net friend in `FollowState.Roster`), `PasswordRequest`, `JoinRecord`, `LogEntry`, `Diagnostics`, `Preferences`.
-  - `follow.go` also holds Auto-host's `HostSettings`, `HostConfig` and `HostState`.
+  - `follow.go` also holds Auto-host's `HostSettings`, `HostConfig` and `HostState`. `HostSettings.gameName` may contain `%d`, the game number; `HostState.lobbyName` is the open or next lobby's name with it filled in. The name counts `%d` as 3 digits against the game's 31-character limit.
   - `update.go`: `Release` (what `Updater.Latest` found), `UpdateState` (`FollowState.update`), `UpdateRelease`, `UpdateProgress` (`Updater.Download`'s progress), `UpdateAfter`, and the changelog shapes `ChangelogSection`, `ChangelogGroup`, `ChangelogEntry` and `TextSpan`.
   - `recent.go`: `RecentPlayer` (`tag`, `map`, `lastSeen`, `firstSeen`, `lobbies`) and `MaxRecentPlayers` (200).
   - `ranking.go`: `RankingEntry` (`tag`, `wins`, `losses`, `lastPlayed`) and `MaxRankingEntries` (500).

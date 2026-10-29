@@ -1,6 +1,7 @@
 package follow_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -554,5 +555,90 @@ func TestAFullLobbyWaitingForTheGroupSaysSoOnce(t *testing.T) {
 	}
 	if f.count(follow.CmdLobbyStart) != 0 {
 		t.Fatal("started without the group")
+	}
+}
+
+// playHostedGame takes Auto-host's open lobby through a match and back to
+// waiting, the way the game reports it.
+func (f *fixture) playHostedGame() {
+	f.receive("GameLobbyGracefulExit", nil)
+	f.receive("SetGlueScreen", map[string]any{"screen": "LOADING_SCREEN"})
+	f.receive("SetGlueScreen", map[string]any{"screen": "DISABLED_SCREEN"})
+	f.receive("ExitedGame", nil)
+	f.receive("SetGlueScreen", map[string]any{"screen": "SCORE_SCREEN"})
+	f.receive("MultiplayerGameLeave", nil)
+	f.receive("SetGlueScreen", map[string]any{"screen": "MULTIPLAYER"})
+	f.advance(time.Minute)
+}
+
+func (f *fixture) createdNames() []string {
+	var names []string
+	for _, c := range f.commands {
+		if c.message == follow.CmdCreateLobby {
+			names = append(names, c.payload["gameName"].(string))
+		}
+	}
+	return names
+}
+
+func TestAutoHostNumbersEachGameInTheLobbyName(t *testing.T) {
+	f := newFixture(t)
+	s := hostSettings()
+	s.GameName, s.DelaySeconds = "Legion TD #%d", 0
+	f.mustHost(s)
+	if f.state().Host.LobbyName != "Legion TD #1" || notes(f, "Creating “Legion TD #1” now.") != 1 {
+		t.Fatalf("lobby name = %q, log %+v", f.state().Host.LobbyName, f.state().Log)
+	}
+	for range 2 {
+		f.openOwnLobby()
+		f.playHostedGame()
+		f.engine.Tick()
+	}
+	if got := f.createdNames(); !slices.Equal(got, []string{"Legion TD #1", "Legion TD #2", "Legion TD #3"}) {
+		t.Fatalf("created %q", got)
+	}
+	if f.state().Host.LobbyName != "Legion TD #3" {
+		t.Fatalf("lobby name = %q", f.state().Host.LobbyName)
+	}
+}
+
+// A lobby that never started a game keeps its number for the next try,
+// and turning Auto-host on again starts over at 1.
+func TestAutoHostCountsOnlyGamesThatStarted(t *testing.T) {
+	f := newFixture(t)
+	s := hostSettings()
+	s.GameName, s.DelaySeconds = "LTD %d", 0
+	f.mustHost(s)
+	f.openOwnLobby()
+	f.playHostedGame()
+	f.engine.Tick()
+	if f.state().Host.LobbyName != "LTD 2" {
+		t.Fatalf("after one game: %q", f.state().Host.LobbyName)
+	}
+	_ = f.engine.ConfigureHost(dto.HostConfig{Enabled: ptr(false)})
+	f.mustHost(s)
+	if f.state().Host.LobbyName != "LTD 1" {
+		t.Fatalf("after turning on again: %q", f.state().Host.LobbyName)
+	}
+}
+
+func TestLobbyNameWithoutPlaceholderIsUnchanged(t *testing.T) {
+	if got := follow.LobbyName("LTD friends", 7); got != "LTD friends" {
+		t.Fatalf("got %q", got)
+	}
+	if got := follow.LobbyName("%d vs %d", 12); got != "12 vs 12" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestHostSettingsLeaveRoomForTheGameNumber(t *testing.T) {
+	s := hostSettings()
+	s.GameName = strings.Repeat("a", 29) + "%d" // 31 characters as typed, 32 with "999"
+	if _, err := follow.NormalizeHostSettings(s); err == nil {
+		t.Fatal("accepted a name with no room for the number")
+	}
+	s.GameName = strings.Repeat("a", 28) + "%d"
+	if _, err := follow.NormalizeHostSettings(s); err != nil {
+		t.Fatal(err)
 	}
 }

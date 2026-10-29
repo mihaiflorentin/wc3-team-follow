@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -62,7 +63,9 @@ func (e *Engine) sendChat(text string) error {
 
 const (
 	// MaxGameName is the game's own limit for lobby names.
-	MaxGameName  = 31
+	MaxGameName = 31
+	// GameNumber is the placeholder in a lobby name for the game number.
+	GameNumber   = "%d"
 	maxHostDelay = 10 * time.Minute
 	// createTimeout bounds how long the game may take to open the lobby.
 	createTimeout = 20 * time.Second
@@ -121,6 +124,9 @@ type hostState struct {
 	lobby map[string]any
 	// gameMode is Game mode's progress in the current match.
 	gameMode gameModeState
+	// number is the game number that %d in the lobby name stands for: 1
+	// when Auto-host is turned on, one more each time a hosted game starts.
+	number int
 }
 
 // swapState throttles !swap: one at a time, each waiting for the lobby to
@@ -157,8 +163,8 @@ func NormalizeHostSettings(s dto.HostSettings) (dto.HostSettings, error) {
 	s.GameName = strings.TrimSpace(s.GameName)
 	s.MapName = strings.TrimSpace(s.MapName)
 	switch {
-	case utf8.RuneCountInString(s.GameName) > MaxGameName:
-		return s, fmt.Errorf("Lobby names can be up to %d characters long.", MaxGameName)
+	case utf8.RuneCountInString(strings.ReplaceAll(s.GameName, GameNumber, "999")) > MaxGameName:
+		return s, fmt.Errorf("Lobby names can be up to %d characters long, with room for 3 digits for each %%d.", MaxGameName)
 	case !slices.Contains([]int{0, 1, 2, 4}, s.Visibility):
 		return s, errors.New("Choose a map visibility.")
 	case !slices.Contains([]int{0, 16, 32, 4194304}, s.Observers):
@@ -218,12 +224,12 @@ func (e *Engine) enableHost(cfg dto.HostConfig) error {
 		e.disarm()
 		e.Note("Auto-join is off while you host.")
 	}
-	e.host.enabled, e.host.gamePath = true, cfg.GameMapPath
+	e.host.enabled, e.host.gamePath, e.host.number = true, cfg.GameMapPath, 1
 	e.waitToHost()
 	if s.DelaySeconds == 0 {
-		e.Note("Auto-host is on. Creating " + quote(s.GameName) + " now.")
+		e.Note("Auto-host is on. Creating " + quote(e.lobbyName()) + " now.")
 	} else {
-		e.Note(fmt.Sprintf("Auto-host is on. Creating %s in %d seconds.", quote(s.GameName), s.DelaySeconds))
+		e.Note(fmt.Sprintf("Auto-host is on. Creating %s in %d seconds.", quote(e.lobbyName()), s.DelaySeconds))
 	}
 	e.hostStep()
 	return nil
@@ -239,6 +245,29 @@ func (e *Engine) waitToHost() {
 }
 
 func quote(s string) string { return "“" + s + "”" }
+
+// lobbyName is the name of the lobby Auto-host creates next, or has open:
+// the settings' name with each %d replaced by the game number.
+func (e *Engine) lobbyName() string {
+	return LobbyName(e.host.settings.GameName, e.host.number)
+}
+
+// LobbyName replaces each %d in name with number, keeping the result within
+// the game's MaxGameName characters.
+func LobbyName(name string, number int) string {
+	out := strings.ReplaceAll(name, GameNumber, strconv.Itoa(max(number, 1)))
+	if r := []rune(out); len(r) > MaxGameName {
+		out = strings.TrimSpace(string(r[:MaxGameName]))
+	}
+	return out
+}
+
+// hostedGameStarted moves Auto-host to its match and counts the game, so
+// the next lobby's %d is one higher.
+func (e *Engine) hostedGameStarted() {
+	e.host.phase = HostMatch
+	e.host.number++
+}
 
 // inMenusNow reports that nothing the game has said puts the player in a
 // lobby, match or queue.
@@ -260,7 +289,7 @@ func (e *Engine) hostStep() {
 		}
 		payload := map[string]any{
 			"filename":    h.gamePath,
-			"gameName":    h.settings.GameName,
+			"gameName":    e.lobbyName(),
 			"gameSpeed":   2, // fast, the game's default
 			"privateGame": h.settings.Private,
 			// The game's own Create Game defaults.
@@ -279,7 +308,7 @@ func (e *Engine) hostStep() {
 			return
 		}
 		h.phase, h.since = HostCreating, e.now()
-		e.Note("Creating your lobby " + quote(h.settings.GameName) + " on " + h.settings.MapName + ".")
+		e.Note("Creating your lobby " + quote(e.lobbyName()) + " on " + h.settings.MapName + ".")
 	case HostCreating:
 		if e.now().Sub(h.since) > createTimeout {
 			e.stopHost("The game didn't open the lobby. Check the map in Warcraft III; Auto-host is off.")
@@ -321,7 +350,7 @@ func (e *Engine) hostReceive(kind string, p map[string]any) {
 		case slices.Contains(lobbyScreens, screen) && h.phase == HostCreating:
 			e.lobbyOpened()
 		case slices.Contains(matchScreens, screen) && h.phase == HostLobby:
-			h.phase = HostMatch
+			e.hostedGameStarted()
 		case slices.Contains(scoreScreens, screen) && h.phase == HostMatch:
 			e.gameModeCancel()
 			e.waitToHost()
@@ -349,7 +378,7 @@ func (e *Engine) hostReceive(kind string, p map[string]any) {
 		}
 	case "PauseUI", "GameFound", "LoadingScreenUpdate":
 		if h.phase == HostLobby {
-			h.phase = HostMatch
+			e.hostedGameStarted()
 		}
 	case "MultiplayerGameLeave":
 		if h.phase == HostLobby {
@@ -370,9 +399,9 @@ func (e *Engine) lobbyOpened() {
 	h.moves, h.invited, h.swap = map[string]int{}, map[string]bool{}, swapState{}
 	h.gameMode = gameModeState{}
 	if h.settings.StartWhenFull {
-		e.Note("Your lobby " + quote(h.settings.GameName) + " is open. It starts once it's full and everyone you follow is in.")
+		e.Note("Your lobby " + quote(e.lobbyName()) + " is open. It starts once it's full and everyone you follow is in.")
 	} else {
-		e.Note("Your lobby " + quote(h.settings.GameName) + " is open. Press Start in Warcraft III when everyone's in.")
+		e.Note("Your lobby " + quote(e.lobbyName()) + " is open. Press Start in Warcraft III when everyone's in.")
 	}
 }
 
@@ -694,7 +723,7 @@ func (e *Engine) hostSnapshot() dto.HostState {
 		phase = HostOff
 	}
 	// Lists are never nil: the window reads them as arrays.
-	s := dto.HostState{Enabled: h.enabled, Settings: h.settings, Phase: phase, Players: h.players, Slots: h.slots, Full: h.full,
+	s := dto.HostState{Enabled: h.enabled, Settings: h.settings, Phase: phase, LobbyName: e.lobbyName(), Players: h.players, Slots: h.slots, Full: h.full,
 		Missing: append([]string{}, h.missing...), OffTeam: append([]string{}, h.offTeam...)}
 	if h.enabled && phase == HostWaiting {
 		at := h.createAt.UTC()
