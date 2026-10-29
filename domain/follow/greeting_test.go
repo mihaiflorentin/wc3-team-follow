@@ -225,3 +225,87 @@ func TestDoesNotTypeWhenTheConnectionIsClosedAndDoesNotRetry(t *testing.T) {
 		t.Fatalf("attempts = %d, want 1", n)
 	}
 }
+
+func lobbyChat(sender, content string) map[string]any {
+	return map[string]any{"message": map[string]any{"source": "gameChat", "type": "message", "sender": sender, "content": content}}
+}
+
+// Someone else greets first: the greeting follows 2 to 4 seconds after it
+// (3 s with the fixed draw) instead of its own 6.5 s.
+func TestGreetingAnswersAnotherPlayersGreeting(t *testing.T) {
+	f := greetFixture(t)
+	f.receive("GameLobbySetup", guestLobby("Fun game", false))
+	f.advance(time.Second)
+	f.receive("ChatMessage", lobbyChat("Stranger#5555", "Hey all!"))
+	f.advance(2900 * time.Millisecond)
+	f.engine.Tick()
+	if got := f.chat(); len(got) != 0 {
+		t.Fatalf("typed %q too early", got)
+	}
+	f.advance(200 * time.Millisecond)
+	f.engine.Tick()
+	if got := f.chat(); len(got) != 1 {
+		t.Fatalf("chat = %q, want one greeting 3 s after theirs", got)
+	}
+	f.wait(10 * time.Second)
+	if got := f.chat(); len(got) != 1 {
+		t.Fatalf("chat = %q, want still one", got)
+	}
+}
+
+func TestGreetingReplyDelayStaysBetweenTwoAndFourSeconds(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		draw  float64
+		first time.Duration
+	}{{"shortest", 0, 2 * time.Second}, {"longest", 0.999, 4 * time.Second}} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			f.engine.SetRandom(edgeRandom{tc.draw})
+			f.receive("GameLobbySetup", guestLobby("Fun game", false))
+			f.receive("ChatMessage", lobbyChat("Stranger#5555", "hi"))
+			f.advance(tc.first - 50*time.Millisecond)
+			f.engine.Tick()
+			if tc.draw == 0 && len(f.chat()) != 0 {
+				t.Fatal("typed before two seconds")
+			}
+			f.advance(100 * time.Millisecond)
+			f.engine.Tick()
+			if got := f.chat(); len(got) != 1 {
+				t.Fatalf("chat = %q after %s", got, tc.first)
+			}
+		})
+	}
+}
+
+// Lines that aren't greetings, other chats and info lines keep the normal
+// delay; only the first greeting moves it.
+func TestGreetingIgnoresOtherChat(t *testing.T) {
+	f := greetFixture(t)
+	f.receive("GameLobbySetup", guestLobby("Fun game", false))
+	f.receive("ChatMessage", lobbyChat("Stranger#5555", "this map is great"))
+	f.receive("ChatMessage", lobbyChat("Stranger#5555", "highground wins"))
+	f.receive("ChatMessage", map[string]any{"message": map[string]any{"source": "info", "content": "Hi joined the game."}})
+	f.receive("ChatMessage", map[string]any{"message": map[string]any{"source": "whisper", "sender": "Friend#1234", "content": "hi"}})
+	f.advance(6400 * time.Millisecond)
+	f.engine.Tick()
+	if got := f.chat(); len(got) != 0 {
+		t.Fatalf("typed %q too early", got)
+	}
+	f.advance(200 * time.Millisecond)
+	f.engine.Tick()
+	if got := f.chat(); len(got) != 1 {
+		t.Fatalf("chat = %q, want the greeting at its own time", got)
+	}
+}
+
+func TestIsGreeting(t *testing.T) {
+	for line, want := range map[string]bool{
+		"hi": true, "Hey all!": true, "HELLO there": true, "glhf": true, "yo": true, "  hiya :)": true,
+		"highground": false, "this is hi": false, "": false, "!swap 1 2": false, "gg": false,
+	} {
+		if got := follow.IsGreeting(line); got != want {
+			t.Errorf("IsGreeting(%q) = %v, want %v", line, got, want)
+		}
+	}
+}

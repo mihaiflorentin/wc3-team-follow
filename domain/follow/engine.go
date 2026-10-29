@@ -494,6 +494,7 @@ func (e *Engine) Receive(event dto.GameEvent) {
 		}
 	case "ChatMessage":
 		e.confirmBan(p)
+		e.greetReply(p)
 	case "IsGameUIActive":
 		switch p["isActive"] {
 		case "true", true:

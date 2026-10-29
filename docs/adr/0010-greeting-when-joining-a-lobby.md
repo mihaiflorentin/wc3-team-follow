@@ -10,7 +10,7 @@ The live checks (`docs/follow-behaviour.md`) showed that `SendGameChatMessage` r
 
 ## Decision
 
-- When the player joins a lobby as a guest, the engine types one greeting in the lobby chat after a random delay of 3 to 10 seconds. It is always on; there is no setting.
+- When the player joins a lobby as a guest, the engine types one greeting in the lobby chat after a random delay of 3 to 10 seconds, or 2 to 4 seconds after another player's greeting in the lobby chat if one comes first. It is always on; there is no setting.
 - Guest means a `GameLobbySetup` in which the player's own slot is occupied (`isSelf`, `slotStatus` 2) and `isHost` is present and false. A missing `isHost`, the player's own hosted lobby (by hand or by Auto-host) and a match never greet.
 - The line is one fixed greeting picked at random from `follow.Greetings()`: `hi`, `hey`, `hello`, `hi all`, `hey everyone`, `hello there`, `hiya`, `glhf`. All start with a lowercase letter. Nothing the player or other players wrote is ever typed.
 - Once per lobby: the first `GameLobbySetup` that meets the rules starts the lobby, keyed by its name. Later updates of the same lobby do nothing. Leaving the lobby, a match or a disconnect forgets it, so the next lobby is greeted again.
