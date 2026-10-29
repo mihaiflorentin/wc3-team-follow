@@ -40,10 +40,11 @@ const (
 )
 
 const (
-	clearFailed = "Recent players couldn't be cleared on this computer. Try again."
-	noteFailed  = "Your note couldn't be saved on this computer. Try again."
-	loadFailed  = "Saved friends couldn't be loaded. Add them again to save a new list."
-	saveFailed  = "Your change couldn't be saved on this computer. Try again."
+	clearFailed        = "Recent players couldn't be cleared on this computer. Try again."
+	clearRankingFailed = "The ranking couldn't be cleared on this computer. Try again."
+	noteFailed         = "Your note couldn't be saved on this computer. Try again."
+	loadFailed         = "Saved friends couldn't be loaded. Add them again to save a new list."
+	saveFailed         = "Your change couldn't be saved on this computer. Try again."
 )
 
 // Options tunes the service.
@@ -90,6 +91,8 @@ type Ports struct {
 	Keyboard contract.GameKeyboard
 	// Recent keeps the players seen in a lobby or match with the player.
 	Recent contract.RecentPlayers
+	// Ranking keeps the wins and losses recorded for the group.
+	Ranking contract.Ranking
 	// Updater finds a newer release of Team Follow.
 	Updater contract.Updater
 	// Notes keeps the player's private notes about other players.
@@ -105,14 +108,16 @@ type Service struct {
 	processes contract.GameProcesses
 	keyboard  contract.GameKeyboard
 	recentDB  contract.RecentPlayers
+	rankingDB contract.Ranking
 	updater   contract.Updater
 	notesDB   contract.PlayerNotes
 	logger    *slog.Logger
 	opts      Options
 
-	mu     sync.Mutex
-	engine *follow.Engine
-	recent *follow.Recent
+	mu      sync.Mutex
+	engine  *follow.Engine
+	recent  *follow.Recent
+	ranking *follow.Ranking
 	// updates decides when to check for a newer release and what to offer.
 	updates *update.Checker
 	// whatsNew is What's new in the running version.
@@ -173,6 +178,7 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		processes:   ports.Processes,
 		keyboard:    ports.Keyboard,
 		recentDB:    ports.Recent,
+		rankingDB:   ports.Ranking,
 		updater:     ports.Updater,
 		notesDB:     ports.Notes,
 		logger:      logger,
@@ -186,6 +192,12 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		recent = nil
 	}
 	s.recent = follow.NewRecent(opts.Now, recent)
+	ranked, err := s.rankingDB.Load()
+	if err != nil {
+		logger.Warn("ranking.load", slog.Any("error", err))
+		ranked = nil
+	}
+	s.ranking = follow.NewRanking(opts.Now, ranked)
 	notes, err := s.notesDB.Load()
 	if err != nil || notes == nil {
 		logger.Warn("notes.load", slog.Any("error", err))
@@ -290,7 +302,9 @@ func (s *Service) Run(ctx context.Context) error {
 			s.logger.Info("companion.stop")
 			s.dropSession()
 			s.recent.End()
+			s.ranking.End()
 			s.saveRecent(true)
+			s.saveRanking()
 			s.mu.Unlock()
 			// Typing stops with ctx; wait for it to report, so nothing
 			// runs after Run returns.
@@ -319,6 +333,7 @@ func (s *Service) step(ctx context.Context) {
 	s.keyboardStatus = keyboard
 	s.engine.Tick()
 	s.recent.Tick()
+	s.saveRanking()
 	s.saveRecent(false)
 	s.typeChatLines(ctx)
 	s.logStatus()
@@ -420,6 +435,7 @@ func (s *Service) read(ctx context.Context, session contract.GameSession) {
 			s.dropSession()
 			s.engine.Connection(false, "")
 			s.recent.End()
+			s.ranking.End()
 			s.logStatus()
 			s.mu.Unlock()
 			s.logger.InfoContext(ctx, "companion.disconnected", slog.Any("error", err))
@@ -478,6 +494,8 @@ func (s *Service) handle(ctx context.Context, ev dto.GameEvent) (loggedOut bool)
 		}
 	}
 	s.recent.Receive(ev)
+	s.ranking.Receive(ev, s.engine.Group())
+	s.saveRanking()
 	s.typeChatLines(ctx)
 	if ev.MessageType == "GameLobbySetup" {
 		s.logLobby(ctx, ev)
@@ -522,6 +540,7 @@ func (s *Service) snapshot() dto.FollowState {
 	state.Keyboard = s.keyboardStatus
 	state.PreferencesError = s.prefsError
 	state.Recent = s.recent.Players()
+	state.Ranking = s.ranking.Entries()
 	state.LobbyTags = s.recent.Present()
 	state.Update = s.updates.State(update.Activity{InLobby: state.Busy && !state.InMatch, InMatch: state.InMatch,
 		AutoJoin: state.Enabled, AutoHost: state.Host.Enabled})
@@ -842,6 +861,7 @@ func (s *Service) CloseGames(ctx context.Context) (dto.FollowState, error) {
 	if count > 0 {
 		s.dropSession()
 		s.recent.End()
+		s.ranking.End()
 		if s.engine.Connected() {
 			s.engine.Connection(false, "")
 		}
@@ -1004,6 +1024,39 @@ func (s *Service) saveRecent(force bool) {
 	}
 	s.recent.MarkSaved()
 	s.logger.Debug("recent.saved", slog.Int("count", len(players)))
+}
+
+// saveRanking writes the ranking when a match was recorded. A failed save
+// is logged and tried again on the next step. It runs with s.mu held.
+func (s *Service) saveRanking() {
+	if !s.ranking.Unsaved() {
+		return
+	}
+	entries := s.ranking.Entries()
+	if err := s.rankingDB.Save(entries); err != nil {
+		s.logger.Warn("ranking.save", slog.Any("error", err))
+		return
+	}
+	s.ranking.MarkSaved()
+	s.logger.Debug("ranking.saved", slog.Int("count", len(entries)))
+}
+
+// ClearRanking forgets every recorded win and loss, on this computer too.
+// The follow group stays as it is.
+func (s *Service) ClearRanking() (dto.FollowState, error) {
+	s.mu.Lock()
+	err := s.rankingDB.Clear()
+	if err != nil {
+		s.logger.Error("ranking.clear", slog.Any("error", err))
+		err = errors.New(clearRankingFailed)
+	} else {
+		s.ranking.Clear()
+		s.logger.Info("ranking.cleared")
+	}
+	state := s.snapshot()
+	s.mu.Unlock()
+	s.notify()
+	return state, err
 }
 
 // ClearRecentPlayers forgets every recent player, on this computer too.

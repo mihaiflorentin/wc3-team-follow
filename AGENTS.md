@@ -14,7 +14,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `container/` | `ServiceContainer`: lazy `(T, error)` accessors and `Close`. Used only by the wiring layer. |
 | `config/` | `config.toml` (embedded into the binary) and `NewConfig`. |
 | `logging/` | `Setup` (console + rotated log file + crash file), `New` (console only) and the log handlers. Cross-cutting: every layer may receive a `*slog.Logger`. |
-| `domain/follow/` | The follow state machine (port of 0.4's `team-follow.cjs`), Auto-host (`host.go`), the recent players recorder (`recent.go`) and the blacklist with auto-ban (`blacklist.go`, `ban.go`). Pure. |
+| `domain/follow/` | The follow state machine (port of 0.4's `team-follow.cjs`), Auto-host (`host.go`), the recent players recorder (`recent.go`), the ranking recorder (`ranking.go`) and the blacklist with auto-ban (`blacklist.go`, `ban.go`). Pure. |
 | `domain/companion/` | `contract.Companion`: discovery loop, game session, saving friends and recent players, running update checks, publishing state. |
 | `domain/update/` | The update check's decisions (ADR 0009): when to check, version comparison, Later and Skip, the restart warning, the changelog parser (`changelog.go`) and the in-app update's states (`install.go`). Pure. |
 | `port/contract/` | Interfaces (ports) that domain and adapters meet at. Interfaces only, no structs. |
@@ -24,7 +24,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `infrastructure/gamesocket/` | Loopback websocket to the game with the command allowlist; a reader goroutine queues events so `TryReceive` can return the ones already waiting. |
 | `infrastructure/keyboard/` | Types one line in the match chat with keystrokes (`contract.GameKeyboard`, ADR 0007): the sequence and its checks in `keyboard.go`, `SendInput` in `platform_windows.go`, `CGEventPost` in `platform_darwin.go`, not supported elsewhere yet. |
 | `infrastructure/updater/` | Finds the newest stable release and its CHANGELOG.md through GitHub's REST API, downloads and verifies its file (`install.go`), unpacks it safely (`archive.go`) and replaces the app (`replace.go`, chosen per OS in `platform_<os>.go`) (`contract.Updater`, ADR 0009); HTTPS to GitHub's hosts only. |
-| `infrastructure/settings/` | `friends.json` (friends, Auto-host setup, blacklist, update settings), `recent-players.json` (`RecentPlayers`) and `notes.json` (`PlayerNotes`) in the per-user data folder. |
+| `infrastructure/settings/` | `friends.json` (friends, Auto-host setup, blacklist, update settings), `recent-players.json` (`RecentPlayers`), `ranking.json` (`Ranking`) and `notes.json` (`PlayerNotes`) in the per-user data folder. |
 | `mock/` | Hand-written test doubles, one package per contract group. |
 | `scripts/` | `release-tag.sh` classifies release tags; `releasenotes/` prints a release's notes from `CHANGELOG.md` for the release workflow. |
 | `packaging/` | App icon sources and renders (`icon/`), the Windows resource description (`windows/winres.json`), the macOS `Info.plist` and entitlements (`darwin/`), and the Linux `.desktop` entry (`linux/`). |
@@ -52,6 +52,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 - Follow always starts off; nothing re-enables it automatically after a disconnect.
 - Update checks (ADR 0009) go only through `contract.Updater` (`infrastructure/updater`): plain GETs to `api.github.com` and the release hosts it links (`github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com`), over HTTPS only, redirects included, carrying no token, cookie or anything about the player. Only clean `vX.Y.Z` builds check; never offer a pre-release such as `edge`. Changelog and release notes reach the page only as plain-text spans set with `textContent`, never as HTML. Nothing is downloaded or changed without the player's click on Update; the bridge opens only `https://github.com/` pages from the companion's state. The in-app update downloads only into `.wc3-team-follow-update-*` beside the installed app, unpacks nothing before the SHA-256 matches `checksums.txt`, refuses archives with paths or links that leave their folder, and replaces only the running program (or its macOS bundle); any failure leaves the running version untouched. Development and `edge` builds never download, install or clean up. Tests never install over the real app or call the real GitHub API: they use temporary folders and `httptest`. The update restart exits with `crashreport.RestartCode`, which the supervisor must keep treating as an update, not a crash; on Windows the first start after an update waits for the WebView2 data folder to be free.
 - Recent players (`follow.Recent`) only read the lobby events the game already sends; recording sends nothing. The list (BattleTags, map, last seen) stays in `recent-players.json` on this computer, never in `Diagnostics` or the log (only `recent.saved` with a count).
+- The ranking (`follow.Ranking`) only reads lobby and score events the game already sends; recording sends nothing. Wins and losses (BattleTags, counts, last played) stay in `ranking.json` on this computer, never in `Diagnostics` or the log (only `ranking.saved` with a count).
 - Player notes are written only by `Companion.SetNote` into `notes.json` on this computer. They are never sent to the game, logged (only `notes.saved` with a count) or put in `Diagnostics`, and the window shows them as plain text, never HTML.
 
 ## Dependency rules
@@ -64,7 +65,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 
 - `main.go` calls `config.NewConfig()`, `logging.New(cfg.Logging, os.Stdout)`, `container.New(cfg, logger)` and `cli.Execute(c)`, then `c.Close()`. Nothing else builds a container.
 - Each command receives the container through its constructor and resolves what it needs before doing any work. The root command resolves `gui.Deps` in `guiDeps` and builds `gui.Options` from `[window]`. `discover` takes a resolve function, so tests run it with mocks.
-- Every collaborator arrives as a constructor parameter and is stored in a field: `companion.New(companion.Ports{Discovery, Dialer, Prefs, Maps, Library, Processes, Keyboard, Recent, Updater, Notes}, logger, opts)`. No globals, no `init()`, no config lookups inside domain code or the window.
+- Every collaborator arrives as a constructor parameter and is stored in a field: `companion.New(companion.Ports{Discovery, Dialer, Prefs, Maps, Library, Processes, Keyboard, Recent, Ranking, Updater, Notes}, logger, opts)`. No globals, no `init()`, no config lookups inside domain code or the window.
 - Container accessors are lazy singletons returning `(T, error)`. A missing config section is an error, and a failed build is retried on the next call. Adapters that hold connections register `s.onClose`.
 
 To add a dependency (an outbound adapter or a domain service):

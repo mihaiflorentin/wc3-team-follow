@@ -31,6 +31,7 @@ type InfrastructureContainer struct {
 	gameKeyboard    lazy[contract.GameKeyboard]
 	recentPlayers   lazy[contract.RecentPlayers]
 	playerNotes     lazy[contract.PlayerNotes]
+	ranking         lazy[contract.Ranking]
 	updater         lazy[contract.Updater]
 }
 
@@ -121,6 +122,18 @@ func (s *ServiceContainer) RecentPlayers() (contract.RecentPlayers, error) {
 			return nil, fmt.Errorf("resolve data folder: %w", err)
 		}
 		return settings.NewRecentPlayers(dir), nil
+	})
+}
+
+// Ranking returns the ranking store, next to the friend selection in the
+// per-user data folder named by [storage].
+func (s *ServiceContainer) Ranking() (contract.Ranking, error) {
+	return s.infrastructure.ranking.get(func() (contract.Ranking, error) {
+		dir, err := config.DataDir(s.config.Storage)
+		if err != nil {
+			return nil, fmt.Errorf("resolve data folder: %w", err)
+		}
+		return settings.NewRanking(dir), nil
 	})
 }
 

@@ -38,6 +38,9 @@ type Companion interface {
 	// ClearRecentPlayers forgets every recent player, on this computer too.
 	// The follow group stays as it is.
 	ClearRecentPlayers() (dto.FollowState, error)
+	// ClearRanking forgets every recorded win and loss, on this computer
+	// too.
+	ClearRanking() (dto.FollowState, error)
 	// CheckForUpdates starts an update check the player asked for; the
 	// answer arrives with a later state (ADR 0009).
 	CheckForUpdates() (dto.FollowState, error)

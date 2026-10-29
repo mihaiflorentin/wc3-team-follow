@@ -13,6 +13,7 @@ import (
 	mockmaps "github.com/mihaiflorentin/wc3-team-follow/mock/maps"
 	mocknotes "github.com/mihaiflorentin/wc3-team-follow/mock/notes"
 	mockprefs "github.com/mihaiflorentin/wc3-team-follow/mock/preferences"
+	mockranking "github.com/mihaiflorentin/wc3-team-follow/mock/ranking"
 	mockrecent "github.com/mihaiflorentin/wc3-team-follow/mock/recent"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
@@ -99,7 +100,7 @@ func TestNotesAreNeverLogged(t *testing.T) {
 	var buf safeBuffer
 	svc := companion.New(companion.Ports{Discovery: &mockgame.Discovery{}, Dialer: &mockgame.Dialer{}, Prefs: noPrefs(),
 		Maps: &mockmaps.Locator{}, Library: &mockmaps.Library{}, Keyboard: &mockkeyboard.Keyboard{}, Recent: mockrecent.New(),
-		Notes: mocknotes.New(nil)},
+		Notes: mocknotes.New(nil), Ranking: mockranking.New()},
 		slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})), companion.Options{})
 	_, _ = svc.SetNote("Arthas#1123", "secret-note-text")
 	_, _ = svc.SetNote("Arthas#1123", "")

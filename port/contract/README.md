@@ -14,6 +14,7 @@ This folder holds interfaces only. The data they accept and return are DTOs in `
 | `PreferenceStore` | outbound | `infrastructure/settings` | `mock/preferences` |
 | `RecentPlayers` | outbound | `infrastructure/settings` | `mock/recent` |
 | `PlayerNotes` | outbound | `infrastructure/settings` | `mock/notes` |
+| `Ranking` | outbound | `infrastructure/settings` | `mock/ranking` |
 
 Each contract has:
 

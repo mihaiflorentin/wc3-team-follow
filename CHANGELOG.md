@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Team Follow now records a win or a loss for you and your follow group when a custom game's score screen shows the result. The record is kept on this computer only. The ranking table to view it comes in a later update.
+
 ## [0.8.0] - 2026-10-28
 
 ### Added

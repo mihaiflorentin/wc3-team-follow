@@ -21,6 +21,7 @@ import (
 	mockmaps "github.com/mihaiflorentin/wc3-team-follow/mock/maps"
 	mocknotes "github.com/mihaiflorentin/wc3-team-follow/mock/notes"
 	mockprefs "github.com/mihaiflorentin/wc3-team-follow/mock/preferences"
+	mockranking "github.com/mihaiflorentin/wc3-team-follow/mock/ranking"
 	mockrecent "github.com/mihaiflorentin/wc3-team-follow/mock/recent"
 	mockupdater "github.com/mihaiflorentin/wc3-team-follow/mock/updater"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
@@ -40,6 +41,7 @@ type harness struct {
 	recent    *mockrecent.Store
 	updater   *mockupdater.Updater
 	notes     *mocknotes.Store
+	ranking   *mockranking.Store
 	// skew moves the service's clock ahead of the real one, in nanoseconds.
 	skew atomic.Int64
 }
@@ -61,8 +63,16 @@ func newHarnessWith(t *testing.T, prefs *mockprefs.Store, recent *mockrecent.Sto
 // changes the options, such as the build version for update checks.
 func newHarnessWithNotes(t *testing.T, prefs *mockprefs.Store, recent *mockrecent.Store, notes *mocknotes.Store, tune ...func(*companion.Options)) *harness {
 	t.Helper()
+	return newHarnessFull(t, prefs, recent, notes, mockranking.New(), tune...)
+}
+
+// newHarnessFull builds the harness around every store, so a test can
+// restart the companion on the same stores.
+func newHarnessFull(t *testing.T, prefs *mockprefs.Store, recent *mockrecent.Store, notes *mocknotes.Store, ranking *mockranking.Store, tune ...func(*companion.Options)) *harness {
+	t.Helper()
 	h := &harness{
 		notes:     notes,
+		ranking:   ranking,
 		discovery: &mockgame.Discovery{Conn: dto.GameConnection{Port: 5000, Session: "12345678901", Version: build}},
 		session:   mockgame.NewSession(),
 		prefs:     prefs,
@@ -73,7 +83,7 @@ func newHarnessWithNotes(t *testing.T, prefs *mockprefs.Store, recent *mockrecen
 	}
 	h.locator = &mockmaps.Locator{Folders: []dto.MapsFolder{{Path: "/detected/Maps", Source: "test"}}, GamePrefix: "GAME:"}
 	h.library = &mockmaps.Library{Entries: []dto.MapEntry{{Name: "Legion TD", Path: "/detected/Maps/Legion TD.w3x"}, {Name: "Footmen Frenzy", Path: "/detected/Maps/ff.w3x"}}}
-	ports := companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library, Processes: h.processes, Keyboard: h.keyboard, Recent: h.recent, Notes: h.notes, Updater: h.updater}
+	ports := companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library, Processes: h.processes, Keyboard: h.keyboard, Recent: h.recent, Notes: h.notes, Ranking: h.ranking, Updater: h.updater}
 	opts := companion.Options{
 		VerifiedBuilds:    []string{build},
 		RefreshInterval:   5 * time.Second,
@@ -303,7 +313,7 @@ func TestLogsNeverContainTheSessionOrPasswords(t *testing.T) {
 		session:   mockgame.NewSession(),
 		prefs:     mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true}),
 	}
-	h.svc = companion.New(companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: h.prefs, Maps: &mockmaps.Locator{}, Library: &mockmaps.Library{}, Keyboard: &mockkeyboard.Keyboard{}, Recent: mockrecent.New(), Notes: mocknotes.New(nil)},
+	h.svc = companion.New(companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: h.prefs, Maps: &mockmaps.Locator{}, Library: &mockmaps.Library{}, Keyboard: &mockkeyboard.Keyboard{}, Recent: mockrecent.New(), Notes: mocknotes.New(nil), Ranking: mockranking.New()},
 		slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		companion.Options{VerifiedBuilds: []string{build}, RefreshInterval: 5 * time.Second, DiscoveryInterval: 10 * time.Second})
 	h.run(t)

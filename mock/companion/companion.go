@@ -28,6 +28,8 @@ type Companion struct {
 	PermissionCalls int
 	// ClearRecentCalls counts ClearRecentPlayers calls.
 	ClearRecentCalls int
+	// ClearRankingCalls counts ClearRanking calls.
+	ClearRankingCalls int
 	// CheckCalls, LaterCalls and SkipCalls count the update calls.
 	CheckCalls int
 	LaterCalls int
@@ -93,6 +95,11 @@ func (c *Companion) SetNote(tag, text string) (dto.FollowState, error) {
 
 func (c *Companion) ClearRecentPlayers() (dto.FollowState, error) {
 	c.ClearRecentCalls++
+	return c.Current, c.Err
+}
+
+func (c *Companion) ClearRanking() (dto.FollowState, error) {
+	c.ClearRankingCalls++
 	return c.Current, c.Err
 }
 

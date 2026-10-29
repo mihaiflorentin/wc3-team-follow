@@ -70,6 +70,10 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve player notes: %w", err)
 		}
+		ranking, err := s.Ranking()
+		if err != nil {
+			return nil, fmt.Errorf("resolve ranking: %w", err)
+		}
 		updates, err := s.Updater()
 		if err != nil {
 			return nil, fmt.Errorf("resolve updater: %w", err)
@@ -83,7 +87,7 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 			return nil, fmt.Errorf("invalid updates.retry_interval %q: %w", updatesCfg.RetryInterval, err)
 		}
 		ports := companion.Ports{Discovery: discovery, Dialer: dialer, Prefs: prefs, Maps: locator, Library: library, Processes: processes,
-			Keyboard: keyboard, Recent: recent, Notes: notes, Updater: updates}
+			Keyboard: keyboard, Recent: recent, Notes: notes, Ranking: ranking, Updater: updates}
 		return companion.New(ports, s.logger, companion.Options{
 			VerifiedBuilds:      cfg.VerifiedBuilds,
 			RefreshInterval:     refresh,

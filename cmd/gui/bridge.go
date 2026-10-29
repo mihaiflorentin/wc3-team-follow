@@ -165,6 +165,12 @@ func (b *Bridge) ClearRecentPlayers() (dto.FollowState, error) {
 	return b.companion.ClearRecentPlayers()
 }
 
+// ClearRanking forgets every recorded win and loss. The page asks the
+// player to confirm first.
+func (b *Bridge) ClearRanking() (dto.FollowState, error) {
+	return b.companion.ClearRanking()
+}
+
 // SetNote saves the player's private note about tag; empty text deletes
 // it.
 func (b *Bridge) SetNote(tag, text string) (dto.FollowState, error) {
