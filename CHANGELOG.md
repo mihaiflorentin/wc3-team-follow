@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- The **Scoreboard** has a search box to find a player, and shows 25 players per page.
+
 ### Fixed
 
 - The **Scoreboard** now records a win or a loss for every player in your custom games, not only you and your follow group. It keeps up to 2000 players, dropping the ones you played with longest ago.

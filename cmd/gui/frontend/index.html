@@ -493,6 +493,14 @@
     <p><strong>No matches recorded yet.</strong></p>
     <p class="fine">After a custom game, Team Follow records a win or a loss for you and every other player in it when the score screen shows the result.</p>
   </div>
+  <div id="ranking-tools" class="ranking-tools">
+    <label class="search">
+      <svg class="icon"><use href="#i-search"/></svg>
+      <span class="visually-hidden">Search players</span>
+      <input id="ranking-search" type="search" placeholder="Search players" autocomplete="off" spellcheck="false">
+    </label>
+  </div>
+  <p id="ranking-none" class="fine ranking-none" hidden>No player matches your search.</p>
   <div class="table-wrap" id="ranking-wrap" tabindex="0" role="region" aria-label="Scoreboard table">
     <table class="rank-table">
       <thead>
@@ -508,6 +516,11 @@
       <tbody id="ranking-rows"></tbody>
     </table>
   </div>
+  <nav id="ranking-pager" class="ranking-pager" aria-label="Scoreboard pages" hidden>
+    <button type="button" id="ranking-prev" class="ghost small" aria-label="Previous page"><svg class="icon flip"><use href="#i-chevron"/></svg></button>
+    <span id="ranking-page" aria-live="polite"></span>
+    <button type="button" id="ranking-next" class="ghost small" aria-label="Next page"><svg class="icon"><use href="#i-chevron"/></svg></button>
+  </nav>
   <p id="ranking-error" class="error" role="alert"></p>
   <div class="row end">
     <button type="button" id="ranking-clear" class="ghost small quiet-danger start">Clear scoreboard</button>

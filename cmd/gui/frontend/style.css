@@ -1046,6 +1046,12 @@ select {
 dialog.sheet.ranking { width: min(760px, calc(100vw - 32px)); display: none; flex-direction: column; gap: 12px; max-height: calc(100vh - 48px); overflow: hidden; }
 dialog.sheet.ranking[open] { display: flex; }
 dialog.sheet.ranking .fine, dialog.sheet.ranking h2 { margin: 0; }
+.ranking-tools { display: flex; gap: 10px; }
+.ranking-tools .search { flex: 1 1 auto; }
+.ranking-none { text-align: center; padding: 18px 0; }
+.ranking-pager { display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 13px; color: var(--sage, inherit); font-variant-numeric: tabular-nums; }
+.ranking-pager[hidden] { display: none; }
+.ranking-pager .icon.flip { transform: rotate(180deg); }
 .ranking-empty { padding: 28px 20px; border-radius: 10px; background: var(--spruce-deep); text-align: center; }
 .ranking-empty p { margin: 0; }
 .ranking-empty .fine { margin-top: 6px; }

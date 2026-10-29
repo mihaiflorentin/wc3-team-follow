@@ -1696,6 +1696,7 @@ function sortRanking(by) {
     ? {by, dir: rankSort.dir === 'asc' ? 'desc' : 'asc'}
     : {by, dir: RANK_COLUMNS[by].text ? 'asc' : 'desc'};
   try { localStorage.setItem(RANK_KEY, JSON.stringify(rankSort)); } catch { /* not kept */ }
+  rankPage = 0;
   renderRanking(state);
   const names = {player: 'player', games: 'games', wins: 'wins', losses: 'losses', rate: 'win rate', last: 'last played'};
   $('announce').textContent = `Sorted by ${names[by]}, ${rankSort.dir === 'asc' ? 'ascending' : 'descending'}.`;
@@ -1723,16 +1724,34 @@ function rankRow(r, self) {
   return tr;
 }
 
+// The table shows RANK_PAGE players at a time; the search keeps players
+// whose BattleTag contains the text, in any case. Searching or sorting goes
+// back to the first page.
+const RANK_PAGE = 25;
+let rankPage = 0;
+const rankQuery = () => $('ranking-search').value.trim().toLowerCase();
+
 function renderRanking(s) {
   const entries = s?.ranking ?? [];
   const me = s?.selfTag ? key(s.selfTag) : '';
+  const q = rankQuery();
+  const shown = sortedRanking(q ? entries.filter(r => r.tag.toLowerCase().includes(q)) : entries, rankSort);
+  const pages = Math.max(1, Math.ceil(shown.length / RANK_PAGE));
+  rankPage = Math.min(rankPage, pages - 1);
+  const from = rankPage * RANK_PAGE;
   for (const th of $('ranking-dialog').querySelectorAll('th[aria-sort]')) {
     const by = th.querySelector('button').dataset.sort;
     th.setAttribute('aria-sort', by === rankSort.by ? (rankSort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
   }
-  $('ranking-rows').replaceChildren(...sortedRanking(entries, rankSort).map(r => rankRow(r, me !== '' && key(r.tag) === me)));
+  $('ranking-rows').replaceChildren(...shown.slice(from, from + RANK_PAGE).map(r => rankRow(r, me !== '' && key(r.tag) === me)));
   $('ranking-empty').hidden = entries.length > 0;
-  $('ranking-wrap').hidden = entries.length === 0;
+  $('ranking-tools').hidden = entries.length === 0;
+  $('ranking-none').hidden = entries.length === 0 || shown.length > 0;
+  $('ranking-wrap').hidden = shown.length === 0;
+  $('ranking-pager').hidden = shown.length <= RANK_PAGE;
+  $('ranking-page').textContent = `${from + 1}–${Math.min(from + RANK_PAGE, shown.length)} of ${shown.length}`;
+  $('ranking-prev').disabled = rankPage === 0;
+  $('ranking-next').disabled = rankPage >= pages - 1;
   $('ranking-clear').hidden = entries.length === 0 || !$('ranking-confirm').hidden;
   if (!entries.length) closeRankingConfirm();
 }
@@ -1750,8 +1769,14 @@ function closeRankingConfirm({focus = false} = {}) {
   if (focus) ($('ranking-clear').hidden ? $('ranking-close') : $('ranking-clear')).focus();
 }
 
+$('ranking-search').oninput = () => { rankPage = 0; renderRanking(state); };
+$('ranking-prev').onclick = () => { rankPage--; renderRanking(state); };
+$('ranking-next').onclick = () => { rankPage++; renderRanking(state); };
+
 $('ranking-open').onclick = () => {
   $('ranking-error').textContent = '';
+  $('ranking-search').value = '';
+  rankPage = 0;
   renderRanking(state);
   $('ranking-dialog').showModal();
 };
@@ -1826,6 +1851,7 @@ async function demoOpen(what) {
       break;
     case 'ranking':
     case 'ranking-empty':
+    case 'ranking-many':
       $('ranking-open').click();
       break;
     case 'report':
@@ -2830,6 +2856,7 @@ function demoBridge() {
     unverified: {version: '3.0.2.25010', verifiedBuild: false},
     recent: {manualTags: ['Arthas#1123', 'Jaina#2214', 'Kelthuzad#6644'], busy: true, inMenus: false, screen: 'GAME_LOBBY'},
     ranking: {ranking: rankingDemo},
+    'ranking-many': {ranking: [...rankingDemo, ...Array.from({length: 52}, (_, i) => ({tag: `Peon${i + 1}#${4100 + i}`, wins: (i * 7) % 11, losses: (i * 5) % 9 + 1, lastPlayed: at(60 * (i + 2))}))]},
     'ranking-empty': {},
     'recent-empty': {recent: [], lobbyTags: []},
     'recent-clear': {},
