@@ -31,18 +31,19 @@ func TestRankingRoundTrip(t *testing.T) {
 	}
 }
 
-func TestRankingSaveKeepsTheMostRecent500(t *testing.T) {
+func TestRankingSaveKeepsTheMostRecentMaximum(t *testing.T) {
 	dir := t.TempDir()
 	start := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	var entries []dto.RankingEntry
-	for i := range 520 {
-		entries = append(entries, dto.RankingEntry{Tag: fmt.Sprintf("Player%d#1%03d", i, i), Wins: 1, LastPlayed: start.Add(time.Duration(i) * time.Minute)})
+	total := dto.MaxRankingEntries + 20
+	for i := range total {
+		entries = append(entries, dto.RankingEntry{Tag: fmt.Sprintf("Player%d#%d", i, 10000+i), Wins: 1, LastPlayed: start.Add(time.Duration(i) * time.Minute)})
 	}
 	if err := settings.NewRanking(dir).Save(entries); err != nil {
 		t.Fatal(err)
 	}
 	got, err := settings.NewRanking(dir).Load()
-	if err != nil || len(got) != dto.MaxRankingEntries || got[0].Tag != "Player519#1519" || got[len(got)-1].Tag != "Player20#1020" {
+	if err != nil || len(got) != dto.MaxRankingEntries || got[0].Tag != fmt.Sprintf("Player%d#%d", total-1, 10000+total-1) || got[len(got)-1].Tag != "Player20#10020" {
 		t.Fatalf("loaded %d, %v", len(got), err)
 	}
 }

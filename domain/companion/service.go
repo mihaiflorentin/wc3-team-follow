@@ -494,7 +494,7 @@ func (s *Service) handle(ctx context.Context, ev dto.GameEvent) (loggedOut bool)
 		}
 	}
 	s.recent.Receive(ev)
-	s.ranking.Receive(ev, s.engine.Group())
+	s.ranking.Receive(ev)
 	s.saveRanking()
 	s.typeChatLines(ctx)
 	if ev.MessageType == "GameLobbySetup" {

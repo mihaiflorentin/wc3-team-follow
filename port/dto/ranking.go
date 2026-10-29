@@ -4,7 +4,7 @@ import "time"
 
 // MaxRankingEntries is how many players the ranking keeps, most recently
 // played first.
-const MaxRankingEntries = 500
+const MaxRankingEntries = 2000
 
 // RankingEntry is one player's record in matches played with the group.
 // Games and win rate are derived by the window.

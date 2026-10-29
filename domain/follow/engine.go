@@ -596,10 +596,6 @@ func (e *Engine) Receive(event dto.GameEvent) {
 	e.evaluate()
 }
 
-// Group returns the BattleTags the player follows now. The local player is
-// not in it.
-func (e *Engine) Group() []string { return e.group() }
-
 // group returns the BattleTags the player has chosen to follow: the team's
 // other members when the team is included, then the chosen friends.
 func (e *Engine) group() []string {

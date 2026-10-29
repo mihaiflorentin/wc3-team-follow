@@ -9,8 +9,8 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
-// Ranking records a win or a loss for the group when a match's score
-// event reports the result. It only reads events and never sends anything
+// Ranking records a win or a loss for every human the player played a match
+// with, and the player, when a match's score event reports the result. It only reads events and never sends anything
 // to the game.
 //
 // Each GameLobbySetup replaces the snapshot of the lobby: who sat on which
@@ -84,7 +84,7 @@ func NewRanking(now func() time.Time, saved []dto.RankingEntry, logger *slog.Log
 
 // Receive applies one game event. group is the BattleTags the player
 // follows now: it is read when the score arrives.
-func (r *Ranking) Receive(event dto.GameEvent, group []string) {
+func (r *Ranking) Receive(event dto.GameEvent) {
 	p := event.Payload
 	switch event.MessageType {
 	case "GameLobbySetup":
@@ -117,14 +117,14 @@ func (r *Ranking) Receive(event dto.GameEvent, group []string) {
 			return
 		}
 		if players := readScorePlayers(info); players.usable {
-			r.recordScore(lobby, players, won, group)
+			r.recordScore(lobby, players, won)
 			return
 		}
 		if lobby == nil {
 			r.skipped("no lobby")
 			return
 		}
-		r.record(lobby, won, group)
+		r.record(lobby, won)
 	}
 }
 
@@ -158,9 +158,9 @@ func (r *Ranking) Unsaved() bool { return r.changed }
 // MarkSaved records that the entries were saved.
 func (r *Ranking) MarkSaved() { r.changed = false }
 
-// record counts one match for the player and the group members who took
+// record counts one match for the player and every other human who took
 // part, from the lobby snapshot alone.
-func (r *Ranking) record(l *rankLobby, localWon bool, group []string) {
+func (r *Ranking) record(l *rankLobby, localWon bool) {
 	if l.selfObserver {
 		r.skipped("local player observed")
 		return
@@ -178,9 +178,6 @@ func (r *Ranking) record(l *rankLobby, localWon bool, group []string) {
 		if !s.human || key == "" || counted[key] || s.team == noTeam {
 			continue
 		}
-		if !s.self && !inGroup(group, key) {
-			continue
-		}
 		var win bool
 		switch {
 		case s.team == myTeam:
@@ -196,13 +193,13 @@ func (r *Ranking) record(l *rankLobby, localWon bool, group []string) {
 		r.add(s.name, win, now, "lobby")
 	}
 	if len(counted) == 0 {
-		r.skipped("no group members")
+		r.skipped("no players")
 	}
 }
 
-// recordScore counts one match from the players of the score. Only humans
-// who are the local player (the lobby's own seat) or in the group count.
-func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool, group []string) {
+// recordScore counts one match from the players of the score: every human,
+// the local player (the lobby's own seat) included. Computers never count.
+func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool) {
 	if l != nil && l.selfObserver {
 		r.skipped("local player observed")
 		return
@@ -223,7 +220,7 @@ func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool, grou
 	for _, p := range sp.humans {
 		key := tagKey(p.tag)
 		isLocal := localKey != "" && key == localKey
-		if counted[key] || (!isLocal && !inGroup(group, key)) {
+		if counted[key] {
 			continue
 		}
 		var win bool
@@ -250,14 +247,10 @@ func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool, grou
 	case len(counted) == 0 && othersSkipped:
 		r.skipped("unfinished, local player unknown, others unknown")
 	case len(counted) == 0:
-		r.skipped("no group members")
+		r.skipped("no players")
 	case othersSkipped:
 		r.skipped("unfinished, others unknown")
 	}
-}
-
-func inGroup(group []string, key string) bool {
-	return slices.ContainsFunc(group, func(g string) bool { return tagKey(g) == key })
 }
 
 func (r *Ranking) add(tag string, win bool, now time.Time, source string) {

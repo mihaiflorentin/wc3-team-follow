@@ -50,7 +50,7 @@ func TestRankingRecordsAMatchSavesAndPublishesIt(t *testing.T) {
 	h.session.Push(screen("LOADING_SCREEN"))
 	h.session.Push(screen("SCORE_SCREEN"))
 	h.session.Push(scoreInfo(true))
-	waitFor(t, "ranking", func() bool { return len(h.svc.State().Ranking) == 2 })
+	waitFor(t, "ranking", func() bool { return len(h.svc.State().Ranking) == 3 })
 	s := h.svc.State()
 	if w, l := wins(s, "Me#1111"); w != 1 || l != 0 {
 		t.Fatalf("Me = %d-%d", w, l)
@@ -58,10 +58,10 @@ func TestRankingRecordsAMatchSavesAndPublishesIt(t *testing.T) {
 	if w, l := wins(s, "Arthas#1123"); w != 1 || l != 0 {
 		t.Fatalf("Arthas = %d-%d", w, l)
 	}
-	if w, _ := wins(s, "Jaina#2214"); w != -1 {
-		t.Fatal("Jaina isn't in the group")
+	if w, l := wins(s, "Jaina#2214"); w != 0 || l != 1 {
+		t.Fatalf("Jaina, on the other team and not in the group, = %d-%d", w, l)
 	}
-	if got := store.Saved(); len(got) != 2 || store.Saves() != 1 {
+	if got := store.Saved(); len(got) != 3 || store.Saves() != 1 {
 		t.Fatalf("saved %+v in %d saves", got, store.Saves())
 	}
 

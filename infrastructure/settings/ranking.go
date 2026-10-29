@@ -14,7 +14,7 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
-// maxRankingFileSize is far above 500 entries; a larger file is not ours.
+// maxRankingFileSize is far above 2000 entries; a larger file is not ours.
 const maxRankingFileSize = 512 * 1024
 
 // Ranking keeps the wins and losses in <dir>/settings/ranking.json, next
