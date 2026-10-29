@@ -41,7 +41,7 @@ const (
 
 const (
 	clearFailed        = "Recent players couldn't be cleared on this computer. Try again."
-	clearRankingFailed = "The ranking couldn't be cleared on this computer. Try again."
+	clearRankingFailed = "The scoreboard couldn't be cleared on this computer. Try again."
 	noteFailed         = "Your note couldn't be saved on this computer. Try again."
 	loadFailed         = "Saved friends couldn't be loaded. Add them again to save a new list."
 	saveFailed         = "Your change couldn't be saved on this computer. Try again."

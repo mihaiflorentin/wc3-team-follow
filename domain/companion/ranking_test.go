@@ -94,7 +94,7 @@ func TestRankingClearFailureKeepsTheEntries(t *testing.T) {
 	store.ClearErr = errors.New("disk full")
 	h := rankingHarness(t, store)
 	s, err := h.svc.ClearRanking()
-	if err == nil || err.Error() != "The ranking couldn't be cleared on this computer. Try again." || len(s.Ranking) != 1 {
+	if err == nil || err.Error() != "The scoreboard couldn't be cleared on this computer. Try again." || len(s.Ranking) != 1 {
 		t.Fatalf("ClearRanking = %v, %v", s.Ranking, err)
 	}
 }

@@ -66,7 +66,7 @@ The window only: `cmd/gui/frontend/app.js` (`playerFacts`, `showTip`). One share
 - **Showing:** on hover after 500 ms; while one is up, or within 300 ms of one closing, the next row's shows at once. On keyboard focus (`:focus-visible`) at once, and the focused control gets `aria-describedby="player-tip"` while it shows. The pointer can move onto it; it hides 150 ms after the pointer leaves both, on focus leaving, Esc (which goes no further and leaves focus where it is; the next Esc reaches what's behind), a pointer press, resizing, leaving the window, or scrolling its row away (a focus tooltip moves with its row instead).
 - **Placement:** fixed, below the row or chip, above when there's no room, 8 px inside the window. It never shows while the player menu or note popover is open, and opening either hides it, so it never covers them. The rows' own `title` tooltips are gone, so only this one shows.
 
-## Ranking
+## Ranking (the window's Scoreboard)
 
 `domain/follow/ranking.go` (`follow.Ranking`), driven by the companion with the events it already receives; it only reads them and never sends anything to the game. The window shows it in the Ranking dialog (`cmd/gui/frontend`): a sortable table (Player, Games, Wins, Losses, Win rate, Last played), default win rate then games, the player's own row marked from `FollowState.selfTag`, and Clear ranking after a confirmation.
 

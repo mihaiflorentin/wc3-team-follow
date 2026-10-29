@@ -6,12 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-## [0.9.0-beta.1] - 2026-10-30
+## [0.9.1] - 2026-10-30
 
 ### Added
 
 - Team Follow now records a win or a loss for you and your follow group when a custom game's score screen shows the result. The record is kept on this computer only.
-- A **Ranking** button in the header opens a table of your group's wins and losses, with games, win rate and when each player last played. Click a column heading to sort by it and again to reverse it. **Clear ranking** starts over after you confirm.
+- A **Scoreboard** button in the header opens a table of your group's wins and losses, with games, win rate and when each player last played. Click a column heading to sort by it and again to reverse it. **Clear scoreboard** starts over after you confirm.
+- Hovering over a player now also shows how many games they won and lost with you.
 - Type **%d** in Auto-host's lobby name to number your games: **Legion TD #%d** opens as **Legion TD #1**, then **Legion TD #2** after the first game starts, and so on. The count starts at 1 each time you turn Auto-host on.
 
 ### Fixed
@@ -104,8 +105,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A friends picker, watching before joining, and log files for reporting problems.
 - Warcraft Team Follow rebuilt in Go, with one app for Windows, macOS and Linux.
 
-[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.0-beta.1...HEAD
-[0.9.0-beta.1]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.8.0...v0.9.0-beta.1
+[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.8.0...v0.9.1
 [0.8.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.6.0...v0.6.1

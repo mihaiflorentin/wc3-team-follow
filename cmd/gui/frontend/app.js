@@ -1359,6 +1359,10 @@ function playerFacts(s, tag) {
     if (p.map) history.push(['Last map', p.map]);
     if (p.lobbies > 0) history.push(['Lobbies shared', String(p.lobbies)]);
   }
+  const score = (s.ranking ?? []).find(r => key(r.tag) === k);
+  if (score && score.wins + score.losses > 0) {
+    history.push(['Games won', String(score.wins)], ['Games lost', String(score.losses)]);
+  }
   return {note: noteOf(s, tag)?.text ?? '', status, statusKey: st.status, standing, history};
 }
 
@@ -2873,7 +2877,7 @@ function demoBridge() {
     'note-edit': {},
     'note-long': {},
     'note-view': {},
-    tooltip: {},
+    tooltip: {ranking: rankingDemo},
     'tooltip-blacklist': {},
     'tooltip-focus': {},
   };

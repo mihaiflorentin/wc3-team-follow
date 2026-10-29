@@ -101,7 +101,7 @@ func TestBridgePassesClearRankingOn(t *testing.T) {
 	if err != nil || c.ClearRankingCalls != 1 || s.Ranking == nil {
 		t.Fatalf("ClearRanking = %+v, %v (calls %d)", s.Ranking, err, c.ClearRankingCalls)
 	}
-	c.Err = errors.New("The ranking couldn't be cleared on this computer. Try again.")
+	c.Err = errors.New("The scoreboard couldn't be cleared on this computer. Try again.")
 	if _, err := gui.NewBridge(c, "", "", "").ClearRanking(); err == nil || err.Error() != c.Err.Error() {
 		t.Fatalf("error = %v", err)
 	}

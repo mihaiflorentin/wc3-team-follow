@@ -85,7 +85,7 @@
   <header class="top">
     <span class="brand"><svg class="icon"><use href="#i-mark"/></svg>Team Follow</span>
     <span class="top-end">
-      <button type="button" id="ranking-open" class="ghost small" aria-haspopup="dialog"><svg class="icon"><use href="#i-trophy"/></svg>Ranking</button>
+      <button type="button" id="ranking-open" class="ghost small" aria-haspopup="dialog"><svg class="icon"><use href="#i-trophy"/></svg>Scoreboard</button>
       <span id="connection" class="connection" role="status"><span class="dot"></span><span id="connection-text">Starting…</span></span>
     </span>
   </header>
@@ -487,13 +487,13 @@
 </dialog>
 
 <dialog id="ranking-dialog" class="sheet ranking" aria-labelledby="ranking-title">
-  <h2 id="ranking-title"><svg class="icon"><use href="#i-trophy"/></svg>Ranking</h2>
+  <h2 id="ranking-title"><svg class="icon"><use href="#i-trophy"/></svg>Scoreboard</h2>
   <p class="fine">Wins and losses in custom games you played with your group. Kept on this computer only.</p>
   <div id="ranking-empty" class="ranking-empty" hidden>
     <p><strong>No matches recorded yet.</strong></p>
     <p class="fine">After a custom game, Team Follow records a win or a loss for you and your group when the score screen shows the result.</p>
   </div>
-  <div class="table-wrap" id="ranking-wrap" tabindex="0" role="region" aria-label="Ranking table">
+  <div class="table-wrap" id="ranking-wrap" tabindex="0" role="region" aria-label="Scoreboard table">
     <table class="rank-table">
       <thead>
         <tr>
@@ -510,10 +510,10 @@
   </div>
   <p id="ranking-error" class="error" role="alert"></p>
   <div class="row end">
-    <button type="button" id="ranking-clear" class="ghost small quiet-danger start">Clear ranking</button>
+    <button type="button" id="ranking-clear" class="ghost small quiet-danger start">Clear scoreboard</button>
     <div id="ranking-confirm" class="recent-confirm start" role="group" aria-labelledby="ranking-confirm-text" hidden>
-      <span id="ranking-confirm-text">Clear the whole ranking? This can’t be undone.</span>
-      <button type="button" id="ranking-clear-yes" class="primary danger small">Clear ranking</button>
+      <span id="ranking-confirm-text">Clear the whole scoreboard? This can’t be undone.</span>
+      <button type="button" id="ranking-clear-yes" class="primary danger small">Clear scoreboard</button>
       <button type="button" id="ranking-clear-no" class="ghost small">Cancel</button>
     </div>
     <button type="button" id="ranking-close" class="primary" autofocus>Close</button>
