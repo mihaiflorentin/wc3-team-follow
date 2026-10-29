@@ -67,7 +67,7 @@ The window only: `cmd/gui/frontend/app.js` (`playerFacts`, `showTip`). One share
 
 ## Ranking
 
-`domain/follow/ranking.go` (`follow.Ranking`), driven by the companion with the events it already receives; it only reads them and never sends anything to the game. The window's table is a separate change.
+`domain/follow/ranking.go` (`follow.Ranking`), driven by the companion with the events it already receives; it only reads them and never sends anything to the game. The window shows it in the Ranking dialog (`cmd/gui/frontend`): a sortable table (Player, Games, Wins, Losses, Win rate, Last played), default win rate then games, the player's own row marked from `FollowState.selfTag`, and Clear ranking after a confirmation.
 
 - **Lobby snapshot:** each `GameLobbySetup` replaces it with the occupied seats of players who take part: humans and computers (computers only to count teams), with their `team`. Observers are left out; if the local player (`isSelf`) is an observer, the match records nothing. Lobby updates stop once a match loads, so the last one is the match.
 - **Result:** `UpdateScoreInfo` with `scoreInfo.localPlayerWon` as a boolean, while a snapshot exists. A campaign score (`payload.data`) or a malformed one is ignored and keeps the snapshot. The snapshot is then dropped, so a repeated score event or screen counts nothing: every match is counted once. The score screen (`SetGlueScreen`) doesn't end the match, because the score event may come after it.

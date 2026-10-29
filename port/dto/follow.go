@@ -92,6 +92,9 @@ type FollowState struct {
 	// Ranking is the wins and losses recorded for the group, most recently
 	// played first. Never nil.
 	Ranking []RankingEntry `json:"ranking"`
+	// SelfTag is the player's own BattleTag once the team or a lobby showed
+	// it, empty before. The window marks the player's row in the ranking.
+	SelfTag string `json:"selfTag"`
 	// Notes are the player's private notes about other players, keyed by
 	// lower-cased BattleTag. Never nil.
 	Notes map[string]PlayerNote `json:"notes"`

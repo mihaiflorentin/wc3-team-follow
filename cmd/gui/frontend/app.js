@@ -258,6 +258,7 @@ function render(s) {
   if (!s.passwordRequest) $('lobby-password').value = '';
   renderActions(s);
   renderHost(s);
+  if ($('ranking-dialog').open) renderRanking(s);
   $('ask-password').checked = Boolean(s.askPassword);
   $('join-host-team').checked = Boolean(s.joinHostTeam);
   renderFriends(s);
@@ -1646,6 +1647,133 @@ $('open-logs').onclick = async () => {
   }
 };
 
+/* Ranking -------------------------------------------------------------- */
+
+// The ranking table sorts the published entries in the window. Games and
+// win rate are derived here. Text starts ascending, numbers and dates start
+// with the best or newest first; a second click on the same column reverses.
+const RANK_KEY = 'ranking-sort';
+const RANK_COLUMNS = {
+  player: {text: true, value: r => r.tag.toLowerCase()},
+  games: {value: r => r.wins + r.losses},
+  wins: {value: r => r.wins},
+  losses: {value: r => r.losses},
+  rate: {value: r => rate(r)},
+  last: {value: r => Date.parse(r.lastPlayed) || 0},
+};
+const rate = r => (r.wins + r.losses ? r.wins / (r.wins + r.losses) : 0);
+
+function loadRankSort() {
+  const fallback = {by: 'rate', dir: 'desc'};
+  try {
+    const saved = JSON.parse(localStorage.getItem(RANK_KEY));
+    if (saved && RANK_COLUMNS[saved.by] && (saved.dir === 'asc' || saved.dir === 'desc')) return {by: saved.by, dir: saved.dir};
+  } catch { /* storage is off or damaged */ }
+  return fallback;
+}
+let rankSort = loadRankSort();
+
+// sortedRanking returns a sorted copy. Array.sort is stable, so entries
+// that tie keep the order they were published in (most recent first). Win
+// rate breaks its own ties by games, most first.
+function sortedRanking(entries, {by, dir}) {
+  const col = RANK_COLUMNS[by];
+  const sign = dir === 'asc' ? 1 : -1;
+  const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  return [...entries].sort((a, b) => {
+    const c = sign * cmp(col.value(a), col.value(b));
+    if (c || by !== 'rate') return c;
+    return cmp(RANK_COLUMNS.games.value(b), RANK_COLUMNS.games.value(a));
+  });
+}
+
+function sortRanking(by) {
+  rankSort = by === rankSort.by
+    ? {by, dir: rankSort.dir === 'asc' ? 'desc' : 'asc'}
+    : {by, dir: RANK_COLUMNS[by].text ? 'asc' : 'desc'};
+  try { localStorage.setItem(RANK_KEY, JSON.stringify(rankSort)); } catch { /* not kept */ }
+  renderRanking(state);
+  const names = {player: 'player', games: 'games', wins: 'wins', losses: 'losses', rate: 'win rate', last: 'last played'};
+  $('announce').textContent = `Sorted by ${names[by]}, ${rankSort.dir === 'asc' ? 'ascending' : 'descending'}.`;
+}
+
+function rankRow(r, self) {
+  const games = r.wins + r.losses;
+  const pct = Math.round(rate(r) * 100);
+  const tr = el('tr');
+  if (self) tr.className = 'self';
+  const name = el('td', 'player');
+  const tag = el('span', 'tag', r.tag);
+  tag.title = r.tag;
+  name.append(tag);
+  if (self) name.append(el('span', 'you', 'You'));
+  const bar = el('span', 'bar');
+  const fill = el('span', 'fill');
+  fill.style.width = `${pct}%`;
+  bar.append(fill);
+  const rateCell = el('td', 'rate');
+  rateCell.append(el('span', 'pct', `${pct}%`), bar);
+  const last = el('td', 'last', lastSeen(r.lastPlayed, false));
+  last.title = new Date(r.lastPlayed).toLocaleString();
+  tr.append(name, el('td', 'num', String(games)), el('td', 'num', String(r.wins)), el('td', 'num', String(r.losses)), rateCell, last);
+  return tr;
+}
+
+function renderRanking(s) {
+  const entries = s?.ranking ?? [];
+  const me = s?.selfTag ? key(s.selfTag) : '';
+  for (const th of $('ranking-dialog').querySelectorAll('th[aria-sort]')) {
+    const by = th.querySelector('button').dataset.sort;
+    th.setAttribute('aria-sort', by === rankSort.by ? (rankSort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+  }
+  $('ranking-rows').replaceChildren(...sortedRanking(entries, rankSort).map(r => rankRow(r, me !== '' && key(r.tag) === me)));
+  $('ranking-empty').hidden = entries.length > 0;
+  $('ranking-wrap').hidden = entries.length === 0;
+  $('ranking-clear').hidden = entries.length === 0 || !$('ranking-confirm').hidden;
+  if (!entries.length) closeRankingConfirm();
+}
+
+function openRankingConfirm() {
+  $('ranking-clear').hidden = true;
+  $('ranking-confirm').hidden = false;
+  $('ranking-clear-no').focus();
+}
+
+function closeRankingConfirm({focus = false} = {}) {
+  if ($('ranking-confirm').hidden) return;
+  $('ranking-confirm').hidden = true;
+  $('ranking-clear').hidden = !(state?.ranking?.length);
+  if (focus) ($('ranking-clear').hidden ? $('ranking-close') : $('ranking-clear')).focus();
+}
+
+$('ranking-open').onclick = () => {
+  $('ranking-error').textContent = '';
+  renderRanking(state);
+  $('ranking-dialog').showModal();
+};
+$('ranking-close').onclick = () => $('ranking-dialog').close();
+$('ranking-dialog').onclose = () => { closeRankingConfirm(); $('ranking-open').focus(); };
+for (const button of $('ranking-dialog').querySelectorAll('th button')) {
+  button.onclick = () => sortRanking(button.dataset.sort);
+}
+$('ranking-clear').onclick = openRankingConfirm;
+$('ranking-clear-no').onclick = () => closeRankingConfirm({focus: true});
+// Escape steps back from the question first, then closes the dialog.
+$('ranking-confirm').onkeydown = event => {
+  if (event.key !== 'Escape') return;
+  event.preventDefault();
+  closeRankingConfirm({focus: true});
+};
+$('ranking-clear-yes').onclick = async () => {
+  try {
+    render(await bridge.ClearRanking());
+    closeRankingConfirm();
+    $('ranking-close').focus();
+  } catch (err) {
+    $('ranking-error').textContent = String(err?.message ?? err);
+  }
+};
+
 async function boot() {
   selectTab(tab);
   try { exePath = await bridge.ExecutablePath(); } catch { exePath = ''; }
@@ -1691,6 +1819,10 @@ async function demoOpen(what) {
         await wait(400);
         document.querySelector('#maps-rows tr')?.click();
       }
+      break;
+    case 'ranking':
+    case 'ranking-empty':
+      $('ranking-open').click();
       break;
     case 'report':
       $('report').click();
@@ -2627,7 +2759,7 @@ function demoBridge() {
     update: scene.startsWith('update') ? updateOffer : updateIdle,
     notes,
     recent, lobbyTags: ['Medivh#3310', 'Varimathras#2207'],
-    blacklist, autoBan: true, blacklistManualBans: true,
+    blacklist, autoBan: true, blacklistManualBans: true, ranking: [], selfTag: 'Player#1234',
     connected: true, version: '3.0.1.24371', verifiedBuild: true, enabled: false, diagnostic: false,
     manualTags: ['Arthas#1123', 'Jaina#2214', 'Thrall#1820', 'Uther#5521'], includeTeam: true, joinHostTeam: true,
     status: '', screen: 'CUSTOM_LOBBIES', busy: false, queued: false, inMatch: false, paused: false, inMenus: true,
@@ -2656,6 +2788,18 @@ function demoBridge() {
       return {battleTag: tag, label: r?.label ?? 'Waiting for activity', open: Boolean(r?.open), lobby: r?.lobby ?? ''};
     });
   };
+  // Ranking: sample BattleTags only. Arthas and Jaina tie on 6 and 2, to
+  // show that ties keep their order.
+  const rankingDemo = [
+    ['Player#1234', 14, 6, 20],
+    ['Arthas#1123', 9, 3, 90],
+    ['Jaina#2214', 9, 3, 60 * 26],
+    ['Kelthuzad#6644', 5, 5, 60 * 24 * 3],
+    ['Medivh#3310', 3, 0, 60 * 24 * 9],
+    ['Varimathras#2207', 1, 6, 60 * 24 * 14],
+    ['Thrall#1820', 8, 2, 60 * 24 * 40],
+    ['Sylvanas-the-Dark-Lady#90310', 0, 2, 60 * 24 * 400],
+  ].map(([tag, wins, losses, mins]) => ({tag, wins, losses, lastPlayed: at(mins)}));
   const scenes = {
     'host-waiting': {host: {enabled: true, phase: 'waiting', createAt: new Date(now + 8000).toISOString(), settings: hostDemo, players: 0, slots: 0, missing: [], offTeam: []}},
     'host-lobby': {host: {enabled: true, phase: 'lobby', settings: {...hostDemo, startWhenFull: true, sameTeam: true}, players: 3, slots: 6, full: false, missing: ['Jaina#2214', 'Thrall#1820'], offTeam: ['Uther#5521']},
@@ -2681,6 +2825,8 @@ function demoBridge() {
     linux: {connected: false, team: [], roster: [], connectionHint: 'This computer blocked reading Warcraft III’s menu session. To allow it, run: sudo setcap cap_sys_ptrace=ep <path to wc3-team-follow>'},
     unverified: {version: '3.0.2.25010', verifiedBuild: false},
     recent: {manualTags: ['Arthas#1123', 'Jaina#2214', 'Kelthuzad#6644'], busy: true, inMenus: false, screen: 'GAME_LOBBY'},
+    ranking: {ranking: rankingDemo},
+    'ranking-empty': {},
     'recent-empty': {recent: [], lobbyTags: []},
     'recent-clear': {},
     'recent-select': {manualTags: ['Arthas#1123', 'Jaina#2214']},
@@ -2784,6 +2930,7 @@ function demoBridge() {
     CancelUpdate: async () => { clearInterval(demoInstall); s.update = {...s.update, phase: 'available', progress: null}; return clone(); },
     DismissUpdateNotes: async () => { s.update = {...s.update, after: null}; return clone(); },
     OpenReleasesPage: async () => {},
+    ClearRanking: async () => { s.ranking = []; return clone(); },
     ClearRecentPlayers: async () => { s.recent = []; s.lobbyTags = []; return clone(); },
     SetNote: async (tag, text) => {
       text = text.trim();

@@ -1141,3 +1141,11 @@ func TestJoinHostTeamStartsOn(t *testing.T) {
 		t.Fatal("Join the host's team starts off")
 	}
 }
+
+func TestSnapshotCarriesTheOwnBattleTag(t *testing.T) {
+	f := newFixture(t)
+	f.roster()
+	if got := f.state().SelfTag; got != "Self#1111" {
+		t.Fatalf("SelfTag = %q", got)
+	}
+}

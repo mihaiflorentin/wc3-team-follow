@@ -79,6 +79,8 @@ input, pre, .log, code { user-select: text; }
   --wails-draggable: drag;
 }
 
+.top-end { display: inline-flex; align-items: center; gap: 12px; --wails-draggable: no-drag; }
+
 .brand {
   display: inline-flex;
   align-items: center;
@@ -994,8 +996,8 @@ select {
 .crumbs .searching { color: var(--bone); font-weight: 600; padding: 4px 6px; }
 
 .table-wrap { flex: 1; min-height: 0; overflow: auto; border-radius: 10px; background: var(--spruce-deep); }
-.maps-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-.maps-table thead th {
+.maps-table, .rank-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.maps-table thead th, .rank-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -1004,7 +1006,7 @@ select {
   text-align: left;
   padding: 0;
 }
-.maps-table th button {
+.maps-table th button, .rank-table th button {
   display: flex;
   justify-content: flex-start;
   width: 100%;
@@ -1015,19 +1017,19 @@ select {
   font-weight: 600;
   font-size: 12.5px;
 }
-.maps-table th button:hover { color: var(--bone); }
-.maps-table th .sort { width: 14px; height: 14px; opacity: 0; }
-.maps-table th[aria-sort="ascending"] button, .maps-table th[aria-sort="descending"] button { color: var(--bone); }
-.maps-table th[aria-sort="ascending"] .sort, .maps-table th[aria-sort="descending"] .sort { opacity: 1; color: var(--open); }
-.maps-table th[aria-sort="descending"] .sort { transform: rotate(180deg); }
+.maps-table th button:hover, .rank-table th button:hover { color: var(--bone); }
+.maps-table th .sort, .rank-table th .sort { width: 14px; height: 14px; opacity: 0; }
+.maps-table th[aria-sort="ascending"] button, .maps-table th[aria-sort="descending"] button, .rank-table th[aria-sort="ascending"] button, .rank-table th[aria-sort="descending"] button { color: var(--bone); }
+.maps-table th[aria-sort="ascending"] .sort, .maps-table th[aria-sort="descending"] .sort, .rank-table th[aria-sort="ascending"] .sort, .rank-table th[aria-sort="descending"] .sort { opacity: 1; color: var(--open); }
+.maps-table th[aria-sort="descending"] .sort, .rank-table th[aria-sort="descending"] .sort { transform: rotate(180deg); }
 .maps-table .date-col { width: 150px; }
 
-.maps-table tbody tr { cursor: pointer; }
-.maps-table tbody tr:hover { background: var(--spruce-raised); }
-.maps-table tbody tr[aria-selected="true"] { background: color-mix(in srgb, var(--open) 18%, transparent); }
-.maps-table tbody tr[aria-selected="true"] .map-name { color: var(--open); }
-.maps-table tbody tr:focus-visible { outline: 2px solid var(--preview); outline-offset: -2px; }
-.maps-table td { padding: 8px 14px; border-top: 1px solid color-mix(in srgb, var(--spruce-line) 45%, transparent); vertical-align: middle; }
+.maps-table tbody tr, .rank-table tbody tr { cursor: pointer; }
+.maps-table tbody tr:hover, .rank-table tbody tr:hover { background: var(--spruce-raised); }
+.maps-table tbody tr[aria-selected="true"], .rank-table tbody tr[aria-selected="true"] { background: color-mix(in srgb, var(--open) 18%, transparent); }
+.maps-table tbody tr[aria-selected="true"] .map-name, .rank-table tbody tr[aria-selected="true"] .map-name { color: var(--open); }
+.maps-table tbody tr:focus-visible, .rank-table tbody tr:focus-visible { outline: 2px solid var(--preview); outline-offset: -2px; }
+.maps-table td, .rank-table td { padding: 8px 14px; border-top: 1px solid color-mix(in srgb, var(--spruce-line) 45%, transparent); vertical-align: middle; }
 .maps-table td.date { color: var(--lichen); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cell-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .cell-name .icon { flex: none; }
@@ -1038,6 +1040,44 @@ select {
 .maps-table .empty-row td { cursor: default; color: var(--lichen); padding: 22px 14px; }
 .maps-table .empty-row:hover { background: none; }
 .maps-selected { margin: 0 auto 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%; }
+
+/* Ranking ------------------------------------------------------------- */
+
+dialog.sheet.ranking { width: min(760px, calc(100vw - 32px)); display: none; flex-direction: column; gap: 12px; max-height: calc(100vh - 48px); overflow: hidden; }
+dialog.sheet.ranking[open] { display: flex; }
+dialog.sheet.ranking .fine, dialog.sheet.ranking h2 { margin: 0; }
+.ranking-empty { padding: 28px 20px; border-radius: 10px; background: var(--spruce-deep); text-align: center; }
+.ranking-empty p { margin: 0; }
+.ranking-empty .fine { margin-top: 6px; }
+.table-wrap:focus-visible { outline: 2px solid var(--preview); outline-offset: 2px; }
+
+.rank-table tbody tr { cursor: default; }
+.rank-table th.num button { justify-content: flex-end; }
+.rank-table th.num button, .rank-table th.rate-col button, .rank-table th.last-col button { white-space: nowrap; }
+.rank-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.rank-table th.num { width: 64px; }
+.rank-table .rate-col { width: 156px; }
+.rank-table .last-col { width: 104px; }
+.rank-table th button, .rank-table td { padding-left: 10px; padding-right: 10px; }
+.rank-table td.player { min-width: 150px; overflow-wrap: break-word; }
+.rank-table td.player .tag { font-weight: 600; }
+.rank-table td.player .you {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--open) 20%, transparent);
+  color: var(--open);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.rank-table tbody tr.self { background: color-mix(in srgb, var(--open) 9%, transparent); box-shadow: inset 3px 0 0 var(--open); }
+.rank-table tbody tr.self:hover { background: color-mix(in srgb, var(--open) 15%, transparent); }
+.rank-table td.rate { display: table-cell; white-space: nowrap; }
+.rank-table .pct { display: inline-block; width: 4ch; text-align: right; font-variant-numeric: tabular-nums; margin-right: 8px; }
+.rank-table .bar { display: inline-block; vertical-align: middle; width: 64px; height: 6px; border-radius: 3px; background: var(--spruce-line); overflow: hidden; }
+.rank-table .fill { display: block; height: 100%; border-radius: 3px; background: var(--online); }
+.rank-table td.last { color: var(--lichen); white-space: nowrap; }
 
 @media (max-width: 820px) {
   .field-row { grid-template-columns: 1fr; gap: 0; }

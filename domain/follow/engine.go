@@ -913,6 +913,7 @@ func (e *Engine) Snapshot() dto.FollowState {
 		Paused:              e.enabled && (e.busy || e.queued || e.inMatch || e.awaitingMenu),
 		InMenus:             e.connected && e.menusKnown && !e.busy && !e.queued && !e.inMatch && !e.awaitingMenu,
 		JoinPending:         e.pending != nil,
+		SelfTag:             e.selfTag,
 		Team:                []dto.TeamMember{},
 		Watched:             []dto.WatchedMember{},
 		Friends:             []dto.WatchedMember{},
