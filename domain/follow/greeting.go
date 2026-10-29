@@ -15,8 +15,8 @@ type Random interface {
 }
 
 const (
-	minGreetDelay = time.Second
-	maxGreetDelay = 5 * time.Second
+	minGreetDelay = 3 * time.Second
+	maxGreetDelay = 10 * time.Second
 )
 
 // Greetings returns the only lines the engine types when the player joins

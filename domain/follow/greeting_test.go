@@ -11,8 +11,8 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
-// fixedRandom picks index pick and a delay of 3 s (1 s plus half of the 4 s
-// range).
+// fixedRandom picks index pick and a delay of 6.5 s (3 s plus half of the
+// 7 s range).
 type fixedRandom struct{ pick int }
 
 func (r fixedRandom) IntN(int) int     { return r.pick }
@@ -65,7 +65,7 @@ func (f *fixture) wantNoChat() {
 func TestGreetsOnceAfterTheDelayWhenJoiningAsGuest(t *testing.T) {
 	f := greetFixture(t)
 	f.receive("GameLobbySetup", guestLobby("Fun game", false))
-	f.advance(2900 * time.Millisecond)
+	f.advance(6400 * time.Millisecond)
 	f.engine.Tick()
 	if got := f.chat(); len(got) != 0 {
 		t.Fatalf("typed before the delay: %q", got)
@@ -83,12 +83,12 @@ func TestGreetsOnceAfterTheDelayWhenJoiningAsGuest(t *testing.T) {
 	}
 }
 
-func TestGreetingDelayStaysBetweenOneAndFiveSeconds(t *testing.T) {
+func TestGreetingDelayStaysBetweenThreeAndTenSeconds(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		draw  float64
 		first time.Duration
-	}{{"shortest", 0, time.Second}, {"longest", 0.999, 5 * time.Second}} {
+	}{{"shortest", 0, 3 * time.Second}, {"longest", 0.999, 10 * time.Second}} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFixture(t)
 			f.engine.SetRandom(edgeRandom{tc.draw})
@@ -96,7 +96,7 @@ func TestGreetingDelayStaysBetweenOneAndFiveSeconds(t *testing.T) {
 			f.advance(tc.first - 50*time.Millisecond)
 			f.engine.Tick()
 			if tc.draw == 0 && len(f.chat()) != 0 {
-				t.Fatal("typed before one second")
+				t.Fatal("typed before three seconds")
 			}
 			f.advance(100 * time.Millisecond)
 			f.engine.Tick()
@@ -165,7 +165,7 @@ func TestDoesNotGreetWhenNotSeated(t *testing.T) {
 func TestGreetsOncePerLobby(t *testing.T) {
 	f := greetFixture(t)
 	f.receive("GameLobbySetup", guestLobby("Fun game", false))
-	f.wait(4 * time.Second)
+	f.wait(7 * time.Second)
 	f.receive("GameLobbySetup", guestLobby("Fun game", false))
 	f.wait(10 * time.Second)
 	if got := f.chat(); len(got) != 1 {
@@ -176,12 +176,12 @@ func TestGreetsOncePerLobby(t *testing.T) {
 func TestGreetsAgainInANewLobby(t *testing.T) {
 	f := greetFixture(t)
 	f.receive("GameLobbySetup", guestLobby("First", false))
-	f.wait(4 * time.Second)
+	f.wait(7 * time.Second)
 	f.receive("MultiplayerGameLeave", nil)
 	f.receive("GameLobbySetup", guestLobby("First", false))
-	f.wait(4 * time.Second)
+	f.wait(7 * time.Second)
 	f.receive("GameLobbySetup", guestLobby("Second", false))
-	f.wait(4 * time.Second)
+	f.wait(7 * time.Second)
 	if got := f.chat(); len(got) != 3 {
 		t.Fatalf("chat = %q, want three greetings", got)
 	}
