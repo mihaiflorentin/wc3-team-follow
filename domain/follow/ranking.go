@@ -9,26 +9,26 @@ import (
 )
 
 // Ranking records a win or a loss for the group when a match's score
-// screen reports the result. It only reads events and never sends anything
+// event reports the result. It only reads events and never sends anything
 // to the game.
 //
 // Each GameLobbySetup replaces the snapshot of the lobby: who sat on which
-// team. Lobby updates stop once a match loads, so the last one is the
-// match. UpdateScoreInfo with the multiplayer shape (scoreInfo.
-// localPlayerWon) records the match against that snapshot and closes it,
-// so a repeated score event or screen counts nothing. Leaving the game, a
-// menu screen, a disconnect or a new lobby ends the match without a
-// result. The score screen itself doesn't end it: the score event may
-// come after the screen is set.
+// team. SetGlueScreen LOADING_SCREEN arms a match. The first UpdateScoreInfo
+// while armed records it and disarms, so the duplicate the game sends is
+// ignored. Leaving the game (ExitedGame, MultiplayerGameLeave) and the score
+// screen don't disarm: the game reports both before the score. A menu
+// screen, a new lobby, a log out, a disconnect or Clear disarm without a
+// result.
 //
-// The player's team gets the player's result. A group member on another
-// team gets the opposite when that is certain: the player won, or the
-// match had exactly two teams. A per-team won flag in the score, when it
-// agrees with the player's own result, decides instead.
+// The result comes from scoreInfo.players, which names every human by
+// BattleTag with a won flag. When no player won the match wasn't finished
+// (the player left, or it was a draw), and only what is certain is recorded.
+// A score without those fields falls back to the lobby snapshot.
 type Ranking struct {
 	now     func() time.Time
 	entries []dto.RankingEntry
 	lobby   *rankLobby
+	armed   bool
 	changed bool
 }
 
@@ -79,38 +79,53 @@ func NewRanking(now func() time.Time, saved []dto.RankingEntry) *Ranking {
 }
 
 // Receive applies one game event. group is the BattleTags the player
-// follows now: it is read when the match ends.
+// follows now: it is read when the score arrives.
 func (r *Ranking) Receive(event dto.GameEvent, group []string) {
 	p := event.Payload
 	switch event.MessageType {
 	case "GameLobbySetup":
+		r.armed = false
 		r.lobby = readRankLobby(p)
-	case "MultiplayerGameLeave", "ExitedGame", "LoggedOut":
+	case "LoggedOut":
 		r.End()
 	case "SetGlueScreen":
-		if screen, _ := p["screen"].(string); slices.Contains(menuScreens, screen) {
+		screen, _ := p["screen"].(string)
+		switch {
+		case screen == "LOADING_SCREEN":
+			r.armed = true
+		case slices.Contains(menuScreens, screen):
 			r.End()
 		}
 	case "UpdateScoreInfo":
 		info := object(p["scoreInfo"])
 		won, ok := info["localPlayerWon"].(bool)
-		if !ok || r.lobby == nil {
+		if !ok || !r.armed {
 			return
 		}
 		lobby := r.lobby
-		r.lobby = nil
-		r.record(lobby, won, teamResults(info), group)
+		r.End()
+		if !rankableMatch(info) {
+			return
+		}
+		if players := readScorePlayers(info); players.usable {
+			r.recordScore(lobby, players, won, group)
+			return
+		}
+		if lobby != nil {
+			r.record(lobby, won, group)
+		}
 	}
 }
 
-// End forgets the lobby: the match is over without a result, or the game
-// is gone.
-func (r *Ranking) End() { r.lobby = nil }
+// End disarms the match and forgets the lobby: the match is over without a
+// result, or the game is gone.
+func (r *Ranking) End() { r.armed, r.lobby = false, nil }
 
-// Clear forgets every entry. A match in progress is still recorded.
+// Clear forgets every entry and any match in progress.
 func (r *Ranking) Clear() {
 	r.entries = nil
 	r.changed = false
+	r.End()
 }
 
 // Entries returns the records, most recently played first. Never nil.
@@ -129,8 +144,8 @@ func (r *Ranking) Unsaved() bool { return r.changed }
 func (r *Ranking) MarkSaved() { r.changed = false }
 
 // record counts one match for the player and the group members who took
-// part.
-func (r *Ranking) record(l *rankLobby, localWon bool, byTeam map[int64]bool, group []string) {
+// part, from the lobby snapshot alone.
+func (r *Ranking) record(l *rankLobby, localWon bool, group []string) {
 	if l.selfObserver {
 		return
 	}
@@ -142,11 +157,6 @@ func (r *Ranking) record(l *rankLobby, localWon bool, byTeam map[int64]bool, gro
 	if myTeam == noTeam {
 		return
 	}
-	if known, ok := byTeam[myTeam]; !ok || known != localWon {
-		// The flags don't line up with the player's own result, so their
-		// team numbers can't be trusted.
-		byTeam = nil
-	}
 	now := r.now()
 	counted := map[string]bool{}
 	for _, s := range l.seats {
@@ -154,15 +164,13 @@ func (r *Ranking) record(l *rankLobby, localWon bool, byTeam map[int64]bool, gro
 		if !s.human || key == "" || counted[key] || s.team == noTeam {
 			continue
 		}
-		if !s.self && !slices.ContainsFunc(group, func(g string) bool { return tagKey(g) == key }) {
+		if !s.self && !inGroup(group, key) {
 			continue
 		}
 		var win bool
 		switch {
 		case s.team == myTeam:
 			win = localWon
-		case byTeam != nil && teamKnown(byTeam, s.team):
-			win = byTeam[s.team]
 		case localWon:
 			win = false
 		case l.teams == 2 && !l.unknown:
@@ -175,9 +183,50 @@ func (r *Ranking) record(l *rankLobby, localWon bool, byTeam map[int64]bool, gro
 	}
 }
 
-func teamKnown(m map[int64]bool, team int64) bool {
-	_, ok := m[team]
-	return ok
+// recordScore counts one match from the players of the score. Only humans
+// who are the local player (the lobby's own seat) or in the group count.
+func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool, group []string) {
+	if l != nil && l.selfObserver {
+		return
+	}
+	localKey := ""
+	if l != nil {
+		if i := slices.IndexFunc(l.seats, func(s rankSeat) bool { return s.self }); i >= 0 {
+			localKey = tagKey(l.seats[i].name)
+		}
+	}
+	local := slices.IndexFunc(sp.humans, func(p scorePlayer) bool { return localKey != "" && tagKey(p.tag) == localKey })
+	now := r.now()
+	counted := map[string]bool{}
+	for _, p := range sp.humans {
+		key := tagKey(p.tag)
+		isLocal := localKey != "" && key == localKey
+		if counted[key] || (!isLocal && !inGroup(group, key)) {
+			continue
+		}
+		var win bool
+		switch {
+		case sp.finished:
+			if !p.wonKnown {
+				continue
+			}
+			win = p.won
+		case isLocal:
+			win = localWon
+		case localWon && local >= 0 && p.teamKnown && sp.humans[local].teamKnown && p.team == sp.humans[local].team:
+			// Unfinished but the player won: their teammates did too.
+			win = true
+		default:
+			// Unfinished: the others' outcome is unknown.
+			continue
+		}
+		counted[key] = true
+		r.add(p.tag, win, now)
+	}
+}
+
+func inGroup(group []string, key string) bool {
+	return slices.ContainsFunc(group, func(g string) bool { return tagKey(g) == key })
 }
 
 func (r *Ranking) add(tag string, win bool, now time.Time) {
@@ -249,27 +298,59 @@ func readRankLobby(p map[string]any) *rankLobby {
 	return l
 }
 
-// teamResults reads the per-team won flags of a score, if it has any:
-// entries of scoreInfo.players with teamIndex and a boolean won. A team
-// whose entries disagree is left out.
-func teamResults(info map[string]any) map[int64]bool {
-	players, _ := list(info["players"])
-	out := map[int64]bool{}
-	conflict := map[int64]bool{}
-	for _, raw := range players {
-		x := object(raw)
-		team, ok := intValue(x["teamIndex"])
+// rankableMatch reports whether a score is for a live custom game: not a
+// replay, and of game type custom when it says.
+func rankableMatch(info map[string]any) bool {
+	m := object(info["mapInfo"])
+	if isTrue(m["isReplay"]) {
+		return false
+	}
+	if t, ok := m["gameType"].(string); ok && t != "" && !strings.EqualFold(t, "custom") {
+		return false
+	}
+	return true
+}
+
+type scorePlayer struct {
+	tag       string
+	team      int64
+	teamKnown bool
+	won       bool
+	wonKnown  bool
+}
+
+// scorePlayers is scoreInfo.players. usable is set when the score is
+// usable (some human is named and some player has a won flag); finished
+// when a player won, so the match was played to its end.
+type scorePlayers struct {
+	humans   []scorePlayer
+	usable   bool
+	finished bool
+}
+
+// readScorePlayers reads scoreInfo.players: humans are entries that aren't
+// computers and have a BattleTag.
+func readScorePlayers(info map[string]any) scorePlayers {
+	raw, _ := list(info["players"])
+	var out scorePlayers
+	anyFlag := false
+	for _, r := range raw {
+		x := object(r)
 		won, wonOK := x["won"].(bool)
-		if !ok || !wonOK {
+		if wonOK {
+			anyFlag = true
+			if won {
+				out.finished = true
+			}
+		}
+		tag, _ := x["battleTag"].(string)
+		tag = strings.TrimSpace(tag)
+		if isTrue(x["isAi"]) || tag == "" {
 			continue
 		}
-		if prev, seen := out[team]; seen && prev != won {
-			conflict[team] = true
-		}
-		out[team] = won
+		team, teamOK := intValue(x["teamIndex"])
+		out.humans = append(out.humans, scorePlayer{tag: tag, team: team, teamKnown: teamOK, won: won, wonKnown: wonOK})
 	}
-	for team := range conflict {
-		delete(out, team)
-	}
+	out.usable = anyFlag && len(out.humans) > 0
 	return out
 }

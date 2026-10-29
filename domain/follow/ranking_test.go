@@ -1,6 +1,9 @@
 package follow_test
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -43,7 +46,19 @@ func glue(screen string) dto.GameEvent {
 	return dto.GameEvent{MessageType: "SetGlueScreen", Payload: map[string]any{"screen": screen}}
 }
 
+// record feeds events, arming the match after each lobby the way the game's
+// loading screen does.
 func record(r *follow.Ranking, group []string, events ...dto.GameEvent) {
+	for _, ev := range events {
+		r.Receive(ev, group)
+		if ev.MessageType == "GameLobbySetup" {
+			r.Receive(glue("LOADING_SCREEN"), group)
+		}
+	}
+}
+
+// feed feeds events exactly as given.
+func feed(r *follow.Ranking, group []string, events ...dto.GameEvent) {
 	for _, ev := range events {
 		r.Receive(ev, group)
 	}
@@ -93,7 +108,7 @@ func TestRankingWinCountsMyTeamAndLossTheOther(t *testing.T) {
 
 func TestRankingLossInTwoTeamsGivesTheOtherTeamTheWin(t *testing.T) {
 	r := newRanking()
-	record(r, []string{"Arthas#1123", "Jaina#2214"}, rlobby(twoTeams...), score(false))
+	record(r, []string{"Arthas#1123", "Jaina#2214"}, rlobby(twoTeams...), glue("LOADING_SCREEN"), score(false))
 	expectRanking(t, r, map[string][2]int{"Me#1111": {0, 1}, "Arthas#1123": {0, 1}, "Jaina#2214": {1, 0}})
 }
 
@@ -130,7 +145,7 @@ func TestRankingIgnoresStrangersObserversAndComputers(t *testing.T) {
 
 func TestRankingGroupMemberNotInTheLobbyGetsNothing(t *testing.T) {
 	r := newRanking()
-	record(r, []string{"Absent#4444"}, rlobby(twoTeams...), score(true))
+	record(r, []string{"Absent#4444"}, rlobby(twoTeams...), glue("LOADING_SCREEN"), score(true))
 	expectRanking(t, r, map[string][2]int{"Me#1111": {1, 0}})
 }
 
@@ -144,33 +159,49 @@ func TestRankingObserverSelfRecordsNothing(t *testing.T) {
 	}
 }
 
-func TestRankingNeedsAScoreEvent(t *testing.T) {
-	endings := []dto.GameEvent{
-		{MessageType: "MultiplayerGameLeave"}, {MessageType: "ExitedGame"}, {MessageType: "LoggedOut"},
-		glue("MAIN_MENU"), glue("CUSTOM_LOBBIES"),
+func TestRankingDisarmsWithoutAResult(t *testing.T) {
+	disarming := []dto.GameEvent{
+		{MessageType: "LoggedOut"}, glue("MAIN_MENU"), glue("CUSTOM_LOBBIES"),
+		rlobby(rseat{name: "Me#1111", team: 0, self: true}), // the next lobby
 	}
-	for _, end := range endings {
+	for _, end := range disarming {
 		r := newRanking()
-		record(r, []string{"Arthas#1123"}, rlobby(twoTeams...), glue("LOADING_SCREEN"), end, score(true))
+		feed(r, []string{"Arthas#1123"}, rlobby(twoTeams...), glue("LOADING_SCREEN"), end, score(true))
 		expectRanking(t, r, map[string][2]int{})
 	}
 	r := newRanking()
-	record(r, []string{"Arthas#1123"}, rlobby(twoTeams...), glue("LOADING_SCREEN"), glue("SCORE_SCREEN"))
-	expectRanking(t, r, map[string][2]int{})
+	feed(r, []string{"Arthas#1123"}, rlobby(twoTeams...), glue("LOADING_SCREEN"))
 	r.End()
-	record(r, nil, score(true))
+	feed(r, nil, score(true))
 	expectRanking(t, r, map[string][2]int{})
+	feed(r, []string{"Arthas#1123"}, rlobby(twoTeams...), glue("LOADING_SCREEN"))
+	r.Clear()
+	feed(r, nil, score(true))
+	expectRanking(t, r, map[string][2]int{})
+}
+
+func TestRankingNeedsTheLoadingScreen(t *testing.T) {
+	r := newRanking()
+	feed(r, []string{"Arthas#1123"}, rlobby(twoTeams...), score(true))
+	expectRanking(t, r, map[string][2]int{})
+}
+
+func TestRankingLeavingTheGameAndTheScoreScreenDontDisarm(t *testing.T) {
+	r := newRanking()
+	feed(r, []string{"Arthas#1123"}, rlobby(twoTeams...), glue("LOADING_SCREEN"),
+		dto.GameEvent{MessageType: "ExitedGame"}, glue("SCORE_SCREEN"), dto.GameEvent{MessageType: "MultiplayerGameLeave"}, score(true))
+	expectRanking(t, r, map[string][2]int{"Me#1111": {1, 0}, "Arthas#1123": {1, 0}})
 }
 
 func TestRankingScoreScreenMayComeBeforeTheScoreEvent(t *testing.T) {
 	r := newRanking()
-	record(r, []string{"Arthas#1123"}, rlobby(twoTeams...), glue("SCORE_SCREEN"), score(true))
+	record(r, []string{"Arthas#1123"}, rlobby(twoTeams...), glue("LOADING_SCREEN"), glue("SCORE_SCREEN"), score(true))
 	expectRanking(t, r, map[string][2]int{"Me#1111": {1, 0}, "Arthas#1123": {1, 0}})
 }
 
 func TestRankingCountsAMatchOnce(t *testing.T) {
 	r := newRanking()
-	record(r, []string{"Arthas#1123"}, rlobby(twoTeams...), score(true), score(true), glue("SCORE_SCREEN"), score(true))
+	record(r, []string{"Arthas#1123"}, rlobby(twoTeams...), glue("LOADING_SCREEN"), score(true), score(true), glue("SCORE_SCREEN"), score(true))
 	expectRanking(t, r, map[string][2]int{"Me#1111": {1, 0}, "Arthas#1123": {1, 0}})
 }
 
@@ -200,7 +231,7 @@ func TestRankingTheNewestLobbyIsTheMatch(t *testing.T) {
 
 func TestRankingMatchesTagsWithoutRegardToCase(t *testing.T) {
 	r := newRanking()
-	record(r, []string{"arthas#1123"}, rlobby(twoTeams...), score(true))
+	record(r, []string{"arthas#1123"}, rlobby(twoTeams...), glue("LOADING_SCREEN"), score(true))
 	record(r, []string{"ARTHAS#1123"}, rlobby(rseat{name: "me#1111", team: 0, self: true}, rseat{name: "ARTHAS#1123", team: 0}), score(false))
 	got := r.Entries()
 	if len(got) != 2 {
@@ -216,7 +247,7 @@ func TestRankingMatchesTagsWithoutRegardToCase(t *testing.T) {
 func TestRankingSavedEntriesCarryOn(t *testing.T) {
 	saved := []dto.RankingEntry{{Tag: "Arthas#1123", Wins: 4, Losses: 2, LastPlayed: rankClock.Add(-time.Hour)}}
 	r := follow.NewRanking(func() time.Time { return rankClock }, saved)
-	record(r, []string{"arthas#1123"}, rlobby(twoTeams...), score(true))
+	record(r, []string{"arthas#1123"}, rlobby(twoTeams...), glue("LOADING_SCREEN"), score(true))
 	expectRanking(t, r, map[string][2]int{"Arthas#1123": {5, 2}, "Me#1111": {1, 0}})
 	if r.Entries()[0].Tag == "" || len(r.Entries()) != 2 {
 		t.Fatal("entries")
@@ -228,43 +259,119 @@ func TestRankingEntriesAreNeverNilAndClearEmptiesThem(t *testing.T) {
 	if r.Entries() == nil {
 		t.Fatal("entries are nil")
 	}
-	record(r, nil, rlobby(twoTeams...), score(true))
+	record(r, nil, rlobby(twoTeams...), glue("LOADING_SCREEN"), score(true))
 	r.Clear()
 	if got := r.Entries(); got == nil || len(got) != 0 || r.Unsaved() {
 		t.Fatalf("after Clear = %v, unsaved %v", got, r.Unsaved())
 	}
 }
 
-func TestRankingPerTeamResultTakesPrecedence(t *testing.T) {
-	// Three teams, so the inference alone gives Jaina nothing; the score
-	// says team 1 won although the local team lost.
-	seats := []rseat{
-		{name: "Me#1111", team: 0, self: true}, {name: "Jaina#2214", team: 1}, {name: "Arthas#1123", team: 2},
+// pl is one entry of scoreInfo.players.
+func pl(tag string, team int, won bool) map[string]any {
+	return map[string]any{"battleTag": tag, "toonName": tag, "teamIndex": float64(team), "won": won, "isAi": false}
+}
+
+func cpu(team int, won bool) map[string]any {
+	return map[string]any{"battleTag": "", "toonName": "Player 5", "teamIndex": float64(team), "won": won, "isAi": true}
+}
+
+func scoreWith(localWon bool, info map[string]any, players ...map[string]any) dto.GameEvent {
+	list := make([]any, len(players))
+	for i, p := range players {
+		list[i] = p
 	}
-	r := newRanking()
-	record(r, []string{"Jaina#2214", "Arthas#1123"}, rlobby(seats...), score(false,
-		map[string]any{"teamIndex": float64(0), "won": false},
-		map[string]any{"teamIndex": float64(1), "won": true},
-		map[string]any{"teamIndex": float64(2), "won": false}))
-	expectRanking(t, r, map[string][2]int{"Me#1111": {0, 1}, "Jaina#2214": {1, 0}, "Arthas#1123": {0, 1}})
+	si := map[string]any{"localPlayerWon": localWon, "players": list}
+	for k, v := range info {
+		si[k] = v
+	}
+	return dto.GameEvent{MessageType: "UpdateScoreInfo", Payload: map[string]any{"scoreInfo": si}}
 }
 
-func TestRankingPerTeamResultIsIgnoredWhenItContradictsTheLocalResult(t *testing.T) {
-	seats := []rseat{{name: "Me#1111", team: 0, self: true}, {name: "Jaina#2214", team: 1}, {name: "Arthas#1123", team: 2}}
+func loadFixture(t *testing.T, name string) dto.GameEvent {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatal(err)
+	}
+	return dto.GameEvent{MessageType: "UpdateScoreInfo", Payload: payload}
+}
+
+func TestRankingLiveCaptureHostLeftEarlyRecordsOneLoss(t *testing.T) {
+	// Event order captured from game 3.0.1.24371 (Legion TD, host left early).
+	lobby := rlobby(rseat{name: "Mihai#22569", team: 0, self: true}, rseat{name: "Player 5", team: 1, computer: true}, rseat{name: "Mihai", team: 0, computer: true})
+	fixture := loadFixture(t, "score-left-early.json")
 	r := newRanking()
-	// Team indexes that don't line up with the lobby's teams.
-	record(r, []string{"Jaina#2214", "Arthas#1123"}, rlobby(seats...), score(false,
-		map[string]any{"teamIndex": float64(0), "won": true},
-		map[string]any{"teamIndex": float64(1), "won": false}))
+	feed(r, []string{"Friend#1234"}, lobby,
+		dto.GameEvent{MessageType: "GameLobbyGracefulExit"}, glue("LOADING_SCREEN"),
+		dto.GameEvent{MessageType: "ExitedGame"}, fixture, glue("SCORE_SCREEN"),
+		dto.GameEvent{MessageType: "MultiplayerGameLeave"}, fixture)
+	expectRanking(t, r, map[string][2]int{"Mihai#22569": {0, 1}})
+}
+
+func TestRankingFinishedMatchUsesEachPlayersWonFlag(t *testing.T) {
+	seats := []rseat{{name: "Me#1111", team: 0, self: true}, {name: "Arthas#1123", team: 0}, {name: "Jaina#2214", team: 1}, {name: "Stranger#9999", team: 1}, {name: "CPU", team: 1, computer: true}}
+	r := newRanking()
+	record(r, []string{"arthas#1123", "Jaina#2214"}, rlobby(seats...), scoreWith(true, nil,
+		pl("Me#1111", 0, true), pl("Arthas#1123", 0, true), pl("Jaina#2214", 1, false), pl("Stranger#9999", 1, false), cpu(1, false)))
+	expectRanking(t, r, map[string][2]int{"Me#1111": {1, 0}, "Arthas#1123": {1, 0}, "Jaina#2214": {0, 1}})
+}
+
+func TestRankingFinishedMatchTheLocalPlayerLost(t *testing.T) {
+	r := newRanking()
+	record(r, []string{"Jaina#2214"}, rlobby(twoTeams...), scoreWith(false, nil,
+		pl("Me#1111", 0, false), pl("Arthas#1123", 0, false), pl("Jaina#2214", 1, true), pl("Stranger#9999", 1, true)))
+	expectRanking(t, r, map[string][2]int{"Me#1111": {0, 1}, "Jaina#2214": {1, 0}})
+}
+
+func TestRankingFinishedMatchIgnoresComputersEvenWithATag(t *testing.T) {
+	r := newRanking()
+	ai := pl("Bot#0001", 1, true)
+	ai["isAi"] = true
+	record(r, []string{"Bot#0001"}, rlobby(twoTeams...), scoreWith(false, nil, pl("Me#1111", 0, false), ai))
 	expectRanking(t, r, map[string][2]int{"Me#1111": {0, 1}})
 }
 
-func TestRankingPerTeamResultWithMixedPlayersOfATeamIsIgnored(t *testing.T) {
-	seats := []rseat{{name: "Me#1111", team: 0, self: true}, {name: "Jaina#2214", team: 1}, {name: "Arthas#1123", team: 2}}
+func TestRankingUnfinishedMatchRecordsOnlyTheLocalLoss(t *testing.T) {
 	r := newRanking()
-	record(r, []string{"Jaina#2214", "Arthas#1123"}, rlobby(seats...), score(false,
-		map[string]any{"teamIndex": float64(0), "won": false},
-		map[string]any{"teamIndex": float64(1), "won": true},
-		map[string]any{"teamIndex": float64(1), "won": false}))
+	record(r, []string{"Arthas#1123", "Jaina#2214"}, rlobby(twoTeams...), scoreWith(false, nil,
+		pl("Me#1111", 0, false), pl("Arthas#1123", 0, false), pl("Jaina#2214", 1, false)))
 	expectRanking(t, r, map[string][2]int{"Me#1111": {0, 1}})
+}
+
+func TestRankingUnfinishedWinGivesTeammatesTheWin(t *testing.T) {
+	r := newRanking()
+	record(r, []string{"Arthas#1123", "Jaina#2214"}, rlobby(twoTeams...), scoreWith(true, nil,
+		pl("Me#1111", 0, false), pl("Arthas#1123", 0, false), pl("Jaina#2214", 1, false)))
+	expectRanking(t, r, map[string][2]int{"Me#1111": {1, 0}, "Arthas#1123": {1, 0}})
+}
+
+func TestRankingIgnoresReplaysAndOtherGameTypes(t *testing.T) {
+	for _, info := range []map[string]any{
+		{"mapInfo": map[string]any{"isReplay": true, "gameType": "custom"}},
+		{"mapInfo": map[string]any{"isReplay": false, "gameType": "ladder"}},
+	} {
+		r := newRanking()
+		record(r, []string{"Arthas#1123"}, rlobby(twoTeams...), scoreWith(true, info, pl("Me#1111", 0, true), pl("Arthas#1123", 0, true)))
+		expectRanking(t, r, map[string][2]int{})
+		// The match is over; a following real score has nothing to count.
+		record(r, []string{"Arthas#1123"}, score(true))
+		expectRanking(t, r, map[string][2]int{})
+	}
+}
+
+func TestRankingScoreWithoutWonFlagsFallsBackToTheLobby(t *testing.T) {
+	r := newRanking()
+	record(r, []string{"Arthas#1123", "Jaina#2214"}, rlobby(twoTeams...), score(false,
+		map[string]any{"teamIndex": float64(0)}, map[string]any{"teamIndex": float64(1)}))
+	expectRanking(t, r, map[string][2]int{"Me#1111": {0, 1}, "Arthas#1123": {0, 1}, "Jaina#2214": {1, 0}})
+}
+
+func TestRankingNeedsAKnownLocalPlayerToRecordTheirResult(t *testing.T) {
+	r := newRanking()
+	feed(r, []string{"Arthas#1123"}, glue("LOADING_SCREEN"), scoreWith(false, nil, pl("Me#1111", 0, false), pl("Arthas#1123", 0, false)))
+	expectRanking(t, r, map[string][2]int{})
 }

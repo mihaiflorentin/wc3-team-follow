@@ -105,6 +105,7 @@ func TestRankingFailedSaveIsRetried(t *testing.T) {
 	h := rankingHarness(t, store)
 	h.connected(t)
 	h.session.Push(lobby(castleFight, "CF", teamSlot("Me#1111", 0, true), teamSlot("Arthas#1123", 1, false)))
+	h.session.Push(screen("LOADING_SCREEN"))
 	h.session.Push(scoreInfo(true))
 	waitFor(t, "recorded", func() bool { return len(h.svc.State().Ranking) == 2 })
 	store.FailSaves(nil)
