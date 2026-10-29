@@ -184,6 +184,9 @@ type Engine struct {
 
 	// host is Auto-host.
 	host hostState
+	// greet is the greeting typed after joining a lobby as a guest.
+	greet  greeting
+	random Random
 	// chatLines are lines Game mode wants typed, for TakeChatLine.
 	chatLines []string
 
@@ -215,6 +218,7 @@ func NewEngine(send Sender, now func() time.Time, verified []string) *Engine {
 		counts:         map[string]int{},
 		presenceEpochs: map[string]presenceEpoch{},
 		seenOpen:       map[string]bool{},
+		random:         newRandom(),
 		host:           hostState{settings: dto.HostSettings{GameModeDelaySeconds: DefaultGameModeDelay}},
 	}
 }
@@ -245,6 +249,7 @@ func (e *Engine) Connection(connected bool, version string) {
 	e.connected, e.version = connected, version
 	e.enabled, e.pending, e.password, e.joined = false, nil, nil, nil
 	e.ban = banState{}
+	e.endGreeting()
 	e.team, e.teamAt = nil, time.Time{}
 	clear(e.friends)
 	clear(e.roster)
@@ -477,18 +482,23 @@ func (e *Engine) Receive(event dto.GameEvent) {
 			}
 		}
 		e.banBlacklisted(p)
+		e.greetLobby(p, inSlot, name)
 	case "LobbyCountdown":
 		details := object(p["details"])
 		if e.joined != nil {
 			e.joined.countdown = isTrue(details["countdownActive"])
 		}
 		e.ban.locked = isTrue(details["countdownActive"]) && isTrue(details["countdownLocked"])
+		if isTrue(details["countdownActive"]) {
+			e.cancelGreeting()
+		}
 	case "ChatMessage":
 		e.confirmBan(p)
 	case "IsGameUIActive":
 		switch p["isActive"] {
 		case "true", true:
 			e.inMatch, e.busy, e.menuReady = true, true, false
+			e.endGreeting()
 			e.pause("Follow is on but paused during the match.")
 		case "false", false:
 			e.inMatch = false
@@ -498,10 +508,12 @@ func (e *Engine) Receive(event dto.GameEvent) {
 		e.pause("Follow is on but paused while entering a lobby.")
 	case "PauseUI", "GameFound", "LoadingScreenUpdate":
 		e.joined, e.ban = nil, banState{}
+		e.endGreeting()
 		e.inMatch, e.busy, e.menuReady = true, true, false
 		e.pause("Follow is on but paused while the game enters a match.")
 	case "MultiplayerGameLeave", "ExitedGame":
 		e.joined, e.ban = nil, banState{}
+		e.endGreeting()
 		if kind == "ExitedGame" {
 			e.inMatch = false
 		}
@@ -545,6 +557,7 @@ func (e *Engine) Receive(event dto.GameEvent) {
 			// the score screen itself is the return to the menus; the game's
 			// own Join Friend works from it.
 			e.busy, e.inMatch = true, false
+			e.endGreeting()
 			e.awaitingMenu, e.menuReady = true, true
 			e.resumeAt = e.now().Add(resumeDelay)
 			e.pending, e.password = nil, nil
@@ -555,6 +568,7 @@ func (e *Engine) Receive(event dto.GameEvent) {
 			e.busy, e.menuReady = true, false
 			if slices.Contains(matchScreens, e.screen) {
 				e.inMatch = true
+				e.endGreeting()
 			}
 			e.pause("Follow is on but paused in this lobby or game screen.")
 		case slices.Contains(menuScreens, e.screen):
@@ -576,6 +590,7 @@ func (e *Engine) Receive(event dto.GameEvent) {
 	e.hostReceive(kind, p)
 	e.resumeIfReady()
 	e.hostStep()
+	e.greetStep()
 	e.announceOpenLobbies()
 	e.evaluate()
 }
@@ -873,6 +888,7 @@ func (e *Engine) Tick() {
 		e.Note("The game didn't confirm the join. Check Warcraft III before trying again.")
 	}
 	e.hostStep()
+	e.greetStep()
 	e.evaluate()
 }
 

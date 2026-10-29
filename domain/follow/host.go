@@ -43,12 +43,12 @@ func ChatLine(text string) (string, error) {
 	return line, nil
 }
 
-// sendChat types one line in the game's lobby or match chat, as the host.
+// sendChat types one line in the game's lobby or match chat.
 // It trims the text and rejects it, sending nothing, unless it is a single
 // non-empty line of at most MaxChatLine characters without control
-// characters. Only Auto-host's own commands may be typed (docs/adr/0006):
-// callers must first check that Auto-host is on and the player is the host
-// of its lobby or match. The error is ErrChatLine for bad text, or says the
+// characters. Only Auto-host's own commands (docs/adr/0006) and the greeting
+// after joining a lobby as a guest (docs/adr/0010) may be typed: callers
+// must first check which case applies. The error is ErrChatLine for bad text, or says the
 // game connection is closed.
 func (e *Engine) sendChat(text string) error {
 	line, err := ChatLine(text)
