@@ -539,26 +539,23 @@ func findPlayer(players []lobbyPlayer, tag string) *lobbyPlayer {
 	return nil
 }
 
-// bringTogether puts the host and a group member on one team with what the
-// game lets the host do (checked live on 3.0.1.24371): move its own slot
-// and, on maps without fixed forces, computers, each into an open slot.
-// Other players' slots can't be moved by the host (teamChangeEnabled is
-// false for them).
+// bringTogether brings a group member onto the host's team. The host never
+// moves, and no computer is moved for it: moving the host would split it
+// from the rest of the group. In order: move the member when the game
+// allows it; wait for the member's own Team Follow to take an open slot on
+// the host's team; trade the member with a player on the host's team who
+// isn't in the group, using the game's !swap (which only trades players).
 func (e *Engine) bringTogether(players []lobbyPlayer, openTeams []any, self, pl lobbyPlayer, tag string) {
 	switch {
 	case pl.canMove && hasTeam(openTeams, self.team):
 		e.moveSlot(pl.slot, self.team, tagKey(tag), "Moving "+tag+" to your team.")
-	case self.canMove && hasTeam(openTeams, pl.team):
-		e.moveSlot(self.slot, pl.team, "self", "Moving you to "+tag+"'s team.")
-	case pl.canMove && e.makeRoom(players, openTeams, self.team, pl.team, tag):
-	case self.canMove && e.makeRoom(players, openTeams, pl.team, self.team, tag):
 	case hasTeam(openTeams, self.team) && e.waitForSelfMove(tag):
 	case e.swapWithStranger(players, self, pl, tag):
 	default:
 		key := tagKey(tag) + ":stuck"
 		if e.host.moves[key] == 0 {
 			e.host.moves[key] = 1
-			e.Note("You and " + tag + " can't be put on one team: the game only lets the host move itself and computers, and there's no open slot for that.")
+			e.Note(tag + " can't be moved to your team: there's no open slot on it and no other player on it to swap with.")
 		}
 	}
 }
@@ -672,36 +669,6 @@ func (e *Engine) moveSlot(slot, team any, who, note string) {
 	if e.send(CmdSetTeam, map[string]any{"slot": slot, "team": team}) {
 		e.Note(note)
 	}
-}
-
-// makeRoom moves a computer off a full team to a team with an open slot,
-// preferring prefer, so a player can take its place on the next lobby
-// update. It reports false when no computer can move, there's no open slot
-// for it, or the move was already tried maxMoves times.
-func (e *Engine) makeRoom(players []lobbyPlayer, openTeams []any, full, prefer any, tag string) bool {
-	var comp *lobbyPlayer
-	for i, pl := range players {
-		if pl.occupied && pl.computer && pl.canMove && sameNumber(pl.team, full) {
-			comp = &players[i]
-			break
-		}
-	}
-	var dest any
-	if hasTeam(openTeams, prefer) {
-		dest = prefer
-	} else {
-		for _, t := range openTeams {
-			if !sameNumber(t, full) {
-				dest = t
-				break
-			}
-		}
-	}
-	if comp == nil || dest == nil || e.host.moves["computer:"+fmt.Sprint(comp.slot)+":"+fmt.Sprint(dest)] >= maxMoves {
-		return false
-	}
-	e.moveSlot(comp.slot, dest, "computer:"+fmt.Sprint(comp.slot), "Moving "+comp.name+" to make room for "+tag+".")
-	return true
 }
 
 // hasTeam reports whether teams holds team.

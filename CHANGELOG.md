@@ -11,6 +11,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Team Follow now records a win or a loss for you and your follow group when a custom game's score screen shows the result. The record is kept on this computer only.
 - A **Ranking** button in the header opens a table of your group's wins and losses, with games, win rate and when each player last played. Click a column heading to sort by it and again to reverse it. **Clear ranking** starts over after you confirm.
 
+### Fixed
+
+- **Same team** no longer moves you, the host, to another team. Group members are brought to your team, and are only ever swapped with real players, never with computers.
+
 ## [0.8.0] - 2026-10-28
 
 ### Added
