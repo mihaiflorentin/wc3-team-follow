@@ -1,0 +1,135 @@
+{
+ "scoreInfo": {
+  "gameId": "5",
+  "gameName": "test",
+  "internalCampaignName": "Human",
+  "isHDModeEnabled": false,
+  "localPlayerRace": 1,
+  "localPlayerWon": true,
+  "mapInfo": {
+   "gameType": "custom",
+   "isReplay": false,
+   "mapFile": "C:/users/steamuser/Documents/Warcraft III/Maps/Download/Legion TD Crazy v39.1.w3x",
+   "elapsedGameTimeTotalSeconds": 1100
+  },
+  "players": [
+   {
+    "battleTag": "Mihai#22569",
+    "toonName": "Mihai#22569",
+    "teamIndex": 0,
+    "won": true,
+    "isAi": false,
+    "gamePlayerId": 0,
+    "playerColor": 0
+   },
+   {
+    "battleTag": "",
+    "toonName": "Player 5",
+    "teamIndex": 1,
+    "won": false,
+    "isAi": true,
+    "gamePlayerId": 4,
+    "playerColor": 4
+   },
+   {
+    "battleTag": "",
+    "toonName": "Player 6",
+    "teamIndex": 1,
+    "won": false,
+    "isAi": true,
+    "gamePlayerId": 5,
+    "playerColor": 5
+   },
+   {
+    "battleTag": "",
+    "toonName": "Player 7",
+    "teamIndex": 1,
+    "won": false,
+    "isAi": true,
+    "gamePlayerId": 6,
+    "playerColor": 6
+   },
+   {
+    "battleTag": "",
+    "toonName": "Player 8",
+    "teamIndex": 1,
+    "won": false,
+    "isAi": true,
+    "gamePlayerId": 7,
+    "playerColor": 7
+   },
+   {
+    "battleTag": "",
+    "toonName": "Mihai",
+    "teamIndex": 0,
+    "won": false,
+    "isAi": true,
+    "gamePlayerId": 8,
+    "playerColor": 0
+   },
+   {
+    "battleTag": "",
+    "toonName": "Player 2",
+    "teamIndex": 0,
+    "won": false,
+    "isAi": true,
+    "gamePlayerId": 9,
+    "playerColor": 1
+   },
+   {
+    "battleTag": "",
+    "toonName": "Player 3",
+    "teamIndex": 0,
+    "won": false,
+    "isAi": true,
+    "gamePlayerId": 10,
+    "playerColor": 2
+   },
+   {
+    "battleTag": "",
+    "toonName": "Player 4",
+    "teamIndex": 0,
+    "won": false,
+    "isAi": true,
+    "gamePlayerId": 11,
+    "playerColor": 3
+   },
+   {
+    "battleTag": "",
+    "toonName": "Player 5",
+    "teamIndex": 1,
+    "won": false,
+    "isAi": true,
+    "gamePlayerId": 12,
+    "playerColor": 4
+   },
+   {
+    "battleTag": "",
+    "toonName": "Player 6",
+    "teamIndex": 1,
+    "won": false,
+    "isAi": true,
+    "gamePlayerId": 13,
+    "playerColor": 5
+   },
+   {
+    "battleTag": "",
+    "toonName": "Player 7",
+    "teamIndex": 1,
+    "won": false,
+    "isAi": true,
+    "gamePlayerId": 14,
+    "playerColor": 6
+   },
+   {
+    "battleTag": "",
+    "toonName": "Player 8",
+    "teamIndex": 1,
+    "won": false,
+    "isAi": true,
+    "gamePlayerId": 15,
+    "playerColor": 7
+   }
+  ]
+ }
+}
