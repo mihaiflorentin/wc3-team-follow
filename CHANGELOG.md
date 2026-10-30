@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Hovering over a player in the **Scoreboard** shows the same player card as elsewhere in the window: notes, status, games won and lost, and more.
+
 ## [0.9.3] - 2026-10-30
 
 ### Added

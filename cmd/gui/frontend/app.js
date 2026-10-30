@@ -1706,6 +1706,8 @@ function rankRow(r, self) {
   const games = r.wins + r.losses;
   const pct = Math.round(rate(r) * 100);
   const tr = el('tr');
+  // The player tooltip shows on hover, as on the other player lists.
+  tr.dataset.player = r.tag;
   if (self) tr.className = 'self';
   const name = el('td', 'player');
   const tag = el('span', 'tag', r.tag);
@@ -1778,10 +1780,19 @@ $('ranking-open').onclick = () => {
   $('ranking-search').value = '';
   rankPage = 0;
   renderRanking(state);
+  // A modal dialog sits above the page, so the player tooltip moves into it
+  // while it is open, and back out when it closes.
+  hideTip();
+  $('ranking-dialog').append($('player-tip'));
   $('ranking-dialog').showModal();
 };
 $('ranking-close').onclick = () => $('ranking-dialog').close();
-$('ranking-dialog').onclose = () => { closeRankingConfirm(); $('ranking-open').focus(); };
+$('ranking-dialog').onclose = () => {
+  hideTip();
+  document.body.append($('player-tip'));
+  closeRankingConfirm();
+  $('ranking-open').focus();
+};
 for (const button of $('ranking-dialog').querySelectorAll('th button')) {
   button.onclick = () => sortRanking(button.dataset.sort);
 }
