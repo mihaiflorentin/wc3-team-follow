@@ -470,3 +470,32 @@ func TestClosingErrorsAreSentencesForPlayers(t *testing.T) {
 		t.Fatalf("status = %q", h.svc.State().Status)
 	}
 }
+
+func TestAutoHostPressesStartAgainFromTheReader(t *testing.T) {
+	prefs := mockprefs.New(dto.Preferences{Tags: []string{}, IncludeTeam: true})
+	h := newHarness(t, prefs)
+	h.run(t)
+	waitFor(t, "connection", func() bool { return h.svc.State().Connected })
+	settings := dto.HostSettings{MapPath: "/detected/Maps/Legion TD.w3x", MapName: "Legion TD", GameName: "LTD", DelaySeconds: 0, StartWhenFull: true}
+	on := true
+	if _, err := h.svc.ConfigureHost(context.Background(), dto.HostConfig{Settings: &settings, Enabled: &on, FromMenus: true}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "CreateLobby", func() bool { return slices.Contains(sentMessages(h.session), "CreateLobby") })
+	starts := func() int {
+		n := 0
+		for _, m := range sentMessages(h.session) {
+			if m == "LobbyStart" {
+				n++
+			}
+		}
+		return n
+	}
+	full := map[string]any{"players": []any{map[string]any{"slot": 0, "slotStatus": 2, "slotType": 0, "name": "Self#1111", "team": 0, "isSelf": true}}}
+	h.session.Push(dto.GameEvent{MessageType: "SetGlueScreen", Payload: map[string]any{"screen": "GAME_LOBBY"}})
+	h.session.Push(dto.GameEvent{MessageType: "GameLobbySetup", Payload: full})
+	waitFor(t, "first LobbyStart", func() bool { return starts() == 1 })
+	// The game ignores it: no countdown. The reader presses Start again.
+	h.skew.Add(int64(6 * time.Second))
+	waitFor(t, "second LobbyStart", func() bool { return starts() == 2 })
+}

@@ -107,6 +107,10 @@ type hostState struct {
 	// startRetried is set once the player was told a start went unanswered;
 	// it resets when the lobby isn't full.
 	startRetried bool
+	// startDue is set when Start should be pressed again; only
+	// SendPendingStart presses it, after the companion handled every event
+	// already waiting.
+	startDue bool
 	// countdown and locked mirror the game's LobbyCountdown details.
 	countdown bool
 	locked    bool
@@ -248,7 +252,7 @@ func (e *Engine) enableHost(cfg dto.HostConfig) error {
 func (e *Engine) waitToHost() {
 	e.host.phase = HostWaiting
 	e.host.createAt = e.now().Add(time.Duration(e.host.settings.DelaySeconds) * time.Second)
-	e.host.startSent, e.host.startRetried, e.host.countdown, e.host.locked = false, false, false, false
+	e.host.startSent, e.host.startRetried, e.host.startDue, e.host.countdown, e.host.locked = false, false, false, false, false
 	e.host.players, e.host.slots, e.host.full, e.host.missing, e.host.offTeam = 0, 0, false, nil, nil
 	e.host.moves, e.host.invited, e.host.swap, e.host.lobby = nil, nil, swapState{}, nil
 	e.host.gameMode = gameModeState{}
@@ -338,18 +342,35 @@ func (e *Engine) hostStep() {
 			}
 		}
 		if h.startSent && !h.countdown && e.now().Sub(h.startSentAt) >= startRetry {
-			// The game didn't start the countdown: press Start again.
-			h.startSent = false
+			// The game didn't start the countdown: press Start again, once
+			// the companion has handled every event already waiting.
+			h.startSent, h.startDue = false, true
 			if !h.startRetried {
 				h.startRetried = true
 				e.Note("Warcraft III didn't start the game yet, maybe someone is still downloading the map. Team Follow presses Start again every few seconds.")
 			}
-			if h.lobby != nil {
-				e.lobbyUpdate(h.lobby)
-			}
 		}
 	case HostMatch:
 		e.gameModeStep()
+	}
+}
+
+// HasPendingStart reports whether Start waits for SendPendingStart.
+func (e *Engine) HasPendingStart() bool { return e.host.startDue }
+
+// SendPendingStart presses Start again after the game ignored it, once the
+// companion has fed the engine every game event already waiting. It reads
+// the newest lobby update again and presses Start only when the lobby is
+// still full, the whole group is in and, with Same team, on the host's
+// team: nobody left meanwhile. It is never called from a timer.
+func (e *Engine) SendPendingStart() {
+	h := &e.host
+	if !h.startDue {
+		return
+	}
+	h.startDue = false
+	if h.enabled && h.phase == HostLobby && h.lobby != nil {
+		e.lobbyUpdate(h.lobby)
 	}
 }
 
@@ -416,7 +437,7 @@ func (e *Engine) hostReceive(kind string, p map[string]any) {
 
 func (e *Engine) lobbyOpened() {
 	h := &e.host
-	h.phase, h.startSent, h.startRetried, h.countdown, h.locked = HostLobby, false, false, false, false
+	h.phase, h.startSent, h.startRetried, h.startDue, h.countdown, h.locked = HostLobby, false, false, false, false, false
 	h.moves, h.invited, h.swap = map[string]int{}, map[string]bool{}, swapState{}
 	h.gameMode = gameModeState{}
 	if h.settings.StartWhenFull {
@@ -495,7 +516,7 @@ func (e *Engine) lobbyUpdate(p map[string]any) {
 	ready := h.full && len(h.missing) == 0 && len(h.offTeam) == 0
 	switch {
 	case !h.full:
-		h.heldFull, h.startRetried = false, false
+		h.heldFull, h.startRetried, h.startDue = false, false, false
 	case !ready && !h.heldFull:
 		h.heldFull = true
 		if len(h.missing) > 0 {
@@ -510,7 +531,7 @@ func (e *Engine) lobbyUpdate(p map[string]any) {
 	}
 	starting := h.countdown || h.startSent
 	switch {
-	case ready && !starting:
+	case ready && !starting && !h.startDue:
 		if e.send(CmdLobbyStart, map[string]any{}) {
 			h.startSent, h.startSentAt = true, e.now()
 			if !h.startRetried {

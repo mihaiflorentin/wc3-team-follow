@@ -186,6 +186,15 @@ func TestStartWhenFullStartsCancelsAndRestarts(t *testing.T) {
 	}
 }
 
+// retryStart runs the timer and then, as the companion does once it has
+// handled every waiting event, SendPendingStart.
+func (f *fixture) retryStart() {
+	f.engine.Tick()
+	if f.engine.HasPendingStart() {
+		f.engine.SendPendingStart()
+	}
+}
+
 func TestStartWhenFullPressesStartAgainWhenTheGameIgnoresIt(t *testing.T) {
 	f := newFixture(t)
 	s := hostSettings()
@@ -198,17 +207,21 @@ func TestStartWhenFullPressesStartAgainWhenTheGameIgnoresIt(t *testing.T) {
 	}
 	// No countdown: the game ignored the start.
 	f.advance(4 * time.Second)
-	f.engine.Tick()
+	f.retryStart()
 	if f.count(follow.CmdLobbyStart) != 1 {
 		t.Fatal("pressed Start again too soon")
 	}
 	f.advance(time.Second)
 	f.engine.Tick()
+	if !f.engine.HasPendingStart() || f.count(follow.CmdLobbyStart) != 1 {
+		t.Fatal("the timer itself must not press Start")
+	}
+	f.engine.SendPendingStart()
 	if f.count(follow.CmdLobbyStart) != 2 {
 		t.Fatalf("did not press Start again: starts=%d", f.count(follow.CmdLobbyStart))
 	}
 	f.advance(5 * time.Second)
-	f.engine.Tick()
+	f.retryStart()
 	if f.count(follow.CmdLobbyStart) != 3 {
 		t.Fatalf("did not keep pressing Start: starts=%d", f.count(follow.CmdLobbyStart))
 	}
@@ -218,9 +231,57 @@ func TestStartWhenFullPressesStartAgainWhenTheGameIgnoresIt(t *testing.T) {
 	// Once the countdown runs, no more presses.
 	f.receive("LobbyCountdown", countdown(true, false))
 	f.advance(10 * time.Second)
-	f.engine.Tick()
+	f.retryStart()
 	if f.count(follow.CmdLobbyStart) != 3 {
 		t.Fatal("pressed Start during the countdown")
+	}
+}
+
+func TestStartIsNotPressedAgainAfterAPlayerLeft(t *testing.T) {
+	f := newFixture(t)
+	s := hostSettings()
+	s.DelaySeconds, s.StartWhenFull = 0, true
+	f.mustHost(s)
+	f.openOwnLobby()
+	f.receive("GameLobbySetup", lobbySetup(2, 2))
+	f.advance(5 * time.Second)
+	f.engine.Tick()
+	// The leave was waiting when the retry came due: the companion handles
+	// it before SendPendingStart.
+	f.receive("GameLobbySetup", lobbySetup(2, 0))
+	f.engine.SendPendingStart()
+	if f.count(follow.CmdLobbyStart) != 1 {
+		t.Fatalf("pressed Start with an open slot: starts=%d", f.count(follow.CmdLobbyStart))
+	}
+	f.advance(10 * time.Second)
+	f.retryStart()
+	if f.count(follow.CmdLobbyStart) != 1 || f.engine.HasPendingStart() {
+		t.Fatal("kept pressing Start for a lobby that isn't full")
+	}
+	// Full again: start as the first time.
+	f.receive("GameLobbySetup", lobbySetup(2, 2))
+	if f.count(follow.CmdLobbyStart) != 2 {
+		t.Fatalf("did not start once full again: starts=%d", f.count(follow.CmdLobbyStart))
+	}
+}
+
+func TestALobbyUpdateWhileARetryIsDueDoesNotPressStart(t *testing.T) {
+	f := newFixture(t)
+	s := hostSettings()
+	s.DelaySeconds, s.StartWhenFull = 0, true
+	f.mustHost(s)
+	f.openOwnLobby()
+	f.receive("GameLobbySetup", lobbySetup(2, 2))
+	f.advance(5 * time.Second)
+	f.engine.Tick()
+	// More events may wait behind this one: only SendPendingStart presses.
+	f.receive("GameLobbySetup", lobbySetup(2, 2))
+	if f.count(follow.CmdLobbyStart) != 1 {
+		t.Fatal("pressed Start before every waiting event was handled")
+	}
+	f.engine.SendPendingStart()
+	if f.count(follow.CmdLobbyStart) != 2 {
+		t.Fatal("did not press Start again")
 	}
 }
 

@@ -429,11 +429,31 @@ func gameCount(err error) int {
 func (s *Service) read(ctx context.Context, session contract.GameSession) {
 	defer s.guard("read")
 	for {
-		ev, err := session.Receive(ctx)
+		// Wake at least every readWake, so a start Auto-host wants to
+		// press again goes out from here, in order with the events.
+		wait, cancel := context.WithTimeout(ctx, readWake)
+		ev, err := session.Receive(wait)
+		woke := err != nil && wait.Err() != nil && ctx.Err() == nil
+		cancel()
 		s.mu.Lock()
 		if s.session != session {
 			s.mu.Unlock()
 			return
+		}
+		if woke {
+			due := s.engine.HasPendingStart()
+			if s.sendStart(ctx, session) {
+				s.signedOut(ctx)
+				return
+			}
+			if due {
+				s.logStatus()
+			}
+			s.mu.Unlock()
+			if due {
+				s.notify()
+			}
+			continue
 		}
 		if err != nil {
 			s.dropSession()
@@ -446,21 +466,30 @@ func (s *Service) read(ctx context.Context, session contract.GameSession) {
 			s.notify()
 			return
 		}
-		if s.handle(ctx, ev) || s.sendBan(ctx, session) {
-			// This game is signed out, often because the same account
-			// signed in from another copy: find the game again.
-			s.dropSession()
-			s.nextDiscovery = time.Time{}
-			s.logStatus()
-			s.mu.Unlock()
-			s.logger.InfoContext(ctx, "companion.disconnected", slog.String("reason", "logged out"))
-			s.notify()
+		if s.handle(ctx, ev) || s.sendBan(ctx, session) || s.sendStart(ctx, session) {
+			s.signedOut(ctx)
 			return
 		}
 		s.logStatus()
 		s.mu.Unlock()
 		s.notify()
 	}
+}
+
+// readWake is how long read waits for an event before checking whether
+// Auto-host wants to press Start again.
+const readWake = time.Second
+
+// signedOut drops a game that signed out, often because the same account
+// signed in from another copy, so discovery finds the game again. It is
+// called with s.mu held and unlocks it.
+func (s *Service) signedOut(ctx context.Context) {
+	s.dropSession()
+	s.nextDiscovery = time.Time{}
+	s.logStatus()
+	s.mu.Unlock()
+	s.logger.InfoContext(ctx, "companion.disconnected", slog.String("reason", "logged out"))
+	s.notify()
 }
 
 // handle applies one event from the game. It reports true when the game
@@ -530,6 +559,28 @@ func (s *Service) sendBan(ctx context.Context, session contract.GameSession) (lo
 		}
 		s.engine.SendPendingBan()
 	}
+	return false
+}
+
+// sendStart presses Start again when Auto-host's start went unanswered.
+// Like sendBan, it first handles every event already waiting on the
+// socket, so the engine checks the newest lobby update: a player who left
+// meanwhile stops the start. It reports true when the game signed out
+// meanwhile. It runs with s.mu held.
+func (s *Service) sendStart(ctx context.Context, session contract.GameSession) (loggedOut bool) {
+	if !s.engine.HasPendingStart() {
+		return false
+	}
+	for {
+		ev, ok, err := session.TryReceive()
+		if err != nil || !ok {
+			break
+		}
+		if s.handle(ctx, ev) || s.sendBan(ctx, session) {
+			return true
+		}
+	}
+	s.engine.SendPendingStart()
 	return false
 }
 
