@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-10-30
+
 ### Changed
 
 - The **Scoreboard** is hidden for now, along with games won and lost on the player card, because some custom maps report every player as a winner. Results are still recorded and will show again once they can be trusted.
@@ -135,7 +137,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A friends picker, watching before joining, and log files for reporting problems.
 - Warcraft Team Follow rebuilt in Go, with one app for Windows, macOS and Linux.
 
-[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.5...HEAD
+[0.9.5]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.1...v0.9.2
