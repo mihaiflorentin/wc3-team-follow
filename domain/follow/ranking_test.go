@@ -402,7 +402,7 @@ func TestRankingLogsEachRecordedPlayerAndEachSkippedScore(t *testing.T) {
 	feed(r, nil, rlobby(twoTeams...), glue("LOADING_SCREEN"), scoreWith(true, map[string]any{"mapInfo": map[string]any{"isReplay": true}}))
 	out := buf.String()
 	for _, want := range []string{
-		`msg=ranking.recorded tag=Me#1111 result=loss source=local-only`,
+		`msg=ranking.recorded wins=0 losses=1 source=local-only`,
 		`msg=ranking.skipped reason="unfinished, others unknown"`,
 		`msg=ranking.skipped reason="not armed"`,
 		`msg=ranking.skipped reason=replay`,
@@ -411,7 +411,33 @@ func TestRankingLogsEachRecordedPlayerAndEachSkippedScore(t *testing.T) {
 			t.Errorf("log lacks %q:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "Arthas") {
-		t.Errorf("an unrecorded player was logged:\n%s", out)
+	if strings.Contains(out, "Arthas") || strings.Contains(out, "Me#1111") {
+		t.Errorf("a BattleTag was logged:\n%s", out)
 	}
+}
+
+func TestRankingFinishedMatchWithEveryTeamWinningRecordsNothing(t *testing.T) {
+	// Seen live on a 4v4 custom map the local player lost: every human's
+	// won flag was true.
+	seats := []rseat{{name: "Me#1111", team: 0, self: true}, {name: "Arthas#1123", team: 0}, {name: "Jaina#2214", team: 1}, {name: "Stranger#9999", team: 1}}
+	for _, localWon := range []bool{false, true} {
+		var buf bytes.Buffer
+		r := follow.NewRanking(func() time.Time { return rankClock }, nil, slog.New(slog.NewTextHandler(&buf, nil)))
+		record(r, nil, rlobby(seats...), scoreWith(localWon, nil,
+			pl("Me#1111", 0, true), pl("Arthas#1123", 0, true), pl("Jaina#2214", 1, true), pl("Stranger#9999", 1, true)))
+		expectRanking(t, r, map[string][2]int{})
+		if r.Unsaved() {
+			t.Errorf("localPlayerWon %v: marked unsaved", localWon)
+		}
+		if !strings.Contains(buf.String(), "inconsistent flags") {
+			t.Errorf("localPlayerWon %v: log = %s", localWon, buf.String())
+		}
+	}
+}
+
+func TestRankingFinishedMatchWhoseLocalFlagContradictsTheResultRecordsNothing(t *testing.T) {
+	r := newRanking()
+	record(r, nil, rlobby(twoTeams...), scoreWith(false, nil,
+		pl("Me#1111", 0, true), pl("Arthas#1123", 0, true), pl("Jaina#2214", 1, false)))
+	expectRanking(t, r, map[string][2]int{})
 }

@@ -24,7 +24,10 @@ import (
 // The result comes from scoreInfo.players, which names every human by
 // BattleTag with a won flag. When no player won the match wasn't finished
 // (the player left, or it was a draw), and only what is certain is recorded.
-// A score without those fields falls back to the lobby snapshot.
+// Flags that contradict themselves (winners on two teams, or the player's
+// own flag against localPlayerWon) record nothing: a custom map once
+// reported everyone in a 4v4 as winners. A score without those fields falls
+// back to the lobby snapshot.
 type Ranking struct {
 	now     func() time.Time
 	logger  *slog.Logger
@@ -57,8 +60,8 @@ type rankSeat struct {
 const noTeam = -1
 
 // NewRanking returns a recorder holding the saved entries.
-// logger gets one line per recorded player and per ignored score: BattleTags
-// and results only, never payloads.
+// logger gets one line per recorded match (counts and the source) and per
+// ignored score, never BattleTags or payloads.
 func NewRanking(now func() time.Time, saved []dto.RankingEntry, logger *slog.Logger) *Ranking {
 	r := &Ranking{now: now, logger: logger}
 	for _, e := range saved {
@@ -173,6 +176,7 @@ func (r *Ranking) record(l *rankLobby, localWon bool) {
 	myTeam := l.seats[self].team
 	now := r.now()
 	counted := map[string]bool{}
+	var t tally
 	for _, s := range l.seats {
 		key := tagKey(s.name)
 		if !s.human || key == "" || counted[key] || s.team == noTeam {
@@ -190,11 +194,14 @@ func (r *Ranking) record(l *rankLobby, localWon bool) {
 			continue
 		}
 		counted[key] = true
-		r.add(s.name, win, now, "lobby")
+		r.add(s.name, win, now)
+		t.count(win)
 	}
 	if len(counted) == 0 {
 		r.skipped("no players")
+		return
 	}
+	t.log(r.logger, "lobby")
 }
 
 // recordScore counts one match from the players of the score: every human,
@@ -211,8 +218,15 @@ func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool) {
 		}
 	}
 	local := slices.IndexFunc(sp.humans, func(p scorePlayer) bool { return localKey != "" && tagKey(p.tag) == localKey })
+	if sp.finished {
+		if reason := sp.inconsistent(local, localWon); reason != "" {
+			r.skipped(reason)
+			return
+		}
+	}
 	now := r.now()
 	counted := map[string]bool{}
+	var t tally
 	source, othersSkipped := "flags", false
 	if !sp.finished {
 		source = "local-only"
@@ -241,7 +255,11 @@ func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool) {
 			continue
 		}
 		counted[key] = true
-		r.add(p.tag, win, now, source)
+		r.add(p.tag, win, now)
+		t.count(win)
+	}
+	if len(counted) > 0 {
+		t.log(r.logger, source)
 	}
 	switch {
 	case len(counted) == 0 && othersSkipped:
@@ -253,12 +271,22 @@ func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool) {
 	}
 }
 
-func (r *Ranking) add(tag string, win bool, now time.Time, source string) {
-	result := "loss"
+// tally counts the results of one recorded match for its log line.
+type tally struct{ wins, losses int }
+
+func (t *tally) count(win bool) {
 	if win {
-		result = "win"
+		t.wins++
+	} else {
+		t.losses++
 	}
-	r.logger.Info("ranking.recorded", slog.String("tag", tag), slog.String("result", result), slog.String("source", source))
+}
+
+func (t tally) log(logger *slog.Logger, source string) {
+	logger.Info("ranking.recorded", slog.Int("wins", t.wins), slog.Int("losses", t.losses), slog.String("source", source))
+}
+
+func (r *Ranking) add(tag string, win bool, now time.Time) {
 	i := r.index(tag)
 	if i < 0 {
 		r.entries = append(r.entries, dto.RankingEntry{Tag: tag})
@@ -356,6 +384,26 @@ type scorePlayers struct {
 	humans   []scorePlayer
 	usable   bool
 	finished bool
+}
+
+// inconsistent gives the reason a finished score's won flags can't be
+// trusted, or "": humans on two or more teams all won, or the local player's
+// flag (local indexes humans, -1 when not found) disagrees with
+// localPlayerWon.
+func (sp scorePlayers) inconsistent(local int, localWon bool) string {
+	if local >= 0 && sp.humans[local].wonKnown && sp.humans[local].won != localWon {
+		return "inconsistent flags: local result"
+	}
+	winners := map[int64]bool{}
+	for _, p := range sp.humans {
+		if p.wonKnown && p.won && p.teamKnown {
+			winners[p.team] = true
+		}
+	}
+	if len(winners) > 1 {
+		return "inconsistent flags: winners on several teams"
+	}
+	return ""
 }
 
 // readScorePlayers reads scoreInfo.players: humans are entries that aren't

@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- The **Scoreboard** no longer records a win for every player when a custom map reports everyone as a winner; such a match is left out.
+
 ## [0.9.4] - 2026-10-30
 
 ### Added
