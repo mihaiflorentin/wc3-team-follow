@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-10-30
+
 ### Fixed
 
 - **Start when full** no longer gets stuck when Warcraft III ignores the first start, for example while a player who just joined is still downloading the map. Team Follow presses Start again every few seconds until the countdown begins, and checks each time that nobody left and every slot is still filled.
@@ -137,7 +139,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A friends picker, watching before joining, and log files for reporting problems.
 - Warcraft Team Follow rebuilt in Go, with one app for Windows, macOS and Linux.
 
-[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.5...HEAD
+[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.6...HEAD
+[0.9.6]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.2...v0.9.3
