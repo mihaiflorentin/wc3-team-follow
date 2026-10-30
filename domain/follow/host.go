@@ -100,8 +100,13 @@ type hostState struct {
 	phase    string
 	createAt time.Time
 	since    time.Time
-	// startSent is set once LobbyStart was sent for the current fill.
-	startSent bool
+	// startSent is set once LobbyStart was sent for the current fill, at
+	// startSentAt.
+	startSent   bool
+	startSentAt time.Time
+	// startRetried is set once the player was told a start went unanswered;
+	// it resets when the lobby isn't full.
+	startRetried bool
 	// countdown and locked mirror the game's LobbyCountdown details.
 	countdown bool
 	locked    bool
@@ -156,6 +161,11 @@ const (
 	// selfMoveWait is how long the host waits for a member to move itself
 	// into an open slot on the host's team before swapping instead.
 	selfMoveWait = 10 * time.Second
+	// startRetry is how long Start when full waits for the countdown after
+	// LobbyStart before pressing Start again. The game ignores LobbyStart
+	// while a player who just joined isn't ready, such as while they still
+	// download the map, and sends no LobbyCountdown then.
+	startRetry = 5 * time.Second
 )
 
 // NormalizeHostSettings trims and checks the settings Auto-host needs.
@@ -238,7 +248,7 @@ func (e *Engine) enableHost(cfg dto.HostConfig) error {
 func (e *Engine) waitToHost() {
 	e.host.phase = HostWaiting
 	e.host.createAt = e.now().Add(time.Duration(e.host.settings.DelaySeconds) * time.Second)
-	e.host.startSent, e.host.countdown, e.host.locked = false, false, false
+	e.host.startSent, e.host.startRetried, e.host.countdown, e.host.locked = false, false, false, false
 	e.host.players, e.host.slots, e.host.full, e.host.missing, e.host.offTeam = 0, 0, false, nil, nil
 	e.host.moves, e.host.invited, e.host.swap, e.host.lobby = nil, nil, swapState{}, nil
 	e.host.gameMode = gameModeState{}
@@ -327,6 +337,17 @@ func (e *Engine) hostStep() {
 				e.lobbyUpdate(h.lobby)
 			}
 		}
+		if h.startSent && !h.countdown && e.now().Sub(h.startSentAt) >= startRetry {
+			// The game didn't start the countdown: press Start again.
+			h.startSent = false
+			if !h.startRetried {
+				h.startRetried = true
+				e.Note("Warcraft III didn't start the game yet, maybe someone is still downloading the map. Team Follow presses Start again every few seconds.")
+			}
+			if h.lobby != nil {
+				e.lobbyUpdate(h.lobby)
+			}
+		}
 	case HostMatch:
 		e.gameModeStep()
 	}
@@ -395,7 +416,7 @@ func (e *Engine) hostReceive(kind string, p map[string]any) {
 
 func (e *Engine) lobbyOpened() {
 	h := &e.host
-	h.phase, h.startSent, h.countdown, h.locked = HostLobby, false, false, false
+	h.phase, h.startSent, h.startRetried, h.countdown, h.locked = HostLobby, false, false, false, false
 	h.moves, h.invited, h.swap = map[string]int{}, map[string]bool{}, swapState{}
 	h.gameMode = gameModeState{}
 	if h.settings.StartWhenFull {
@@ -474,7 +495,7 @@ func (e *Engine) lobbyUpdate(p map[string]any) {
 	ready := h.full && len(h.missing) == 0 && len(h.offTeam) == 0
 	switch {
 	case !h.full:
-		h.heldFull = false
+		h.heldFull, h.startRetried = false, false
 	case !ready && !h.heldFull:
 		h.heldFull = true
 		if len(h.missing) > 0 {
@@ -491,8 +512,10 @@ func (e *Engine) lobbyUpdate(p map[string]any) {
 	switch {
 	case ready && !starting:
 		if e.send(CmdLobbyStart, map[string]any{}) {
-			h.startSent = true
-			e.Note("The lobby is full and everyone's in. Starting the game.")
+			h.startSent, h.startSentAt = true, e.now()
+			if !h.startRetried {
+				e.Note("The lobby is full and everyone's in. Starting the game.")
+			}
 		}
 	case !ready && starting:
 		if h.locked {

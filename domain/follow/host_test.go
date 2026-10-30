@@ -186,6 +186,44 @@ func TestStartWhenFullStartsCancelsAndRestarts(t *testing.T) {
 	}
 }
 
+func TestStartWhenFullPressesStartAgainWhenTheGameIgnoresIt(t *testing.T) {
+	f := newFixture(t)
+	s := hostSettings()
+	s.DelaySeconds, s.StartWhenFull = 0, true
+	f.mustHost(s)
+	f.openOwnLobby()
+	f.receive("GameLobbySetup", lobbySetup(2, 2))
+	if f.count(follow.CmdLobbyStart) != 1 {
+		t.Fatalf("did not start a full lobby: starts=%d", f.count(follow.CmdLobbyStart))
+	}
+	// No countdown: the game ignored the start.
+	f.advance(4 * time.Second)
+	f.engine.Tick()
+	if f.count(follow.CmdLobbyStart) != 1 {
+		t.Fatal("pressed Start again too soon")
+	}
+	f.advance(time.Second)
+	f.engine.Tick()
+	if f.count(follow.CmdLobbyStart) != 2 {
+		t.Fatalf("did not press Start again: starts=%d", f.count(follow.CmdLobbyStart))
+	}
+	f.advance(5 * time.Second)
+	f.engine.Tick()
+	if f.count(follow.CmdLobbyStart) != 3 {
+		t.Fatalf("did not keep pressing Start: starts=%d", f.count(follow.CmdLobbyStart))
+	}
+	if notes(f, "didn't start the game yet") != 1 || notes(f, "Starting the game") != 1 {
+		t.Error("the retry should be said once")
+	}
+	// Once the countdown runs, no more presses.
+	f.receive("LobbyCountdown", countdown(true, false))
+	f.advance(10 * time.Second)
+	f.engine.Tick()
+	if f.count(follow.CmdLobbyStart) != 3 {
+		t.Fatal("pressed Start during the countdown")
+	}
+}
+
 func TestALockedCountdownIsNotCancelled(t *testing.T) {
 	f := newFixture(t)
 	s := hostSettings()

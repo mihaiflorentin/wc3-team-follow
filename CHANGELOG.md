@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- **Start when full** no longer gets stuck when Warcraft III ignores the first start, for example while a player who just joined is still downloading the map. Team Follow presses Start again every few seconds until the countdown begins.
+
 ## [0.9.5] - 2026-10-30
 
 ### Changed
