@@ -25,8 +25,10 @@ import (
 // BattleTag with a won flag. When no player won the match wasn't finished
 // (the player left, or it was a draw), and only what is certain is recorded.
 // Flags that contradict themselves (winners on two teams, or the player's
-// own flag against localPlayerWon) record nothing: a custom map once
-// reported everyone in a 4v4 as winners. A score without those fields falls
+// own flag against localPlayerWon) aren't used: a custom map once reported
+// everyone in a 4v4 as winners while localPlayerWon said the player lost.
+// When localPlayerWon disagrees with the player's own flag, it decides by
+// team; otherwise nothing is recorded. A score without those fields falls
 // back to the lobby snapshot.
 type Ranking struct {
 	now     func() time.Time
@@ -220,6 +222,10 @@ func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool) {
 	local := slices.IndexFunc(sp.humans, func(p scorePlayer) bool { return localKey != "" && tagKey(p.tag) == localKey })
 	if sp.finished {
 		if reason := sp.inconsistent(local, localWon); reason != "" {
+			if me := local >= 0 && sp.humans[local].wonKnown; me && sp.humans[local].won != localWon && sp.humans[local].teamKnown {
+				r.recordByTeam(sp, local, localWon)
+				return
+			}
 			r.skipped(reason)
 			return
 		}
@@ -268,6 +274,46 @@ func (r *Ranking) recordScore(l *rankLobby, sp scorePlayers, localWon bool) {
 		r.skipped("no players")
 	case othersSkipped:
 		r.skipped("unfinished, others unknown")
+	}
+}
+
+// recordByTeam counts a match from localPlayerWon alone, when the won flags
+// can't be trusted: the player's teammates share their result; when the
+// player won everyone else lost, and when they lost the other team won if
+// there were exactly two teams.
+func (r *Ranking) recordByTeam(sp scorePlayers, local int, localWon bool) {
+	myTeam := sp.humans[local].team
+	now := r.now()
+	counted := map[string]bool{}
+	var t tally
+	othersSkipped := false
+	for _, p := range sp.humans {
+		key := tagKey(p.tag)
+		if counted[key] {
+			continue
+		}
+		var win bool
+		switch {
+		case !p.teamKnown:
+			othersSkipped = true
+			continue
+		case p.team == myTeam:
+			win = localWon
+		case localWon:
+			win = false
+		case sp.teams == 2 && !sp.teamsUnknown:
+			win = true
+		default:
+			othersSkipped = true
+			continue
+		}
+		counted[key] = true
+		r.add(p.tag, win, now)
+		t.count(win)
+	}
+	t.log(r.logger, "local-team")
+	if othersSkipped {
+		r.skipped("inconsistent flags, others unknown")
 	}
 }
 
@@ -384,6 +430,10 @@ type scorePlayers struct {
 	humans   []scorePlayer
 	usable   bool
 	finished bool
+	// teams counts the distinct teams of every player, computers included;
+	// teamsUnknown is set when a player has no team.
+	teams        int
+	teamsUnknown bool
 }
 
 // inconsistent gives the reason a finished score's won flags can't be
@@ -412,8 +462,15 @@ func readScorePlayers(info map[string]any) scorePlayers {
 	raw, _ := list(info["players"])
 	var out scorePlayers
 	anyFlag := false
+	teams := map[int64]bool{}
 	for _, r := range raw {
 		x := object(r)
+		team, teamOK := intValue(x["teamIndex"])
+		if teamOK {
+			teams[team] = true
+		} else {
+			out.teamsUnknown = true
+		}
 		won, wonOK := x["won"].(bool)
 		if wonOK {
 			anyFlag = true
@@ -426,9 +483,9 @@ func readScorePlayers(info map[string]any) scorePlayers {
 		if isTrue(x["isAi"]) || tag == "" {
 			continue
 		}
-		team, teamOK := intValue(x["teamIndex"])
 		out.humans = append(out.humans, scorePlayer{tag: tag, team: team, teamKnown: teamOK, won: won, wonKnown: wonOK})
 	}
 	out.usable = anyFlag && len(out.humans) > 0
+	out.teams = len(teams)
 	return out
 }

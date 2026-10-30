@@ -416,28 +416,42 @@ func TestRankingLogsEachRecordedPlayerAndEachSkippedScore(t *testing.T) {
 	}
 }
 
-func TestRankingFinishedMatchWithEveryTeamWinningRecordsNothing(t *testing.T) {
-	// Seen live on a 4v4 custom map the local player lost: every human's
-	// won flag was true.
-	seats := []rseat{{name: "Me#1111", team: 0, self: true}, {name: "Arthas#1123", team: 0}, {name: "Jaina#2214", team: 1}, {name: "Stranger#9999", team: 1}}
-	for _, localWon := range []bool{false, true} {
-		var buf bytes.Buffer
-		r := follow.NewRanking(func() time.Time { return rankClock }, nil, slog.New(slog.NewTextHandler(&buf, nil)))
-		record(r, nil, rlobby(seats...), scoreWith(localWon, nil,
-			pl("Me#1111", 0, true), pl("Arthas#1123", 0, true), pl("Jaina#2214", 1, true), pl("Stranger#9999", 1, true)))
-		expectRanking(t, r, map[string][2]int{})
-		if r.Unsaved() {
-			t.Errorf("localPlayerWon %v: marked unsaved", localWon)
-		}
-		if !strings.Contains(buf.String(), "inconsistent flags") {
-			t.Errorf("localPlayerWon %v: log = %s", localWon, buf.String())
-		}
+func TestRankingEveryoneFlaggedWonButTheLocalPlayerLostDecidesByTeam(t *testing.T) {
+	// Seen live on a 4v4 Legion TD: the score screen said the player lost
+	// (localPlayerWon false) while every human's won flag was true.
+	var buf bytes.Buffer
+	r := follow.NewRanking(func() time.Time { return rankClock }, nil, slog.New(slog.NewTextHandler(&buf, nil)))
+	record(r, nil, rlobby(twoTeams...), scoreWith(false, nil,
+		pl("Me#1111", 0, true), pl("Arthas#1123", 0, true), pl("Jaina#2214", 1, true), pl("Stranger#9999", 1, true)))
+	expectRanking(t, r, map[string][2]int{"Me#1111": {0, 1}, "Arthas#1123": {0, 1}, "Jaina#2214": {1, 0}, "Stranger#9999": {1, 0}})
+	if !strings.Contains(buf.String(), "wins=2 losses=2 source=local-team") {
+		t.Errorf("log = %s", buf.String())
 	}
 }
 
-func TestRankingFinishedMatchWhoseLocalFlagContradictsTheResultRecordsNothing(t *testing.T) {
+func TestRankingEveryoneFlaggedWonAndTheLocalPlayerWonRecordsNothing(t *testing.T) {
+	// Nothing tells who lost: the flags and localPlayerWon agree on a win for
+	// both teams.
+	var buf bytes.Buffer
+	r := follow.NewRanking(func() time.Time { return rankClock }, nil, slog.New(slog.NewTextHandler(&buf, nil)))
+	record(r, nil, rlobby(twoTeams...), scoreWith(true, nil,
+		pl("Me#1111", 0, true), pl("Arthas#1123", 0, true), pl("Jaina#2214", 1, true), pl("Stranger#9999", 1, true)))
+	expectRanking(t, r, map[string][2]int{})
+	if r.Unsaved() || !strings.Contains(buf.String(), "inconsistent flags: winners on several teams") {
+		t.Errorf("unsaved %v, log = %s", r.Unsaved(), buf.String())
+	}
+}
+
+func TestRankingLocalFlagContradictingAWinGivesTheOthersALoss(t *testing.T) {
+	r := newRanking()
+	record(r, nil, rlobby(twoTeams...), scoreWith(true, nil,
+		pl("Me#1111", 0, false), pl("Arthas#1123", 0, false), pl("Jaina#2214", 1, true)))
+	expectRanking(t, r, map[string][2]int{"Me#1111": {1, 0}, "Arthas#1123": {1, 0}, "Jaina#2214": {0, 1}})
+}
+
+func TestRankingLostWithUntrustedFlagsAndThreeTeamsRecordsOnlyMyTeam(t *testing.T) {
 	r := newRanking()
 	record(r, nil, rlobby(twoTeams...), scoreWith(false, nil,
-		pl("Me#1111", 0, true), pl("Arthas#1123", 0, true), pl("Jaina#2214", 1, false)))
-	expectRanking(t, r, map[string][2]int{})
+		pl("Me#1111", 0, true), pl("Arthas#1123", 1, true), pl("Jaina#2214", 2, true)))
+	expectRanking(t, r, map[string][2]int{"Me#1111": {0, 1}})
 }
