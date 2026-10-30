@@ -1731,8 +1731,9 @@ function rankRow(r, self) {
 // back to the first page.
 const RANK_PAGE = 25;
 // The Scoreboard is hidden until wins and losses are recorded reliably:
-// some custom maps report every player as a winner. Matches are still
-// recorded; the demo page (?scene=ranking) still opens it.
+// some custom maps report every player as a winner. Recording is off too
+// (companion.Options.RecordRanking); the demo page (?scene=ranking) still
+// opens it.
 const SCOREBOARD_SHOWN = false;
 $('ranking-open').hidden = !SCOREBOARD_SHOWN;
 let rankPage = 0;

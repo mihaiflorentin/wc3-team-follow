@@ -72,6 +72,10 @@ type Options struct {
 	// Changelog is CHANGELOG.md as built into the app, for What's new and
 	// the changelog in the Updates section.
 	Changelog string
+	// RecordRanking turns on recording wins and losses. It is off in the
+	// app until results can be trusted: some custom maps report every
+	// player as a winner.
+	RecordRanking bool
 	// Now reads the clock; nil uses time.Now.
 	Now func() time.Time
 }
@@ -494,8 +498,10 @@ func (s *Service) handle(ctx context.Context, ev dto.GameEvent) (loggedOut bool)
 		}
 	}
 	s.recent.Receive(ev)
-	s.ranking.Receive(ev)
-	s.saveRanking()
+	if s.opts.RecordRanking {
+		s.ranking.Receive(ev)
+		s.saveRanking()
+	}
 	s.typeChatLines(ctx)
 	if ev.MessageType == "GameLobbySetup" {
 		s.logLobby(ctx, ev)

@@ -3,6 +3,9 @@ package companion_test
 import (
 	"errors"
 	"testing"
+	"time"
+
+	"github.com/mihaiflorentin/wc3-team-follow/domain/companion"
 
 	mocknotes "github.com/mihaiflorentin/wc3-team-follow/mock/notes"
 	mockprefs "github.com/mihaiflorentin/wc3-team-follow/mock/preferences"
@@ -35,7 +38,23 @@ func wins(s dto.FollowState, tag string) (w, l int) {
 func rankingHarness(t *testing.T, store *mockranking.Store) *harness {
 	t.Helper()
 	prefs := mockprefs.New(dto.Preferences{Tags: []string{"Arthas#1123"}, IncludeTeam: false})
-	return newHarnessFull(t, prefs, mockrecent.New(), mocknotes.New(nil), store)
+	return newHarnessFull(t, prefs, mockrecent.New(), mocknotes.New(nil), store, func(o *companion.Options) { o.RecordRanking = true })
+}
+
+func TestRankingIsNotRecordedByDefault(t *testing.T) {
+	store := mockranking.New()
+	prefs := mockprefs.New(dto.Preferences{Tags: []string{"Arthas#1123"}})
+	h := newHarnessFull(t, prefs, mockrecent.New(), mocknotes.New(nil), store)
+	h.connected(t)
+	h.session.Push(lobby(castleFight, "CF", teamSlot("Me#1111", 0, true), teamSlot("Arthas#1123", 1, false)))
+	h.session.Push(screen("LOADING_SCREEN"))
+	h.session.Push(scoreInfo(true))
+	h.session.Push(screen("MAIN_MENU"))
+	waitFor(t, "menu", func() bool { return h.svc.State().Connected })
+	time.Sleep(200 * time.Millisecond)
+	if n := len(h.svc.State().Ranking); n != 0 || store.Saves() != 0 {
+		t.Fatalf("recorded %d players in %d saves; recording is off", n, store.Saves())
+	}
 }
 
 func TestRankingRecordsAMatchSavesAndPublishesIt(t *testing.T) {

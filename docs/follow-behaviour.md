@@ -68,7 +68,7 @@ The window only: `cmd/gui/frontend/app.js` (`playerFacts`, `showTip`). One share
 
 ## Ranking (the window's Scoreboard)
 
-The Scoreboard button and the player card's games won and lost are hidden (`SCOREBOARD_SHOWN = false` in `app.js`) until wins and losses are recorded reliably: a 4v4 Legion TD reported every player as a winner. Recording goes on; the demo page's `?scene=ranking` still opens the dialog.
+The Scoreboard button and the player card's games won and lost are hidden (`SCOREBOARD_SHOWN = false` in `app.js`) until wins and losses are recorded reliably: a 4v4 Legion TD reported every player as a winner. Recording is off too: the companion feeds events to the recorder only when `companion.Options.RecordRanking` is set, which the app doesn't do. Entries already saved stay in `ranking.json`; the demo page's `?scene=ranking` still opens the dialog.
 
 `domain/follow/ranking.go` (`follow.Ranking`), driven by the companion with the events it already receives; it only reads them and never sends anything to the game. The window shows it in the Ranking dialog (`cmd/gui/frontend`): a sortable table (Player, Games, Wins, Losses, Win rate, Last played), default win rate then games, the player's own row marked from `FollowState.selfTag`, and Clear ranking after a confirmation.
 
