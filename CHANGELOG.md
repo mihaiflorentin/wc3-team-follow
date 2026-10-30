@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The **Scoreboard** is hidden for now, along with games won and lost on the player card, because some custom maps report every player as a winner. Results are still recorded and will show again once they can be trusted.
+
 ### Fixed
 
 - The **Scoreboard** no longer records a win for every player when a custom map reports everyone as a winner. It now goes by whether you won or lost: your team shares your result and the other team gets the opposite.

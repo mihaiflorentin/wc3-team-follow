@@ -68,6 +68,8 @@ The window only: `cmd/gui/frontend/app.js` (`playerFacts`, `showTip`). One share
 
 ## Ranking (the window's Scoreboard)
 
+The Scoreboard button and the player card's games won and lost are hidden (`SCOREBOARD_SHOWN = false` in `app.js`) until wins and losses are recorded reliably: a 4v4 Legion TD reported every player as a winner. Recording goes on; the demo page's `?scene=ranking` still opens the dialog.
+
 `domain/follow/ranking.go` (`follow.Ranking`), driven by the companion with the events it already receives; it only reads them and never sends anything to the game. The window shows it in the Ranking dialog (`cmd/gui/frontend`): a sortable table (Player, Games, Wins, Losses, Win rate, Last played), default win rate then games, the player's own row marked from `FollowState.selfTag`, and Clear ranking after a confirmation.
 
 - **Observed event order** (live capture, game 3.0.1.24371, Legion TD, the host left the match early and lost): `GameLobbyGracefulExit`, `SetGlueScreen LOADING_SCREEN` (the match starts); at the end `ExitedGame`, `UpdateScoreInfo`, `SetGlueScreen SCORE_SCREEN`, `MultiplayerGameLeave`, then a second identical `UpdateScoreInfo`. The score arrives after the player leaves the game. In that capture every player, the other team's computers included, had `won: false`, because the match wasn't finished. A won match against computers (1100 s) had the same order, with `localPlayerWon: true` and `won: true` for the host; every computer, the host's teammates included, had `won: false`, so computers' flags are never used. Real players' flags are what the recorder trusts.

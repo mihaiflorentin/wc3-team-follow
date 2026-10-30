@@ -1360,7 +1360,7 @@ function playerFacts(s, tag) {
     if (p.lobbies > 0) history.push(['Lobbies shared', String(p.lobbies)]);
   }
   const score = (s.ranking ?? []).find(r => key(r.tag) === k);
-  if (score && score.wins + score.losses > 0) {
+  if (SCOREBOARD_SHOWN && score && score.wins + score.losses > 0) {
     history.push(['Games won', String(score.wins)], ['Games lost', String(score.losses)]);
   }
   return {note: noteOf(s, tag)?.text ?? '', status, statusKey: st.status, standing, history};
@@ -1730,6 +1730,11 @@ function rankRow(r, self) {
 // whose BattleTag contains the text, in any case. Searching or sorting goes
 // back to the first page.
 const RANK_PAGE = 25;
+// The Scoreboard is hidden until wins and losses are recorded reliably:
+// some custom maps report every player as a winner. Matches are still
+// recorded; the demo page (?scene=ranking) still opens it.
+const SCOREBOARD_SHOWN = false;
+$('ranking-open').hidden = !SCOREBOARD_SHOWN;
 let rankPage = 0;
 const rankQuery = () => $('ranking-search').value.trim().toLowerCase();
 
