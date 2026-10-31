@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- Buttons such as Set up, Check now and Choose map no longer look greyed out; they have a clear outline, and only buttons you can't use right now look faded.
+
 ## [0.10.0] - 2026-10-31
 
 ### Added

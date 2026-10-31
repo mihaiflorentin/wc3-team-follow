@@ -760,16 +760,22 @@ button:disabled { cursor: not-allowed; }
 .primary:disabled { background: var(--spruce-line); color: var(--lichen); }
 .primary.big { padding: 13px 18px; font-size: 15px; }
 
+/* A translucent bone fill and edge, so a ghost button reads as clickable on
+   any card, amber Auto-host included; only :disabled looks faded. */
 .ghost {
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--bone) 30%, transparent);
   border-radius: 8px;
-  padding: 9px 14px;
-  background: var(--spruce-line);
+  padding: 8px 13px;
+  background: color-mix(in srgb, var(--bone) 11%, transparent);
   color: var(--bone);
+  font-weight: 550;
 }
-.ghost:hover:not(:disabled) { background: #43605f; }
-.ghost:disabled { opacity: .5; }
-.ghost.small { padding: 6px 10px; font-size: 12.5px; }
+.ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bone) 19%, transparent);
+  border-color: color-mix(in srgb, var(--bone) 48%, transparent);
+}
+.ghost:disabled { opacity: .45; border-color: transparent; }
+.ghost.small { padding: 5px 9px; font-size: 12.5px; }
 
 .link {
   border: 0;
