@@ -219,7 +219,7 @@ func NewEngine(send Sender, now func() time.Time, verified []string) *Engine {
 		presenceEpochs: map[string]presenceEpoch{},
 		seenOpen:       map[string]bool{},
 		random:         newRandom(),
-		host:           hostState{settings: dto.HostSettings{GameModeDelaySeconds: DefaultGameModeDelay}},
+		host:           hostState{settings: dto.HostSettings{GameModeDelaySeconds: DefaultGameModeDelay, UseNewest: true}},
 	}
 }
 

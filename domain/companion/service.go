@@ -167,6 +167,12 @@ type Service struct {
 	closing bool
 	// mapsFolder is the folder the player chose, or "".
 	mapsFolder string
+	// hostMap is the file Auto-host creates its next lobby on (issue 32);
+	// hostMapStale asks for it to be worked out again, and hostMapBusy is
+	// set while that runs.
+	hostMap      dto.HostMap
+	hostMapStale bool
+	hostMapBusy  bool
 	// lastStatus is the last status line written to the log.
 	lastStatus string
 	// gamePID is the connected game's process id, for typing.
@@ -204,6 +210,8 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		logger:      logger,
 		opts:        opts,
 		subscribers: map[int]func(dto.FollowState){},
+		// The saved setup's map is worked out once Run starts.
+		hostMapStale: true,
 	}
 	s.engine = follow.NewEngine(s.send, opts.Now, opts.VerifiedBuilds)
 	recent, err := s.recentDB.Load()
@@ -354,6 +362,7 @@ func (s *Service) step(ctx context.Context) {
 	s.mu.Lock()
 	s.keyboardStatus = keyboard
 	s.engine.Tick()
+	s.startHostMap(ctx)
 	s.recent.Tick()
 	s.saveRanking()
 	s.saveRecent(false)
@@ -624,6 +633,7 @@ func (s *Service) snapshot() dto.FollowState {
 		AutoJoin: state.Enabled, AutoHost: state.Host.Enabled})
 	state.Update.WhatsNew = s.whatsNew.View()
 	state.MapUpdates = s.mapUpdates.State()
+	state.Host.Map = s.hostMap
 	state.Notes = maps.Clone(s.notes)
 	if !state.Connected {
 		state.ConnectionHint = s.hint
@@ -773,27 +783,36 @@ func (s *Service) save() error {
 	})
 }
 
-// ConfigureHost changes the Auto-host setup or turns it on or off. Turning
-// it on translates the map's path to the game's view (a Windows path under
-// Wine or Proton).
+// ConfigureHost changes the Auto-host setup or turns it on or off. It works
+// out the file to host: the newest installed version of a tracked map with
+// Use the newest installed version on, otherwise the chosen file (issue
+// 32). Turning it on translates that file's path to the game's view (a
+// Windows path under Wine or Proton).
 func (s *Service) ConfigureHost(ctx context.Context, cfg dto.HostConfig) (dto.FollowState, error) {
-	if cfg.Enabled != nil && *cfg.Enabled {
+	var hostMap *dto.HostMap
+	if cfg.Settings != nil || cfg.Enabled != nil && *cfg.Enabled {
 		s.mu.Lock()
-		mapPath := s.engine.HostSettings().MapPath
+		settings := s.engine.HostSettings()
 		s.mu.Unlock()
 		if cfg.Settings != nil {
-			mapPath = cfg.Settings.MapPath
+			settings = *cfg.Settings
 		}
-		if mapPath != "" {
-			gamePath, err := s.maps.GamePath(ctx, mapPath)
+		m := s.HostMap(ctx, settings)
+		hostMap = &m
+		if cfg.Enabled != nil && *cfg.Enabled && m.Path != "" {
+			gamePath, err := s.maps.GamePath(ctx, m.Path)
 			if err != nil {
 				return s.State(), fmt.Errorf("The map's path couldn't be prepared for the game: %w", err)
 			}
-			cfg.GameMapPath = gamePath
+			cfg.GameMapPath, cfg.MapLabel = gamePath, hostMapLabel(m)
+			cfg.MapEachLobby = m.Tracked != "" && settings.UseNewest
 		}
 	}
 	s.mu.Lock()
 	err := s.engine.ConfigureHost(cfg)
+	if err == nil && hostMap != nil {
+		s.hostMap = *hostMap
+	}
 	s.logger.Info("host.configure", hostAttrs(cfg, err)...)
 	if err == nil && cfg.Settings != nil {
 		if saveErr := s.save(); saveErr != nil {
@@ -817,10 +836,12 @@ func hostAttrs(cfg dto.HostConfig, err error) []any {
 	if st := cfg.Settings; st != nil {
 		attrs = append(attrs, slog.String("map", st.MapName), slog.String("map_path", st.MapPath), slog.String("game_name", st.GameName),
 			slog.Bool("private", st.Private), slog.Int("visibility", st.Visibility), slog.Int("observers", st.Observers),
-			slog.Int("delay_seconds", st.DelaySeconds), slog.Bool("start_when_full", st.StartWhenFull), slog.Bool("same_team", st.SameTeam))
+			slog.Int("delay_seconds", st.DelaySeconds), slog.Bool("start_when_full", st.StartWhenFull), slog.Bool("same_team", st.SameTeam),
+			slog.Bool("use_newest", st.UseNewest))
 	}
 	if cfg.Enabled != nil {
-		attrs = append(attrs, slog.Bool("enabled", *cfg.Enabled), slog.Bool("from_menus", cfg.FromMenus), slog.String("game_map_path", cfg.GameMapPath))
+		attrs = append(attrs, slog.Bool("enabled", *cfg.Enabled), slog.Bool("from_menus", cfg.FromMenus), slog.String("game_map_path", cfg.GameMapPath),
+			slog.String("map_label", cfg.MapLabel), slog.Bool("map_each_lobby", cfg.MapEachLobby))
 	}
 	if err != nil {
 		attrs = append(attrs, slog.String("refused", err.Error()))
@@ -856,6 +877,7 @@ func (s *Service) SetMapsFolder(path string) (dto.FollowState, error) {
 	}
 	s.mu.Lock()
 	s.mapsFolder = path
+	s.hostMapStale = true
 	err := s.save()
 	if err != nil {
 		s.logger.Error("companion.preferences_save", slog.Any("error", err))

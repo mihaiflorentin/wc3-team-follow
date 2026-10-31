@@ -20,6 +20,11 @@ type Companion interface {
 	Diagnostics() dto.Diagnostics
 	// ConfigureHost changes the Auto-host setup, or turns it on or off.
 	ConfigureHost(ctx context.Context, cfg dto.HostConfig) (dto.FollowState, error)
+	// HostMap works out the file Auto-host would create its lobbies on with
+	// settings: for a tracked map with UseNewest its newest installed
+	// version, otherwise the chosen file (issue 32). The setup dialog shows
+	// it before the settings are saved.
+	HostMap(ctx context.Context, settings dto.HostSettings) dto.HostMap
 	// MapsFolders lists the chosen Maps folder, then the detected ones.
 	MapsFolders(ctx context.Context) []dto.MapsFolder
 	// SetMapsFolder chooses the Maps folder; "" goes back to detecting it.

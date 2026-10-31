@@ -18,6 +18,17 @@ func TestBridgePassesMapUpdateCallsOn(t *testing.T) {
 	}
 }
 
+func TestHostMapAsksTheCompanionForTheDraftsMap(t *testing.T) {
+	want := dto.HostMap{Path: "/Maps/Download/Legion_TD_11.4c-hf9_Team_OZE.w3x", Tracked: "Legion TD", Version: "11.4c-hf9",
+		ChosenVersion: "11.4c-hf5", NewestVersion: "11.4c-hf9", Newest: true}
+	c := &mockcompanion.Companion{HostMapAnswer: want}
+	b, _ := updateBridge(c)
+	got := b.HostMap("/Maps/Download/Legion_TD_11.4c-hf5_Team_OZE.w3x", true)
+	if got != want || c.LastHostMap.MapPath != "/Maps/Download/Legion_TD_11.4c-hf5_Team_OZE.w3x" || !c.LastHostMap.UseNewest {
+		t.Fatalf("HostMap = %+v, asked %+v", got, c.LastHostMap)
+	}
+}
+
 func TestOpenMapReleasePageOpensOnlyTheStatesGitHubPage(t *testing.T) {
 	release := "https://github.com/team-oze/Legion-TD/releases/tag/v11.4c-hf9"
 	c := &mockcompanion.Companion{Current: dto.FollowState{MapUpdates: dto.MapUpdatesState{Maps: []dto.MapUpdate{

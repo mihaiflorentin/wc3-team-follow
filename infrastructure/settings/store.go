@@ -56,12 +56,13 @@ type fileShape struct {
 }
 
 // savedHost is the Auto-host setup as saved. Settings saved before Game
-// mode existed get its default delay.
+// mode existed get its default delay, and those saved before Use the
+// newest installed version existed have it on.
 type savedHost dto.HostSettings
 
 func (h *savedHost) UnmarshalJSON(data []byte) error {
 	type plain dto.HostSettings
-	v := plain{GameModeDelaySeconds: dto.DefaultGameModeDelaySeconds}
+	v := plain{GameModeDelaySeconds: dto.DefaultGameModeDelaySeconds, UseNewest: true}
 	if err := json.Unmarshal(data, &v); err != nil {
 		return err
 	}

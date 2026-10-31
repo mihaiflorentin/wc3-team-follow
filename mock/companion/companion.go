@@ -18,10 +18,14 @@ type Companion struct {
 	LastConfig   dto.FollowConfig
 	LastPassword string
 	LastHost     dto.HostConfig
-	Folders      []dto.MapsFolder
-	Listing      dto.MapListing
-	LastFolder   string
-	LastQuery    string
+	// HostMapAnswer is what HostMap returns; LastHostMap is its last
+	// question.
+	HostMapAnswer dto.HostMap
+	LastHostMap   dto.HostSettings
+	Folders       []dto.MapsFolder
+	Listing       dto.MapListing
+	LastFolder    string
+	LastQuery     string
 	// CloseCalls counts CloseGames calls.
 	CloseCalls int
 	// PermissionCalls counts RequestKeyboardPermission calls.
@@ -134,6 +138,11 @@ func (c *Companion) Subscribe(func(dto.FollowState)) func() { return func() {} }
 func (c *Companion) ConfigureHost(_ context.Context, cfg dto.HostConfig) (dto.FollowState, error) {
 	c.LastHost = cfg
 	return c.Current, c.Err
+}
+
+func (c *Companion) HostMap(_ context.Context, settings dto.HostSettings) dto.HostMap {
+	c.LastHostMap = settings
+	return c.HostMapAnswer
 }
 
 func (c *Companion) MapsFolders(context.Context) []dto.MapsFolder { return c.Folders }

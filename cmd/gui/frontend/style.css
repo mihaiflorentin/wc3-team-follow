@@ -924,6 +924,28 @@ select {
 .map-pick-name .icon { color: var(--open); }
 .map-pick[data-empty="true"] .map-pick-name { color: var(--lichen); font-weight: 400; }
 
+/* A tracked map: which version Auto-host hosts. The hosted line sits
+   under the switch like a receipt, the version itself in the action colour. */
+.map-version { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.map-version[hidden] { display: none; }
+.hosted-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px dashed var(--spruce-line);
+  color: var(--lichen);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.hosted-line .icon { flex: none; width: 14px; height: 14px; color: var(--open); transform: translateY(2px); }
+.hosted-line strong { color: var(--bone); font-weight: 600; }
+.hosted-line .version { font-family: var(--display); color: var(--open); font-weight: 600; letter-spacing: .01em; }
+.hosted-line[data-newest="false"] .icon { color: var(--lichen); }
+.hosted-line[data-newest="false"] .version { color: var(--bone); }
+
 .choice { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; background: var(--spruce-deep); border-radius: 10px; }
 .choice label { cursor: pointer; }
 .choice input { position: absolute; opacity: 0; pointer-events: none; }

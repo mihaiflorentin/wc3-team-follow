@@ -97,9 +97,15 @@ type hostState struct {
 	enabled  bool
 	settings dto.HostSettings
 	gamePath string
-	phase    string
-	createAt time.Time
-	since    time.Time
+	// mapLabel names gamePath's file for Activity; "" uses MapName.
+	mapLabel string
+	// eachLobby makes each lobby after the first wait for SetHostMap, and
+	// mapDue is set while one waits.
+	eachLobby bool
+	mapDue    bool
+	phase     string
+	createAt  time.Time
+	since     time.Time
 	// startSent is set once LobbyStart was sent for the current fill, at
 	// startSentAt.
 	startSent   bool
@@ -239,7 +245,10 @@ func (e *Engine) enableHost(cfg dto.HostConfig) error {
 		e.Note("Auto-join is off while you host.")
 	}
 	e.host.enabled, e.host.gamePath, e.host.number = true, cfg.GameMapPath, 1
+	e.host.mapLabel, e.host.eachLobby = cfg.MapLabel, cfg.MapEachLobby
 	e.waitToHost()
+	// The companion resolved the first lobby's map just now.
+	e.host.mapDue = false
 	if s.DelaySeconds == 0 {
 		e.Note("Auto-host is on. Creating " + quote(e.lobbyName()) + " now.")
 	} else {
@@ -256,6 +265,35 @@ func (e *Engine) waitToHost() {
 	e.host.players, e.host.slots, e.host.full, e.host.missing, e.host.offTeam = 0, 0, false, nil, nil
 	e.host.moves, e.host.invited, e.host.swap, e.host.lobby = nil, nil, swapState{}, nil
 	e.host.gameMode = gameModeState{}
+	e.host.mapDue = e.host.eachLobby
+}
+
+// HostMapDue reports that Auto-host's next lobby waits for SetHostMap.
+func (e *Engine) HostMapDue() bool { return e.host.enabled && e.host.mapDue }
+
+// SetHostMap sets the file the waiting lobby is created on, as the game
+// sees it, and the label Activity names it with, then creates the lobby
+// when its time has come. An empty gamePath keeps the last file, for a map
+// that couldn't be resolved. It does nothing unless HostMapDue: the
+// companion resolves the newest installed version of a tracked map before
+// each lobby (issue 32), and the engine never looks for files itself.
+func (e *Engine) SetHostMap(gamePath, label string) {
+	if !e.HostMapDue() {
+		return
+	}
+	if gamePath != "" {
+		e.host.gamePath, e.host.mapLabel = gamePath, label
+	}
+	e.host.mapDue = false
+	e.hostStep()
+}
+
+// hostMapLabel names the file Auto-host creates its lobby on.
+func (e *Engine) hostMapLabel() string {
+	if e.host.mapLabel != "" {
+		return e.host.mapLabel
+	}
+	return e.host.settings.MapName
 }
 
 func quote(s string) string { return "“" + s + "”" }
@@ -298,7 +336,7 @@ func (e *Engine) hostStep() {
 	}
 	switch h.phase {
 	case HostWaiting:
-		if !e.inMenusNow() || e.now().Before(h.createAt) {
+		if h.mapDue || !e.inMenusNow() || e.now().Before(h.createAt) {
 			return
 		}
 		payload := map[string]any{
@@ -322,7 +360,7 @@ func (e *Engine) hostStep() {
 			return
 		}
 		h.phase, h.since = HostCreating, e.now()
-		e.Note("Creating your lobby " + quote(e.lobbyName()) + " on " + h.settings.MapName + ".")
+		e.Note("Creating your lobby " + quote(e.lobbyName()) + " on " + e.hostMapLabel() + ".")
 	case HostCreating:
 		if e.now().Sub(h.since) > createTimeout {
 			e.stopHost("The game didn't open the lobby. Check the map in Warcraft III; Auto-host is off.")

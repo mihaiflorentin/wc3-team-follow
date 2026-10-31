@@ -92,6 +92,8 @@ func (s *Service) downloadMap(ctx context.Context, i int, rel dto.MapRelease, di
 		s.logger.WarnContext(ctx, "maps.download_failed", slog.String("map", rel.Map.Name), slog.String("version", rel.Version), slog.Any("error", err))
 	default:
 		s.mapUpdates.Downloaded(i, path, nil)
+		// Auto-host's next lobby may use it.
+		s.hostMapStale = true
 		s.logger.InfoContext(ctx, "maps.download_done", slog.String("map", rel.Map.Name), slog.String("version", rel.Version), slog.String("path", path))
 	}
 	s.takeMapNotes()

@@ -20,7 +20,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `port/contract/` | Interfaces (ports) that domain and adapters meet at. Interfaces only, no structs. |
 | `port/dto/` | Plain data shapes, `package dto`, no subfolders. |
 | `infrastructure/discovery/` | Finds the game, menu port, session and version, and the Maps folders (`MapsLocator`, with Wine path translation). `Processes` closes the game's own processes when the player asks (`contract.GameProcesses`). `platform_<os>.go` per OS; portable parsing beside it. |
-| `domain/mapupdate/` | Keep maps up to date's decisions (ADR 0012): when to check tracked maps, what to download, retries and each map's state and Activity lines. Pure. |
+| `domain/mapupdate/` | Keep maps up to date's decisions (ADR 0012): when to check tracked maps, what to download, retries and each map's state and Activity lines; which tracked map a file is and its newest installed version, for Auto-host (`newest.go`). Pure. |
 | `infrastructure/maps/` | Lists and searches maps in a Maps folder, and finds a tracked map's installed versions by its file-name pattern (`MapLibrary`, `installed.go`). |
 | `infrastructure/mapreleases/` | Finds a tracked map's newest GitHub Release with its SHA-256 digest and downloads it into the Maps folder, verified, never over an existing file (`contract.MapReleases`, ADR 0012); HTTPS to GitHub's hosts only, through the updater's client. |
 | `infrastructure/gamesocket/` | Loopback websocket to the game with the command allowlist; a reader goroutine queues events so `TryReceive` can return the ones already waiting. |

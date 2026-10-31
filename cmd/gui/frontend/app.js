@@ -1851,6 +1851,9 @@ async function demoOpen(what) {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   switch (what) {
     case 'host-setup':
+    case 'host-newest':
+    case 'host-newest-off':
+    case 'host-newest-untracked':
       $('host-setup').click();
       break;
     case 'maps':
@@ -2004,10 +2007,30 @@ const listNames = tags => {
   return names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 };
 
+// hostedMap describes the file Auto-host hosts when the chosen map is a
+// tracked map (issue 32): its name and version and why that version, or
+// null for any other map. m is the companion's dto.HostMap.
+function hostedMap(m, useNewest) {
+  if (!m?.tracked) return null;
+  const title = `${m.tracked} ${m.version}`;
+  if (m.newest) return {title, why: 'newest installed', newest: true};
+  if (useNewest && !m.newestVersion) return {title, why: 'the version you chose. Your Maps folder couldn’t be read', newest: false};
+  if (m.newestVersion && m.newestVersion.toLowerCase() !== m.version.toLowerCase()) {
+    return {title, why: `the version you chose. ${m.newestVersion} is installed too`, newest: false};
+  }
+  return {title, why: 'the version you chose', newest: false};
+}
+
+// hostMapName is the map Auto-host's lines name: the hosted version of a
+// tracked map, otherwise the chosen map's name.
+function hostMapName(h) {
+  return hostedMap(h.map, h.settings.useNewest)?.title ?? h.settings.mapName;
+}
+
 function hostHeadline(s) {
   const h = {...s.host, missing: s.host.missing ?? [], offTeam: s.host.offTeam ?? []};
   const name = `“${h.lobbyName || h.settings.gameName}”`;
-  const map = h.settings.mapName;
+  const map = hostMapName(h);
   switch (h.phase) {
     case 'waiting': {
       if (!h.createAt) return [`Hosting ${name} next`, `On ${map}.`];
@@ -2040,11 +2063,14 @@ function hostBlocked(s) {
   return '';
 }
 
-function hostSummary(st) {
+function hostSummary(h) {
+  const st = h.settings;
   if (!st.mapPath) return 'Create your lobby on a map, then wait for your group.';
   const extras = [st.private ? 'private' : 'public', st.startWhenFull && 'starts when full', st.sameTeam && 'same team', st.inviteGroup && 'invites your group']
     .filter(Boolean).join(', ');
-  return `${st.mapName}, “${st.gameName || 'no name yet'}”. ${extras.charAt(0).toUpperCase()}${extras.slice(1)}.${gameModeSummary(st)}`;
+  const hosted = hostedMap(h.map, st.useNewest);
+  const map = hosted?.newest ? `${hosted.title}, newest installed` : hosted?.title ?? st.mapName;
+  return `${map}, “${st.gameName || 'no name yet'}”. ${extras.charAt(0).toUpperCase()}${extras.slice(1)}.${gameModeSummary(st)}`;
 }
 
 function gameModeSummary(st) {
@@ -2078,7 +2104,7 @@ function renderHost(s) {
   const reason = h.enabled ? '' : hostBlocked(s);
   toggle.checked = h.enabled;
   toggle.disabled = !h.enabled && Boolean(reason);
-  $('host-help').textContent = hostSummary(h.settings);
+  $('host-help').textContent = hostSummary(h);
   $('host-setup').classList.toggle('needs-setup', !h.settings.mapPath || !h.settings.gameName);
   $('host-blocked').textContent = s.connected || !h.settings.mapPath ? reason : '';
   renderKeyboard(s.keyboard);
@@ -2099,6 +2125,8 @@ function fillHostForm() {
   $('host-map-name').textContent = draft.mapName || 'No map chosen';
   $('host-map-path').textContent = draft.mapPath || '';
   document.querySelector('.map-pick').dataset.empty = String(!draft.mapPath);
+  $('host-use-newest').checked = draft.useNewest !== false;
+  updateHostedLine();
   $('host-name').value = draft.gameName || '';
   updateNameCount();
   for (const radio of document.querySelectorAll('input[name="host-private"]')) radio.checked = (radio.value === 'private') === Boolean(draft.private);
@@ -2113,6 +2141,26 @@ function fillHostForm() {
   $('game-mode-delay').value = String(draft.gameModeDelaySeconds ?? 5);
   updateGameModeCount();
   $('host-error').textContent = '';
+}
+
+// updateHostedLine asks which file Auto-host would host for the draft's
+// map, and shows Use the newest installed version with that file only for
+// a tracked map. Only the newest answer is shown.
+let hostMapAsk = 0;
+async function updateHostedLine() {
+  const box = $('host-newest');
+  const ask = ++hostMapAsk;
+  if (!draft?.mapPath) { box.hidden = true; return; }
+  const useNewest = $('host-use-newest').checked;
+  let m = null;
+  try { m = await bridge.HostMap(draft.mapPath, useNewest); } catch { m = null; }
+  if (ask !== hostMapAsk) return;
+  const hosted = hostedMap(m, useNewest);
+  box.hidden = !hosted;
+  if (!hosted) return;
+  $('host-newest-help').textContent = `Each lobby uses the newest ${m.tracked} in your Maps folder, including one Keep maps up to date just downloaded.`;
+  $('host-hosted').dataset.newest = String(hosted.newest);
+  $('host-hosted-text').replaceChildren('Hosts ', el('strong', '', m.tracked), ' ', el('span', 'version', m.version), `, ${hosted.why}.`);
 }
 
 function updateNameCount() {
@@ -2139,6 +2187,7 @@ $('host-setup').onclick = () => {
   $('host-dialog').showModal();
 };
 $('host-name').oninput = updateNameCount;
+$('host-use-newest').onchange = updateHostedLine;
 $('game-mode').oninput = updateGameModeCount;
 $('keyboard-allow').onclick = async () => {
   $('host-error').textContent = '';
@@ -2155,12 +2204,15 @@ $('host-choose-map').onclick = () => openMapBrowser(entry => {
   $('host-map-name').textContent = entry.name;
   $('host-map-path').textContent = entry.path;
   document.querySelector('.map-pick').dataset.empty = 'false';
+  updateHostedLine();
 });
 
 $('host-form').onsubmit = async event => {
   event.preventDefault();
   const settings = {
     ...draft,
+    // Kept for untracked maps too, so it's on again for the next tracked one.
+    useNewest: $('host-newest').hidden ? draft.useNewest !== false : $('host-use-newest').checked,
     gameName: $('host-name').value.trim(),
     private: document.querySelector('input[name="host-private"]:checked').value === 'private',
     delaySeconds: Number($('host-delay').value),
@@ -2807,6 +2859,7 @@ $('map-updates-auto').onchange = e => act(() => bridge.SetMapUpdates(e.target.ch
 /* Demo bridge: used only when the page runs outside the app, to preview
    the design in a browser. Pick a scene with ?scene=watching|first|live|
    paused|password|waiting|many|linux|unverified|host-waiting|host-lobby|
+   host-newest|host-newest-off|host-newest-untracked|host-newest-card|
    game-mode|keyboard-ask|keyboard-linux|recent|recent-empty|recent-clear|
    recent-select|recent-select-confirm|blacklist|blacklist-empty|blacklist-off|
    update|update-open|update-warning|update-notes|update-later|update-skipped|
@@ -2838,12 +2891,26 @@ function demoBridge() {
     ['Malfurion#2034', 'Offline', false, false, false, '', false],
   ].map(([battleTag, label, inGame, open, away, lobby = '', online = true]) => ({battleTag, label, inGame, open, away, lobby, online, selected: false}));
   const find = tag => roster.find(r => key(r.battleTag) === key(tag));
-  const hostDemo = {mapPath: '/Maps/Download/Legion TD x20.w3x', mapName: 'Legion TD x20', gameName: 'LTD with friends #%d', private: false, visibility: 0, observers: 0, delaySeconds: 10, startWhenFull: false, sameTeam: false, inviteGroup: true, gameMode: '', gameModeDelaySeconds: 5};
+  const hostDemo = {mapPath: '/Maps/Download/Legion TD x20.w3x', mapName: 'Legion TD x20', useNewest: true, gameName: 'LTD with friends #%d', private: false, visibility: 0, observers: 0, delaySeconds: 10, startWhenFull: false, sameTeam: false, inviteGroup: true, gameMode: '', gameModeDelaySeconds: 5};
   const mapsRoot = '/Users/player/Library/Application Support/Blizzard/Warcraft III/Maps';
+  // Legion TD Team OZE is tracked (config.toml [maps] tracked); the demo
+  // has three versions of it in Download.
+  const legionFile = v => `${mapsRoot}/Download/Legion_TD_${v}_Team_OZE.w3x`;
+  const hostLegion = {...hostDemo, mapPath: legionFile('11.4c-hf5'), mapName: 'Legion_TD_11.4c-hf5_Team_OZE', gameName: 'LTD OZE #%d'};
+  const legionVersions = ['11.4c-hf9', '11.4c-hf5', '11.2c-hf1'];
+  const demoHostMap = (path, useNewest) => {
+    const version = /(?:^|\/)Legion_TD_(\d[^_/ ]*)_Team_?OZE[^/]*\.w3x$/i.exec(path ?? '')?.[1];
+    if (!version) return {path: path ?? '', tracked: '', version: '', chosenVersion: '', newestVersion: '', newest: false};
+    const newest = legionVersions[0];
+    return useNewest
+      ? {path: legionFile(newest), tracked: 'Legion TD', version: newest, chosenVersion: version, newestVersion: newest, newest: true}
+      : {path, tracked: 'Legion TD', version, chosenVersion: version, newestVersion: newest, newest: false};
+  };
   const day = d => new Date(Date.UTC(2026, 0, 1) + d * 86400000).toISOString();
   const tree = {
     '': [['Download', true, 300], ['FrozenThrone', true, 10], ['(2)Lost Temple', false, 5], ['(4)Twisted Meadows', false, 40], ['Legion TD x20', false, 200]],
-    'Download': [['Tower Defense', true, 280], ['Green Circle TD 2020', false, 120], ['Footmen Frenzy 6.2', false, 250], ['Island Defense 4.1', false, 90], ['(8)Vanguard Point', false, 23]],
+    'Download': [['Tower Defense', true, 280], ['Legion_TD_11.4c-hf9_Team_OZE', false, 12], ['Legion_TD_11.4c-hf5_Team_OZE', false, 26],
+      ['Legion_TD_11.2c-hf1_TeamOZE', false, 70], ['Green Circle TD 2020', false, 120], ['Footmen Frenzy 6.2', false, 250], ['Island Defense 4.1', false, 90], ['(8)Vanguard Point', false, 23]],
     'Download/Tower Defense': [['Legion TD Mega 4.2', false, 290], ['Element TD 5.5', false, 160], ['Wintermaul Wars', false, 60]],
     'FrozenThrone': [['(2)Echo Isles', false, 1], ['(4)Turtle Rock', false, 1]],
   };
@@ -2986,6 +3053,12 @@ function demoBridge() {
     ['Sylvanas-the-Dark-Lady#90310', 0, 2, 60 * 24 * 400],
   ].map(([tag, wins, losses, mins]) => ({tag, wins, losses, lastPlayed: at(mins)}));
   const scenes = {
+    'host-newest': {host: {enabled: false, phase: 'off', settings: hostLegion, map: demoHostMap(hostLegion.mapPath, true), players: 0, slots: 0, missing: [], offTeam: []}},
+    'host-newest-off': {host: {enabled: false, phase: 'off', settings: {...hostLegion, useNewest: false}, map: demoHostMap(hostLegion.mapPath, false), players: 0, slots: 0, missing: [], offTeam: []}},
+    'host-newest-untracked': {host: {enabled: false, phase: 'off', settings: hostDemo, map: demoHostMap(hostDemo.mapPath, true), players: 0, slots: 0, missing: [], offTeam: []}},
+    'host-newest-card': {host: {enabled: true, phase: 'waiting', createAt: new Date(now + 8000).toISOString(), settings: hostLegion, map: demoHostMap(hostLegion.mapPath, true),
+      lobbyName: 'LTD OZE #2', players: 0, slots: 0, missing: [], offTeam: []},
+      log: [{time: at(30), message: 'Legion TD 11.4c-hf9 is ready in your Maps folder.'}, {time: at(1), message: 'Next lobby in 10 seconds.'}]},
     'host-waiting': {host: {enabled: true, phase: 'waiting', createAt: new Date(now + 8000).toISOString(), settings: hostDemo, lobbyName: 'LTD with friends #3', players: 0, slots: 0, missing: [], offTeam: []}},
     'host-lobby': {host: {enabled: true, phase: 'lobby', lobbyName: 'LTD with friends #3', settings: {...hostDemo, startWhenFull: true, sameTeam: true}, players: 3, slots: 6, full: false, missing: ['Jaina#2214', 'Thrall#1820'], offTeam: ['Uther#5521']},
       log: [{time: at(1), message: 'Your lobby “LTD with friends” is open. It starts once it’s full and everyone you follow is in.'}, {time: at(0), message: 'Moving Uther#5521 to your team.'}]},
@@ -3187,8 +3260,9 @@ function demoBridge() {
     SetAutoBan: async on => { s.autoBan = on; return clone(); },
     SetBlacklistManualBans: async on => { s.blacklistManualBans = on; return clone(); },
     RequestKeyboardPermission: async () => { s.keyboard = {supported: true, permitted: true, reason: ''}; return clone(); },
+    HostMap: async (path, useNewest) => demoHostMap(path, useNewest),
     ConfigureHost: async cfg => {
-      if (cfg.settings) s.host.settings = cfg.settings;
+      if (cfg.settings) { s.host.settings = cfg.settings; s.host.map = demoHostMap(cfg.settings.mapPath, cfg.settings.useNewest); }
       if (cfg.enabled === false) s.host = {...s.host, enabled: false, phase: 'off'};
       if (cfg.enabled === true) { s.enabled = false; s.host = {...s.host, enabled: true, phase: 'waiting', createAt: new Date(Date.now() + s.host.settings.delaySeconds * 1000).toISOString()}; }
       return clone();

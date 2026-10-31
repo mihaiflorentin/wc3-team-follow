@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - **Keep maps up to date**: Team Follow checks for the newest version of Legion TD (Team OZE) when it starts and every few hours, and downloads it into your Maps folder when it's missing, with a progress bar while it downloads and a message once it's ready. Every download is checked against the checksum the map's authors publish on GitHub, and older versions stay in your Maps folder so you can still join lobbies on them. The new Maps section shows the version you have and the newest one, with Check now and a switch to turn it off.
+- **Use the newest installed version**: when Auto-host's map is one Team Follow keeps up to date, such as Legion TD (Team OZE), each lobby uses the newest version in your Maps folder, including one downloaded during your last match. It's on by default; turn it off in Auto-host's Set up to host the exact file you chose. Set up and the Auto-host card show which version will be hosted.
 
 ### Changed
 

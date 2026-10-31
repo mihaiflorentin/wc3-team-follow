@@ -241,8 +241,12 @@ type HostSettings struct {
 	// MapPath is the map file on this computer.
 	MapPath string `json:"mapPath"`
 	// MapName is shown in the window and status lines.
-	MapName  string `json:"mapName"`
-	GameName string `json:"gameName"`
+	MapName string `json:"mapName"`
+	// UseNewest hosts the newest installed version of the chosen map when
+	// it is a tracked map (issue 32); it doesn't matter for other maps. On
+	// by default, settings saved before it existed included.
+	UseNewest bool   `json:"useNewest"`
+	GameName  string `json:"gameName"`
 	// Private hides the lobby from the Custom Games list (the game's
 	// [PUBLIC]/[PRIVATE] toggle).
 	Private bool `json:"private"`
@@ -290,12 +294,43 @@ type HostConfig struct {
 	// GameMapPath is MapPath as the game sees it (a Windows path under
 	// Wine). The companion fills it in.
 	GameMapPath string `json:"-"`
+	// MapLabel names the file in GameMapPath for Activity, like "Legion TD
+	// 11.4c-hf9"; "" uses the settings' MapName. The companion fills it in.
+	MapLabel string `json:"-"`
+	// MapEachLobby makes every lobby after the first wait until the
+	// companion sets its map with Engine.SetHostMap: the newest installed
+	// version of a tracked map (issue 32). The companion fills it in.
+	MapEachLobby bool `json:"-"`
+}
+
+// HostMap is the map file Auto-host creates its lobbies on, worked out
+// from the settings: the chosen file, or the newest installed version of a
+// tracked map with UseNewest (issue 32).
+type HostMap struct {
+	// Path is the file on this computer; "" without a chosen map.
+	Path string `json:"path"`
+	// Tracked is the tracked map's name when the chosen file is one, like
+	// "Legion TD"; "" otherwise.
+	Tracked string `json:"tracked"`
+	// Version is Path's version, for a tracked map.
+	Version string `json:"version"`
+	// ChosenVersion is the chosen file's version, for a tracked map.
+	ChosenVersion string `json:"chosenVersion"`
+	// NewestVersion is the newest installed version, for a tracked map; ""
+	// when the Maps folder couldn't be read.
+	NewestVersion string `json:"newestVersion"`
+	// Newest reports that Path is the newest installed version because
+	// UseNewest is on.
+	Newest bool `json:"newest"`
 }
 
 // HostState is Auto-host's part of the snapshot.
 type HostState struct {
 	Enabled  bool         `json:"enabled"`
 	Settings HostSettings `json:"settings"`
+	// Map is the file the next lobby is created on, or the open one's; the
+	// companion fills it in.
+	Map HostMap `json:"map"`
 	// Phase is off, waiting, creating, lobby or match.
 	Phase string `json:"phase"`
 	// LobbyName is the name of the open lobby, or of the next one: the

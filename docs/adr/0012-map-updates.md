@@ -24,6 +24,10 @@ Popular custom maps such as Legion TD Team OZE ship hotfixes every week or two. 
 - **Window.** A Maps section under Updates: one row per tracked map with its installed and newest versions, a state badge, the progress bar and "Downloading Legion TD 11.4c-hf9… 12 of 30 MB" while downloading, the completion or failure sentence, Release page, Check now and the switch. Everything is plain text set with `textContent`. The bridge's `OpenMapReleasePage(name)` opens only the `https://github.com/` page from the companion's state for that map, never an address from the page.
 - **Logging.** `maps.check` (map, latest version, installed count, whether it downloads), `maps.check_failed`, `maps.installed`, `maps.download_start` (bytes), `maps.downloaded`, `maps.download_done` (path), `maps.download_failed`, `maps.download_cancelled`, `maps.checksum_mismatch`. Nothing personal is involved.
 
+## Addendum: the newest installed version (issue 32, 2026-10-31)
+
+Auto-host's **Use the newest installed version** needs an order the "Installed?" rule above doesn't: the newest installed file of a tracked map is the one with the highest version (`mapupdate.Newest`, `mapupdate.CompareVersions`: runs of digits compared as numbers, the rest as text ignoring case, a prefix first), and of equal versions the most recently changed. The time a file changed doesn't decide, because the game itself downloads old versions into `Maps/Download` when the player joins a lobby hosted on one. The Maps section's installed column uses the same order when the newest release isn't installed. "Already have it" stays a string comparison, as above. The companion works the file out before each lobby; the follow engine waits for it and never reads files (see `docs/follow-behaviour.md`, Auto-host).
+
 ## Consequences
 
 - Team Follow makes a few more HTTPS requests to GitHub per day (one per tracked map per check), sharing the 60-per-hour unauthenticated limit with app update checks; the retry rule respects it.

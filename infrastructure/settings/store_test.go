@@ -188,6 +188,33 @@ func TestHostSettingsRoundTripWithGameMode(t *testing.T) {
 	}
 }
 
+func TestUseNewestRoundTripsAndIsOnInOlderFiles(t *testing.T) {
+	for _, on := range []bool{true, false} {
+		dir := t.TempDir()
+		host := dto.HostSettings{MapPath: "/maps/Legion_TD_11.4c-hf5_Team_OZE.w3x", MapName: "Legion TD", GameName: "LTD", UseNewest: on,
+			GameModeDelaySeconds: 5}
+		if err := settings.New(dir).Save(dto.Preferences{Tags: []string{}, IncludeTeam: true, Host: &host}); err != nil {
+			t.Fatal(err)
+		}
+		got, err := settings.New(dir).Load()
+		if err != nil || got.Host == nil || *got.Host != host {
+			t.Fatalf("saved %v, loaded %+v, %v", on, got.Host, err)
+		}
+	}
+	dir := t.TempDir()
+	file := filepath.Join(dir, "settings", "friends.json")
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"tags":[],"includeTeam":true,"host":{"mapPath":"/maps/a.w3x","mapName":"a","gameName":"g","delaySeconds":10,"gameModeDelaySeconds":5}}`
+	if err := os.WriteFile(file, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := settings.New(dir).Load(); err != nil || got.Host == nil || !got.Host.UseNewest {
+		t.Fatalf("a file saved before the option loaded %+v, %v", got.Host, err)
+	}
+}
+
 func TestHostSettingsSavedBeforeGameModeGetTheDefaultDelay(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "settings", "friends.json")

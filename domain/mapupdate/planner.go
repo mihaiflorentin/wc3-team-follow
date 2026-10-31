@@ -303,15 +303,15 @@ func has(installed []dto.InstalledMap, version string) bool {
 }
 
 // installedVersion is the newest version when installed, otherwise the
-// most recently changed file's (installed comes newest first), or "".
+// highest installed version (Newest), or "".
 func installedVersion(installed []dto.InstalledMap, newest string) string {
 	for _, m := range installed {
 		if newest != "" && strings.EqualFold(m.Version, newest) {
 			return m.Version
 		}
 	}
-	if len(installed) > 0 {
-		return installed[0].Version
+	if m, ok := Newest(installed); ok {
+		return m.Version
 	}
 	return ""
 }

@@ -110,6 +110,13 @@ func (b *Bridge) ConfigureHost(cfg dto.HostConfig) (dto.FollowState, error) {
 	return b.companion.ConfigureHost(b.context(), cfg)
 }
 
+// HostMap tells the setup dialog which file Auto-host would host for the
+// chosen map: its newest installed version when it is a tracked map and
+// useNewest is on, otherwise the chosen file.
+func (b *Bridge) HostMap(mapPath string, useNewest bool) dto.HostMap {
+	return b.companion.HostMap(b.context(), dto.HostSettings{MapPath: mapPath, UseNewest: useNewest})
+}
+
 // MapsFolders lists the chosen Maps folder, then the detected ones.
 func (b *Bridge) MapsFolders() []dto.MapsFolder {
 	folders := b.companion.MapsFolders(b.context())
