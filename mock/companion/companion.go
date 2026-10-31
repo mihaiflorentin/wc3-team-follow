@@ -30,6 +30,8 @@ type Companion struct {
 	ClearRecentCalls int
 	// ClearRankingCalls counts ClearRanking calls.
 	ClearRankingCalls int
+	// MapChecks counts CheckMaps calls.
+	MapChecks int
 	// CheckCalls, LaterCalls and SkipCalls count the update calls.
 	CheckCalls int
 	LaterCalls int
@@ -48,6 +50,11 @@ type Companion struct {
 	NoteCalls    int
 	LastNoteTag  string
 	LastNoteText string
+}
+
+func (c *Companion) CheckMaps() (dto.FollowState, error) {
+	c.MapChecks++
+	return c.Current, c.Err
 }
 
 func (c *Companion) CheckForUpdates() (dto.FollowState, error) {

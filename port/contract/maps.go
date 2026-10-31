@@ -24,4 +24,8 @@ type MapLibrary interface {
 	Browse(ctx context.Context, root, dir string) (dto.MapListing, error)
 	// Search finds maps whose name contains query, in root and below.
 	Search(ctx context.Context, root, query string) (dto.MapListing, error)
+	// Installed finds the files of a tracked map in root and below: those
+	// whose name matches its pattern, with the version in the name, most
+	// recently changed first (ADR 0012).
+	Installed(ctx context.Context, root string, tracked dto.TrackedMap) ([]dto.InstalledMap, error)
 }

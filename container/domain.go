@@ -78,6 +78,26 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve updater: %w", err)
 		}
+		mapsCfg := s.config.Maps
+		if mapsCfg == nil {
+			return nil, errors.New("missing [maps] config section")
+		}
+		tracked, err := trackedMaps(mapsCfg)
+		if err != nil {
+			return nil, err
+		}
+		mapEvery, err := time.ParseDuration(mapsCfg.CheckInterval)
+		if err != nil {
+			return nil, fmt.Errorf("invalid maps.check_interval %q: %w", mapsCfg.CheckInterval, err)
+		}
+		mapRetry, err := time.ParseDuration(mapsCfg.RetryInterval)
+		if err != nil {
+			return nil, fmt.Errorf("invalid maps.retry_interval %q: %w", mapsCfg.RetryInterval, err)
+		}
+		mapReleases, err := s.MapReleases()
+		if err != nil {
+			return nil, fmt.Errorf("resolve map releases: %w", err)
+		}
 		checkEvery, err := time.ParseDuration(updatesCfg.CheckInterval)
 		if err != nil {
 			return nil, fmt.Errorf("invalid updates.check_interval %q: %w", updatesCfg.CheckInterval, err)
@@ -87,7 +107,8 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 			return nil, fmt.Errorf("invalid updates.retry_interval %q: %w", updatesCfg.RetryInterval, err)
 		}
 		ports := companion.Ports{Discovery: discovery, Dialer: dialer, Prefs: prefs, Maps: locator, Library: library, Processes: processes,
-			Keyboard: keyboard, Recent: recent, Notes: notes, Ranking: ranking, Updater: updates}
+			Keyboard: keyboard, Recent: recent, Notes: notes, Ranking: ranking, Updater: updates,
+			MapReleases: mapReleases}
 		return companion.New(ports, s.logger, companion.Options{
 			VerifiedBuilds:      cfg.VerifiedBuilds,
 			RefreshInterval:     refresh,
@@ -100,6 +121,9 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 			Executable:          s.config.App.Executable,
 			Updated:             s.config.App.Updated,
 			Changelog:           s.config.App.Changelog,
+			TrackedMaps:         tracked,
+			MapInterval:         mapEvery,
+			MapRetryInterval:    mapRetry,
 		}), nil
 	})
 }

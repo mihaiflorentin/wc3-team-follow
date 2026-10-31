@@ -32,7 +32,9 @@ type FollowConfig struct {
 	BlacklistManualBans *bool `json:"blacklistManualBans,omitempty"`
 	// CheckUpdates switches automatic update checks on or off.
 	CheckUpdates *bool `json:"checkUpdates,omitempty"`
-	Enabled      *bool `json:"enabled,omitempty"`
+	// MapUpdates switches "Keep maps up to date" on or off (ADR 0012).
+	MapUpdates *bool `json:"mapUpdates,omitempty"`
+	Enabled    *bool `json:"enabled,omitempty"`
 	// FromMenus confirms the player is in the game menus, outside a lobby,
 	// match or queue. Enabling Follow requires it.
 	FromMenus bool `json:"fromMenus,omitempty"`
@@ -109,6 +111,9 @@ type FollowState struct {
 	// Update is the update check: the running version, a newer release and
 	// the banner (ADR 0009).
 	Update UpdateState `json:"update"`
+	// MapUpdates is the Maps section: tracked maps, their installed and
+	// newest versions and any download (ADR 0012).
+	MapUpdates MapUpdatesState `json:"mapUpdates"`
 }
 
 // MaxBlacklist is how many BattleTags the blacklist holds.
@@ -219,6 +224,9 @@ type Preferences struct {
 	CheckUpdates bool `json:"checkUpdates"`
 	// SkippedVersion is the release the player chose to skip, like 0.8.0.
 	SkippedVersion string `json:"skippedVersion,omitempty"`
+	// MapUpdates keeps tracked maps current: checks GitHub and downloads
+	// the newest version when it's missing; on by default.
+	MapUpdates bool `json:"mapUpdates"`
 	// LastVersion is the last version of Team Follow the player ran, like
 	// 0.8.0, for What's new; "" in settings saved before it existed.
 	LastVersion string `json:"lastVersion,omitempty"`

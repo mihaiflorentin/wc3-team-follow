@@ -341,6 +341,19 @@
           <div id="changelog-list" class="changes" tabindex="0" aria-label="Changelog"></div>
         </details>
       </section>
+
+      <section id="map-updates" class="panel updates map-updates" aria-labelledby="map-updates-title" hidden>
+        <div class="panel-head">
+          <h2 id="map-updates-title"><svg class="icon"><use href="#i-map"/></svg>Maps</h2>
+          <span id="map-updates-count" class="count"></span>
+        </div>
+        <ul id="map-updates-list" class="map-rows" aria-label="Tracked maps"></ul>
+        <p id="map-updates-status" class="updates-status" role="status"></p>
+        <div class="row">
+          <button type="button" id="map-updates-check" class="ghost small"><svg class="icon"><use href="#i-refresh"/></svg><span>Check now</span></button>
+        </div>
+        <label class="option-row updates-auto"><span><strong>Keep maps up to date</strong><small>Downloads the newest version into your Maps folder when it’s missing, checked against GitHub’s checksum. Older versions stay, so you can still join lobbies on them.</small></span><input type="checkbox" id="map-updates-auto" role="switch"></label>
+      </section>
     </aside>
   </main>
 

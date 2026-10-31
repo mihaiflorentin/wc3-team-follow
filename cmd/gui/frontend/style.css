@@ -712,6 +712,7 @@ h2 .icon { color: var(--lichen); }
 .log li[data-kind="pause"] { --kind: var(--game); }
 .log li[data-kind="problem"] { --kind: var(--danger); }
 .log li[data-kind="ban"] { --kind: var(--danger); }
+.log li[data-kind="map"] { --kind: var(--update); }
 .log time { display: block; color: var(--lichen); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .log .text { font-size: 13px; line-height: 1.4; }
 .log .empty { display: block; padding: 4px 0; }
@@ -1356,6 +1357,64 @@ dialog.sheet.ranking .fine, dialog.sheet.ranking h2 { margin: 0; }
 .updates-auto { background: var(--spruce); }
 .updates-auto:has(input:disabled) { cursor: not-allowed; opacity: .6; }
 .updates-auto input:disabled { cursor: not-allowed; }
+/* Maps section (ADR 0012): one row per tracked map. The row's left edge
+   carries its state in the status scale: blue while a newer version is
+   on its way, green once it's in the Maps folder, red when it failed. */
+
+.map-updates h2 .icon { color: var(--update); }
+.map-rows { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }
+.map-row {
+  --edge: var(--spruce-line);
+  padding: 10px 12px 10px 14px;
+  border-radius: 8px;
+  background: var(--spruce);
+  box-shadow: inset 3px 0 0 var(--edge);
+}
+.map-row[data-phase="missing"], .map-row[data-phase="downloading"] { --edge: var(--update); }
+.map-row[data-phase="done"], .map-row[data-phase="upToDate"] { --edge: var(--online); }
+.map-row[data-phase="failed"] { --edge: var(--danger); }
+.map-row-head { display: flex; align-items: flex-start; gap: 8px; }
+.map-row-name { min-width: 0; }
+.map-row-name strong { display: block; font-family: var(--display); font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+.map-row-name small { display: block; color: var(--lichen); font-size: 12px; overflow-wrap: anywhere; }
+.map-badge {
+  margin-left: auto;
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--edge);
+  background: color-mix(in srgb, var(--edge) 15%, transparent);
+}
+.map-row[data-phase="checking"] .map-badge, .map-row[data-phase="idle"] .map-badge { color: var(--lichen); background: var(--spruce-raised); }
+.map-versions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+.map-versions div { min-width: 0; }
+.map-versions dt { color: var(--lichen); font-size: 11.5px; }
+.map-versions dd {
+  margin: 0;
+  font-family: var(--display);
+  font-size: var(--step-1);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+/* The newest version is the one to have; it takes the row's colour once
+   it differs from what's installed. */
+.map-row[data-newer="true"] .map-latest dd { color: var(--update); }
+.map-row .update-track { margin-top: 10px; }
+.map-line { display: flex; gap: 6px; align-items: flex-start; margin: 8px 0 0; font-size: 13px; color: var(--lichen); font-variant-numeric: tabular-nums; }
+.map-line .icon { width: 14px; height: 14px; margin-top: 3px; flex: none; color: var(--edge); }
+.map-row[data-phase="done"] .map-line { color: var(--bone); }
+.map-row[data-phase="failed"] .map-line { color: var(--bone); }
+.map-page { margin-top: 6px; font-size: 12.5px; }
+
 .whats-new-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; }
 .whats-new-link .icon { width: 14px; height: 14px; color: var(--update); }
 .changelog { margin-top: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--spruce-line) 60%, transparent); }

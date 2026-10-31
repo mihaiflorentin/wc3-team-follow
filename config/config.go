@@ -19,6 +19,7 @@ type Config struct {
 	Storage *StorageConfig `mapstructure:"storage"`
 	Window  *WindowConfig  `mapstructure:"window"`
 	Updates *UpdatesConfig `mapstructure:"updates"`
+	Maps    *MapsConfig    `mapstructure:"maps"`
 }
 
 type AppConfig struct {
@@ -70,6 +71,32 @@ type UpdatesConfig struct {
 	CheckInterval string `mapstructure:"check_interval"`
 	RetryInterval string `mapstructure:"retry_interval"`
 	Timeout       string `mapstructure:"timeout"`
+}
+
+// MapsConfig is Keep maps up to date: the tracked maps and how their GitHub
+// Releases are checked (docs/adr/0012).
+type MapsConfig struct {
+	// APIURL is GitHub's API; it must use HTTPS.
+	APIURL string `mapstructure:"api_url"`
+	// CheckInterval is the time between automatic checks, RetryInterval the
+	// wait after a failed one and Timeout the limit on one request (and how
+	// long a download may receive nothing).
+	CheckInterval string `mapstructure:"check_interval"`
+	RetryInterval string `mapstructure:"retry_interval"`
+	Timeout       string `mapstructure:"timeout"`
+	// MaxSizeMB caps one map download.
+	MaxSizeMB int                `mapstructure:"max_size_mb"`
+	Tracked   []TrackedMapConfig `mapstructure:"tracked"`
+}
+
+// TrackedMapConfig is one tracked map.
+type TrackedMapConfig struct {
+	Name       string `mapstructure:"name"`
+	Repository string `mapstructure:"repository"`
+	// Pattern must match the whole file name, with a group named version.
+	Pattern string `mapstructure:"pattern"`
+	// Folder is the Maps subfolder downloads go into.
+	Folder string `mapstructure:"folder"`
 }
 
 // WindowConfig sizes the desktop window.

@@ -22,7 +22,9 @@ import (
 )
 
 const (
-	userAgent = "wc3-team-follow"
+	// UserAgent is the User-Agent every request to GitHub carries.
+	UserAgent = "wc3-team-follow"
+	userAgent = UserAgent
 	// maxRelease and maxChangelog bound what is read from the network.
 	maxRelease   = 1 << 20
 	maxChangelog = 512 << 10
@@ -225,6 +227,20 @@ func retryAt(resp *http.Response) (time.Time, bool) {
 		return time.Now().Add(time.Minute), true
 	}
 	return time.Time{}, false
+}
+
+// OnGitHub reports whether link is an HTTPS address on GitHub's own
+// download hosts, for other GitHub Releases clients such as map updates
+// (ADR 0012).
+func OnGitHub(link string) bool { return onGitHub(link) }
+
+// RateLimitError returns GitHub's rate limit as an error implementing
+// contract.RetryLater when resp is one, or nil.
+func RateLimitError(resp *http.Response) error {
+	if at, ok := retryAt(resp); ok {
+		return rateLimited{at: at}
+	}
+	return nil
 }
 
 // onGitHub reports whether link is an HTTPS address on GitHub's own hosts.

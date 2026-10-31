@@ -65,6 +65,10 @@ type Companion interface {
 	// Changelog is every released version in the changelog built into the
 	// app, newest first.
 	Changelog() []dto.ChangelogSection
+	// CheckMaps checks every tracked map for a newer release now, and with
+	// Keep maps up to date on downloads it when it's missing; the answer and
+	// the download's progress arrive with later states (ADR 0012).
+	CheckMaps() (dto.FollowState, error)
 	// SetNote saves the player's private note about the player with tag;
 	// empty text deletes it. Notes hold at most dto.MaxNoteLength characters
 	// and stay on this computer.

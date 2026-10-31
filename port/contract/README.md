@@ -15,6 +15,8 @@ This folder holds interfaces only. The data they accept and return are DTOs in `
 | `RecentPlayers` | outbound | `infrastructure/settings` | `mock/recent` |
 | `PlayerNotes` | outbound | `infrastructure/settings` | `mock/notes` |
 | `Ranking` | outbound | `infrastructure/settings` | `mock/ranking` |
+| `Updater` | outbound | `infrastructure/updater` | `mock/updater` |
+| `MapReleases` | outbound | `infrastructure/mapreleases` | `mock/mapreleases` |
 
 Each contract has:
 

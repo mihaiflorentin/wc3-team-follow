@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/mihaiflorentin/wc3-team-follow/domain/follow"
+	"github.com/mihaiflorentin/wc3-team-follow/domain/mapupdate"
 	"github.com/mihaiflorentin/wc3-team-follow/domain/update"
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
@@ -76,6 +77,12 @@ type Options struct {
 	// app until results can be trusted: some custom maps report every
 	// player as a winner.
 	RecordRanking bool
+	// TrackedMaps are the custom maps kept current from their GitHub
+	// Releases (ADR 0012); MapInterval and MapRetryInterval time their
+	// checks, zero using 6 hours and 30 minutes.
+	TrackedMaps      []dto.TrackedMap
+	MapInterval      time.Duration
+	MapRetryInterval time.Duration
 	// Now reads the clock; nil uses time.Now.
 	Now func() time.Time
 }
@@ -101,6 +108,8 @@ type Ports struct {
 	Updater contract.Updater
 	// Notes keeps the player's private notes about other players.
 	Notes contract.PlayerNotes
+	// MapReleases finds and downloads tracked maps' newest releases.
+	MapReleases contract.MapReleases
 }
 
 type Service struct {
@@ -115,8 +124,10 @@ type Service struct {
 	rankingDB contract.Ranking
 	updater   contract.Updater
 	notesDB   contract.PlayerNotes
-	logger    *slog.Logger
-	opts      Options
+	// mapReleases finds and downloads tracked maps' releases.
+	mapReleases contract.MapReleases
+	logger      *slog.Logger
+	opts        Options
 
 	mu      sync.Mutex
 	engine  *follow.Engine
@@ -135,6 +146,10 @@ type Service struct {
 	stopping bool
 	// cancelInstall stops the running update's download, or is nil.
 	cancelInstall context.CancelFunc
+	// mapUpdates decides when to check tracked maps and what to download;
+	// cancelMaps stops the running map check and its download, or is nil.
+	mapUpdates *mapupdate.Planner
+	cancelMaps context.CancelFunc
 	// recentSavedAt is when the recent players were last saved.
 	recentSavedAt time.Time
 	// notes are the player's notes, keyed by follow.NoteKey.
@@ -185,6 +200,7 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		rankingDB:   ports.Ranking,
 		updater:     ports.Updater,
 		notesDB:     ports.Notes,
+		mapReleases: ports.MapReleases,
 		logger:      logger,
 		opts:        opts,
 		subscribers: map[int]func(dto.FollowState){},
@@ -218,10 +234,12 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 	s.opts = opts
 
 	saved, err := s.prefs.Load()
-	checkUpdates, skipped := true, ""
+	checkUpdates, skipped, mapUpdates := true, "", true
 	if err == nil {
-		checkUpdates, skipped = saved.CheckUpdates, saved.SkippedVersion
+		checkUpdates, skipped, mapUpdates = saved.CheckUpdates, saved.SkippedVersion, saved.MapUpdates
 	}
+	s.mapUpdates = mapupdate.New(mapupdate.Options{Interval: opts.MapInterval, RetryInterval: opts.MapRetryInterval, Now: opts.Now},
+		opts.TrackedMaps, mapUpdates)
 	s.updates = update.New(update.Options{Version: opts.AppVersion, Interval: opts.UpdateInterval, RetryInterval: opts.UpdateRetryInterval,
 		ReleasesURL: opts.ReleasesURL, Now: opts.Now, System: opts.System, Executable: opts.Executable, Updated: opts.Updated},
 		checkUpdates, skipped)
@@ -344,6 +362,9 @@ func (s *Service) step(ctx context.Context) {
 	s.refresh()
 	if s.updates.Due() && s.updates.Begin(false) {
 		s.startCheck(ctx, false)
+	}
+	if s.mapUpdates.Due() && s.mapUpdates.Begin(false) {
+		s.startMapCheck(ctx, false)
 	}
 	start := s.session == nil && !s.connecting && !s.closing && !s.opts.Now().Before(s.nextDiscovery)
 	if start {
@@ -602,6 +623,7 @@ func (s *Service) snapshot() dto.FollowState {
 	state.Update = s.updates.State(update.Activity{InLobby: state.Busy && !state.InMatch, InMatch: state.InMatch,
 		AutoJoin: state.Enabled, AutoHost: state.Host.Enabled})
 	state.Update.WhatsNew = s.whatsNew.View()
+	state.MapUpdates = s.mapUpdates.State()
 	state.Notes = maps.Clone(s.notes)
 	if !state.Connected {
 		state.ConnectionHint = s.hint
@@ -617,8 +639,11 @@ func (s *Service) Configure(cfg dto.FollowConfig) (dto.FollowState, error) {
 	if err == nil && cfg.CheckUpdates != nil {
 		s.updates.SetAutomatic(*cfg.CheckUpdates)
 	}
+	if err == nil && cfg.MapUpdates != nil {
+		s.setMapUpdates(*cfg.MapUpdates)
+	}
 	s.logger.Info("follow.configure", configAttrs(cfg, err)...)
-	if err == nil && (cfg.Tags != nil || cfg.CheckUpdates != nil || cfg.IncludeTeam != nil || cfg.AskPassword != nil || cfg.JoinHostTeam != nil ||
+	if err == nil && (cfg.Tags != nil || cfg.CheckUpdates != nil || cfg.MapUpdates != nil || cfg.IncludeTeam != nil || cfg.AskPassword != nil || cfg.JoinHostTeam != nil ||
 		cfg.Blacklist != nil || cfg.BlacklistAdd != nil || cfg.BlacklistRemove != nil || cfg.AutoBan != nil ||
 		cfg.BlacklistManualBans != nil) {
 		if saveErr := s.save(); saveErr != nil {
@@ -665,6 +690,9 @@ func configAttrs(cfg dto.FollowConfig, err error) []any {
 	}
 	if cfg.CheckUpdates != nil {
 		attrs = append(attrs, slog.Bool("check_updates", *cfg.CheckUpdates))
+	}
+	if cfg.MapUpdates != nil {
+		attrs = append(attrs, slog.Bool("map_updates", *cfg.MapUpdates))
 	}
 	if cfg.Diagnostic != nil {
 		attrs = append(attrs, slog.Bool("preview", *cfg.Diagnostic))
@@ -740,7 +768,7 @@ func (s *Service) save() error {
 		JoinHostTeam: s.engine.JoinHostTeam(),
 		MapsFolder:   s.mapsFolder, Host: &host,
 		Blacklist: s.engine.Blacklist(), AutoBan: s.engine.AutoBan(), BlacklistManualBans: s.engine.BlacklistManualBans(),
-		CheckUpdates: s.updates.Automatic(), SkippedVersion: s.updates.SkippedVersion(),
+		CheckUpdates: s.updates.Automatic(), SkippedVersion: s.updates.SkippedVersion(), MapUpdates: s.mapUpdates.Enabled(),
 		LastVersion: s.whatsNew.LastVersion(),
 	})
 }

@@ -18,7 +18,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	tags := []string{"One#1234", "Two#2345", "Three#3456"}
 	if err := settings.New(dir).Save(dto.Preferences{Tags: tags, IncludeTeam: false, JoinHostTeam: true, AutoBan: true, BlacklistManualBans: true,
-		CheckUpdates: true}); err != nil {
+		CheckUpdates: true, MapUpdates: true}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := settings.New(dir).Load()
@@ -32,6 +32,25 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	content, _ := os.ReadFile(filepath.Join(dir, "settings", "friends.json"))
 	if err := json.Unmarshal(content, &raw); err != nil || len(raw) != 2 {
 		t.Fatalf("file holds more than tags and includeTeam: %s", content)
+	}
+}
+
+func TestMapUpdatesIsOnUnlessSavedOff(t *testing.T) {
+	dir := t.TempDir()
+	if got, err := settings.New(dir).Load(); err != nil || !got.MapUpdates {
+		t.Fatalf("no file: loaded %+v, %v", got, err)
+	}
+	// A file saved before map updates existed has no mapUpdates.
+	_ = os.MkdirAll(filepath.Join(dir, "settings"), 0o700)
+	_ = os.WriteFile(filepath.Join(dir, "settings", "friends.json"), []byte(`{"tags":[],"includeTeam":true}`), 0o600)
+	if got, err := settings.New(dir).Load(); err != nil || !got.MapUpdates {
+		t.Fatalf("older file: loaded %+v, %v", got, err)
+	}
+	if err := settings.New(dir).Save(dto.Preferences{Tags: []string{}, IncludeTeam: true, MapUpdates: false}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := settings.New(dir).Load(); err != nil || got.MapUpdates {
+		t.Fatalf("saved off: loaded %+v, %v", got, err)
 	}
 }
 

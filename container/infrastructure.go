@@ -4,17 +4,21 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/mihaiflorentin/wc3-team-follow/config"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/discovery"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/gamesocket"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/keyboard"
+	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/mapreleases"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/maps"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/settings"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/updater"
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
+	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
 // InfrastructureContainer holds the lazily built outbound adapters. Every
@@ -33,6 +37,7 @@ type InfrastructureContainer struct {
 	playerNotes     lazy[contract.PlayerNotes]
 	ranking         lazy[contract.Ranking]
 	updater         lazy[contract.Updater]
+	mapReleases     lazy[contract.MapReleases]
 }
 
 // Updater returns the GitHub Releases client named by [updates]. It talks
@@ -55,6 +60,52 @@ func (s *ServiceContainer) Updater() (contract.Updater, error) {
 			Executable: s.config.App.Executable,
 		}, s.logger), nil
 	})
+}
+
+// MapReleases returns the GitHub Releases client for tracked maps named by
+// [maps]. Like the updater, it talks only to GitHub's hosts over HTTPS
+// (docs/adr/0012).
+func (s *ServiceContainer) MapReleases() (contract.MapReleases, error) {
+	return s.infrastructure.mapReleases.get(func() (contract.MapReleases, error) {
+		cfg := s.config.Maps
+		if cfg == nil {
+			return nil, errors.New("missing [maps] config section")
+		}
+		if u, err := url.Parse(cfg.APIURL); err != nil || u.Scheme != "https" || u.Host == "" {
+			return nil, fmt.Errorf("invalid maps.api_url %q: it must be an HTTPS address", cfg.APIURL)
+		}
+		timeout, err := time.ParseDuration(cfg.Timeout)
+		if err != nil {
+			return nil, fmt.Errorf("invalid maps.timeout %q: %w", cfg.Timeout, err)
+		}
+		if cfg.MaxSizeMB < 0 {
+			return nil, fmt.Errorf("invalid maps.max_size_mb %d", cfg.MaxSizeMB)
+		}
+		return mapreleases.New(updater.NewClient(timeout), mapreleases.Options{APIURL: cfg.APIURL, MaxSize: int64(cfg.MaxSizeMB) << 20},
+			s.logger), nil
+	})
+}
+
+// trackedMaps checks [maps] tracked: a name, an owner/name repository, a
+// pattern with a version group and a Maps subfolder inside the Maps folder.
+func trackedMaps(cfg *config.MapsConfig) ([]dto.TrackedMap, error) {
+	var out []dto.TrackedMap
+	for i, t := range cfg.Tracked {
+		owner, name, ok := strings.Cut(t.Repository, "/")
+		switch {
+		case strings.TrimSpace(t.Name) == "":
+			return nil, fmt.Errorf("maps.tracked[%d] has no name", i)
+		case !ok || owner == "" || name == "" || strings.ContainsAny(name, "/\\?#% ") || strings.Contains(t.Repository, ".."):
+			return nil, fmt.Errorf("maps.tracked[%d].repository %q isn't owner/name", i, t.Repository)
+		case !filepath.IsLocal(filepath.FromSlash(t.Folder)):
+			return nil, fmt.Errorf("maps.tracked[%d].folder %q must be inside the Maps folder", i, t.Folder)
+		}
+		if _, err := maps.Pattern(t.Pattern); err != nil {
+			return nil, fmt.Errorf("maps.tracked[%d]: %w", i, err)
+		}
+		out = append(out, dto.TrackedMap{Name: t.Name, Repository: t.Repository, Pattern: t.Pattern, Folder: t.Folder})
+	}
+	return out, nil
 }
 
 // MapsLocator returns the Maps folder locator for this operating system.

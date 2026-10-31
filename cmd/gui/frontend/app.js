@@ -266,6 +266,7 @@ function render(s) {
   renderBlacklist(s);
   renderLog(s);
   renderUpdate(s);
+  renderMapUpdates(s);
   refreshTip();
 }
 
@@ -834,6 +835,9 @@ $('recent-clear-yes').onclick = async () => {
 
 // Activity icons, by what the line is about.
 const logKinds = [
+  // Map updates (ADR 0012): a download starting and finishing.
+  [/^Downloading .+ into your Maps folder\.$/, 'map', 'update'],
+  [/ is ready in your Maps folder\.$/, 'joined', 'map'],
   [/by mistake/, 'problem', 'alert'],
   [/^Banned |blacklist/, 'ban', 'ban'],
   [/^Asked to join|^Confirming|^Password sent/, 'join', 'enter'],
@@ -2675,6 +2679,131 @@ $('updates-releases').onclick = async () => {
   try { await bridge.OpenReleasesPage(); } catch (err) { $('error').textContent = String(err?.message ?? err); }
 };
 
+/* Maps: tracked maps kept current from their GitHub Releases (ADR 0012).
+   Each row shows the installed and newest versions, and while a map
+   downloads, a progress bar and how far it is. Everything is plain text. */
+
+const wholeMB = n => `${Math.max(0, Math.round(n / 1048576))} MB`;
+
+// mapLine is the row's sentence: the download's progress, or the message
+// the companion wrote.
+function mapLine(m) {
+  if (m.phase === 'downloading') {
+    const p = m.progress;
+    const what = `Downloading ${m.name} ${m.latest}…`;
+    if (!p || !p.done) return `${what} Starting.`;
+    return p.total ? `${what} ${Math.round(p.done / 1048576)} of ${wholeMB(p.total)}` : `${what} ${wholeMB(p.done)}`;
+  }
+  if (m.message) return m.message;
+  if (m.phase === 'upToDate') return 'You have the newest version.';
+  if (m.phase === 'checking') return 'Checking GitHub…';
+  return '';
+}
+
+const mapBadges = {
+  checking: 'Checking',
+  upToDate: 'Up to date',
+  missing: 'Newer version',
+  downloading: 'Downloading',
+  done: 'Ready',
+  failed: 'Not downloaded',
+};
+
+function trackedMapRow(m) {
+  const li = el('li', 'map-row');
+  li.dataset.phase = m.phase;
+  li.dataset.newer = String(Boolean(m.latest && m.latest.toLowerCase() !== (m.installed || '').toLowerCase()));
+  const head = el('div', 'map-row-head');
+  const name = el('div', 'map-row-name');
+  name.append(el('strong', '', m.name), el('small', '', m.repository));
+  head.append(name);
+  // A failed check found no release; a failed download did.
+  const badge = m.phase === 'failed' && !m.latest ? 'Not checked' : mapBadges[m.phase];
+  if (badge) head.append(el('span', 'map-badge', badge));
+  li.append(head);
+
+  const versions = el('dl', 'map-versions');
+  const pair = (label, value, cls) => {
+    const box = el('div', cls);
+    box.append(el('dt', '', label), el('dd', '', value));
+    versions.append(box);
+  };
+  pair('Installed', m.installed || 'None found', 'map-installed');
+  pair('Newest', m.latest || 'Not checked', 'map-latest');
+  li.append(versions);
+
+  if (m.phase === 'downloading') {
+    const p = m.progress;
+    const pct = p?.total ? Math.min(100, Math.round((p.done / p.total) * 100)) : null;
+    const bar = el('div', 'update-track');
+    bar.setAttribute('role', 'progressbar');
+    bar.setAttribute('aria-label', `Downloading ${m.name} ${m.latest}`);
+    bar.setAttribute('aria-valuemin', '0');
+    bar.setAttribute('aria-valuemax', '100');
+    if (pct === null) bar.toggleAttribute('data-busy', true); else bar.setAttribute('aria-valuenow', String(pct));
+    bar.style.setProperty('--done', `${pct ?? 0}%`);
+    bar.append(el('span'));
+    li.append(bar);
+  }
+  const line = mapLine(m);
+  if (line) {
+    const text = el('p', 'map-line');
+    if (m.phase === 'failed') text.append(icon('alert'));
+    if (m.phase === 'done') text.append(icon('check'));
+    text.append(el('span', '', line));
+    if (m.phase === 'downloading') text.setAttribute('aria-live', 'polite');
+    li.append(text);
+  }
+  if (m.pageUrl) {
+    const link = el('button', 'link map-page', 'Release page');
+    link.type = 'button';
+    link.onclick = async () => {
+      $('error').textContent = '';
+      try { await bridge.OpenMapReleasePage(m.name); } catch (err) { $('error').textContent = String(err?.message ?? err); }
+    };
+    li.append(link);
+  }
+  return li;
+}
+
+let mapRowsSignature = '';
+
+function renderMapUpdates(s) {
+  const u = s.mapUpdates;
+  const panel = $('map-updates');
+  panel.hidden = !u?.maps?.length;
+  if (panel.hidden) return;
+  $('map-updates-count').textContent = u.maps.length === 1 ? '1 tracked' : `${u.maps.length} tracked`;
+  // Rebuild the rows only when they change, so focus survives the
+  // once-a-second states and the bar grows from where it was.
+  const signature = JSON.stringify(u.maps);
+  if (signature !== mapRowsSignature) {
+    mapRowsSignature = signature;
+    const list = $('map-updates-list');
+    const hadFocus = list.contains(document.activeElement);
+    const before = [...list.querySelectorAll('.update-track')].map(b => b.style.getPropertyValue('--done'));
+    list.replaceChildren(...u.maps.map(trackedMapRow));
+    list.querySelectorAll('.update-track').forEach((bar, i) => {
+      if (!before[i]) return;
+      const target = bar.style.getPropertyValue('--done');
+      bar.style.setProperty('--done', before[i]);
+      requestAnimationFrame(() => bar.style.setProperty('--done', target));
+    });
+    if (hadFocus) list.querySelector('button')?.focus();
+  }
+  const status = $('map-updates-status');
+  const at = u.lastChecked && new Date(u.lastChecked).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  status.textContent = u.message || (u.checking ? '' : at ? `Last checked at ${at}.` : u.enabled ? 'Not checked yet.' : 'Keep maps up to date is off.');
+  status.dataset.tone = u.message ? 'problem' : '';
+  const check = $('map-updates-check');
+  check.disabled = u.checking;
+  check.querySelector('span').textContent = u.checking ? 'Checking…' : 'Check now';
+  $('map-updates-auto').checked = Boolean(u.enabled);
+}
+
+$('map-updates-check').onclick = () => act(() => bridge.CheckMaps());
+$('map-updates-auto').onchange = e => act(() => bridge.SetMapUpdates(e.target.checked));
+
 /* Demo bridge: used only when the page runs outside the app, to preview
    the design in a browser. Pick a scene with ?scene=watching|first|live|
    paused|password|waiting|many|linux|unverified|host-waiting|host-lobby|
@@ -2684,6 +2813,7 @@ $('updates-releases').onclick = async () => {
    update-latest|update-offline|update-dev|update-downloading|update-verifying|
    update-installing|update-failed|update-translocated|update-linux|update-after-linux|
    update-after-mac|whats-new|whats-new-older|
+   map-updates|map-updates-downloading|map-updates-done|map-updates-failed|map-updates-off|map-updates-offline|
    changelog|changelog-dev|
    menu-recent|menu-blacklist|menu-group|notes|notes-search|menu-note|
    note-add|note-edit|note-long|note-view|tooltip|tooltip-blacklist|
@@ -2802,7 +2932,15 @@ function demoBridge() {
     ['Garrosh#7781', 'Left three Castle Fight games in a row when losing.', 60 * 26],
     ['Kaelthas#7710', 'Met in a Legion TD lobby. Plays well, quiet in chat.', 60 * 24 * 20],
   ].map(([tag, text, mins]) => [key(tag), {text, updated: at(mins)}]));
+  // Map updates: Legion TD from team-oze/Legion-TD, as config.toml tracks it.
+  const mapTotal = 31657165;
+  const legion = {name: 'Legion TD', repository: 'team-oze/Legion-TD', installed: '11.4c-hf9', latest: '11.4c-hf9', phase: 'upToDate',
+    progress: null, message: '', pageUrl: 'https://github.com/team-oze/Legion-TD/releases/tag/v11.4c-hf9'};
+  const mapsIdle = {enabled: true, checking: false, message: '', lastChecked: at(25), maps: [legion]};
+  const mapsDownloading = {...mapsIdle, checking: true, maps: [{...legion, installed: '11.4c-hf5', phase: 'downloading', progress: {done: 12 * 1048576 + 400000, total: mapTotal}}]};
+  const mapsLog = line => [...s.log.slice(0, 3), {time: at(1), message: 'Downloading Legion TD 11.4c-hf9 into your Maps folder.'}, ...(line ? [{time: at(0), message: line}] : [])];
   const s = {
+    mapUpdates: mapsIdle,
     update: scene.startsWith('update') ? updateOffer : updateIdle,
     notes,
     recent, lobbyTags: ['Medivh#3310', 'Varimathras#2207'],
@@ -2906,6 +3044,17 @@ function demoBridge() {
     'update-after-linux': {update: {...updateIdle, currentVersion: '0.9.0', whatsNew: null,
       after: {version: '0.9.0', setcap: "sudo setcap cap_sys_ptrace=ep '/home/player/Apps/wc3-team-follow/wc3-team-follow'", accessibility: false}}},
     'update-after-mac': {update: {...updateIdle, currentVersion: '0.9.0', whatsNew: null, after: {version: '0.9.0', setcap: '', accessibility: true}}},
+    'map-updates': {},
+    'map-updates-downloading': {mapUpdates: mapsDownloading, log: mapsLog('')},
+    'map-updates-done': {mapUpdates: {...mapsIdle, lastChecked: at(0), maps: [{...legion, phase: 'done', message: 'Legion TD 11.4c-hf9 is ready in your Maps folder.'}]},
+      log: mapsLog('Legion TD 11.4c-hf9 is ready in your Maps folder.')},
+    'map-updates-failed': {mapUpdates: {...mapsIdle, lastChecked: at(0), maps: [{...legion, installed: '11.4c-hf5', phase: 'failed',
+      message: 'Legion TD 11.4c-hf9 couldn’t be downloaded. The download of Legion TD 11.4c-hf9 didn’t match its published checksum, so it wasn’t kept.'}]},
+      log: mapsLog('Legion TD 11.4c-hf9 couldn’t be downloaded. The download of Legion TD 11.4c-hf9 didn’t match its published checksum, so it wasn’t kept.')},
+    'map-updates-off': {mapUpdates: {...mapsIdle, enabled: false, maps: [{...legion, installed: '11.4c-hf5', phase: 'missing',
+      message: 'Legion TD 11.4c-hf9 is out. Turn on Keep maps up to date to download it.'}]}},
+    'map-updates-offline': {mapUpdates: {...mapsIdle, lastChecked: null, maps: [{...legion, installed: '11.4c-hf5', latest: '', pageUrl: '', phase: 'failed',
+      message: 'Team Follow couldn’t reach GitHub to check Legion TD. Check your internet connection and try again.'}]}},
     'whats-new': {update: updated},
     'whats-new-older': {update: {...updated, whatsNew: {version: '0.9.0', since: '', changes: changes.slice(0, 1), show: true}}},
     changelog: {update: updated},
@@ -2929,7 +3078,7 @@ function demoBridge() {
   if (s.enabled) watch();
   const clone = () => structuredClone(s);
   let demoInstall = 0;
-  return {
+  const api = {
     State: async () => clone(),
     ExecutablePath: async () => '/home/me/Apps/wc3-team-follow',
     Diagnostics: async () => JSON.stringify({version: s.version, connected: s.connected, platform: 'demo', logFolder: '/home/me/.config/WarcraftTeamFollow/logs'}, null, 2),
@@ -2975,6 +3124,41 @@ function demoBridge() {
       }, 450);
       return clone();
     },
+    // Check now walks through a download of the newest Legion TD when it's
+    // missing and the switch is on.
+    CheckMaps: async () => {
+      const row = s.mapUpdates.maps[0];
+      const missing = row.installed !== row.latest || row.phase === 'failed';
+      if (!s.mapUpdates.enabled || !missing) {
+        s.mapUpdates = {...s.mapUpdates, lastChecked: new Date().toISOString(), message: ''};
+        return clone();
+      }
+      let done = 0;
+      s.mapUpdates = {...s.mapUpdates, checking: true, message: '', maps: [{...row, phase: 'downloading', message: '', progress: {done, total: mapTotal}}]};
+      s.log.push({time: new Date().toISOString(), message: 'Downloading Legion TD 11.4c-hf9 into your Maps folder.'});
+      clearInterval(demoInstall);
+      demoInstall = setInterval(() => {
+        done = Math.min(mapTotal, done + 2600000);
+        const r = s.mapUpdates.maps[0];
+        if (done < mapTotal) {
+          s.mapUpdates = {...s.mapUpdates, maps: [{...r, progress: {done, total: mapTotal}}]};
+        } else {
+          clearInterval(demoInstall);
+          const ready = 'Legion TD 11.4c-hf9 is ready in your Maps folder.';
+          s.mapUpdates = {...s.mapUpdates, checking: false, lastChecked: new Date().toISOString(),
+            maps: [{...r, phase: 'done', installed: r.latest, progress: null, message: ready}]};
+          s.log.push({time: new Date().toISOString(), message: ready});
+        }
+        render(clone());
+      }, 300);
+      return clone();
+    },
+    SetMapUpdates: async on => {
+      s.mapUpdates = {...s.mapUpdates, enabled: on};
+      // Switching on checks at once, as the companion does.
+      return on ? api.CheckMaps() : clone();
+    },
+    OpenMapReleasePage: async () => {},
     CancelUpdate: async () => { clearInterval(demoInstall); s.update = {...s.update, phase: 'available', progress: null}; return clone(); },
     DismissUpdateNotes: async () => { s.update = {...s.update, after: null}; return clone(); },
     OpenReleasesPage: async () => {},
@@ -3029,4 +3213,5 @@ function demoBridge() {
       return clone();
     },
   };
+  return api;
 }

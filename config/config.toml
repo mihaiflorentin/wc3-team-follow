@@ -44,3 +44,25 @@ repository     = "mihaiflorentin/wc3-team-follow"
 check_interval = "6h"
 retry_interval = "30m"
 timeout        = "20s"
+
+[maps]
+# Keep maps up to date (docs/adr/0012): Team Follow checks each tracked map's
+# GitHub Releases and downloads the newest version into the Maps folder when
+# it's missing, checked against the SHA-256 GitHub publishes. Only GitHub's own
+# hosts are contacted, over HTTPS. Old versions are never deleted or replaced.
+api_url        = "https://api.github.com"
+check_interval = "6h"
+retry_interval = "30m"
+timeout        = "20s"
+# Largest map file downloaded, in MB.
+max_size_mb = 256
+
+# Each tracked map: its name in the window, the GitHub repository that
+# publishes official releases, a pattern the whole file name must match with a
+# group named version, and the Maps subfolder downloads go into. Download for
+# play only; Team Follow never redistributes a map.
+[[maps.tracked]]
+name       = "Legion TD"
+repository = "team-oze/Legion-TD"
+pattern    = '(?i)^Legion_TD_(?P<version>\d[^_/\\ ]*)_Team_?OZE(?: \(\d+\))?\.w3x$'
+folder     = "Download"
