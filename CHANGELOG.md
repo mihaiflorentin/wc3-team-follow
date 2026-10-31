@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-31
+
 ### Added
 
 - **Blacklist players who leave Legion TD early**: a new switch in the Blacklist tab, off until you turn it on. After each Legion TD match you play, Team Follow reads the game's replay of it and adds anyone who left before the match's final round began, or before the others voted the game over with -draw or -ff. The rounds come from the replay itself. It never adds you, your Battle.net friends or the people you follow. Each player it adds gets the reason "Left Legion TD early (round 3)", with the round they left in, which is also added to your note about them, and Activity says who was added.
@@ -159,7 +161,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A friends picker, watching before joining, and log files for reporting problems.
 - Warcraft Team Follow rebuilt in Go, with one app for Windows, macOS and Linux.
 
-[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.6...v0.10.0
 [0.9.6]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.4...v0.9.5
