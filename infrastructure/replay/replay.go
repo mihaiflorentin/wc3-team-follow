@@ -84,7 +84,8 @@ func Parse(r io.Reader) (dto.Replay, error) {
 	g := readGameData(&c, meta.post202, warn)
 	out.GameTime = g.elapsed
 	out.Leaves = g.leaves
-	out.Chat = g.chat
+	out.Chat = mergeChat(g.chat, g.actionChat)
+	out.Orders = g.orders
 	if len(g.leaves) > 0 {
 		out.SaverID = g.leaves[len(g.leaves)-1].PlayerID
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/discovery"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/gamesocket"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/keyboard"
+	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/mapdata"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/mapreleases"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/maps"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/replay"
@@ -40,6 +41,7 @@ type InfrastructureContainer struct {
 	updater         lazy[contract.Updater]
 	mapReleases     lazy[contract.MapReleases]
 	replayReader    lazy[contract.ReplayReader]
+	mapObjects      lazy[contract.MapObjects]
 }
 
 // Updater returns the GitHub Releases client named by [updates]. It talks
@@ -128,6 +130,14 @@ func (s *ServiceContainer) MapLibrary() (contract.MapLibrary, error) {
 func (s *ServiceContainer) ReplayReader() (contract.ReplayReader, error) {
 	return s.infrastructure.replayReader.get(func() (contract.ReplayReader, error) {
 		return replay.New(), nil
+	})
+}
+
+// MapObjects returns the reader of object names in map files. It needs no
+// settings.
+func (s *ServiceContainer) MapObjects() (contract.MapObjects, error) {
+	return s.infrastructure.mapObjects.get(func() (contract.MapObjects, error) {
+		return mapdata.New(), nil
 	})
 }
 

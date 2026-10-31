@@ -23,7 +23,8 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `domain/mapupdate/` | Keep maps up to date's decisions (ADR 0012): when to check tracked maps, what to download, retries and each map's state and Activity lines; which tracked map a file is and its newest installed version, for Auto-host (`newest.go`). Pure. |
 | `infrastructure/maps/` | Lists and searches maps in a Maps folder, and finds a tracked map's installed versions by its file-name pattern (`MapLibrary`, `installed.go`). |
 | `infrastructure/mapreleases/` | Finds a tracked map's newest GitHub Release with its SHA-256 digest and downloads it into the Maps folder, verified, never over an existing file (`contract.MapReleases`, ADR 0012); HTTPS to GitHub's hosts only, through the updater's client. |
-| `infrastructure/replay/` | Prototype: reads replay files (`.w3g`, Reforged 0x38/0x39 included) into `dto.Replay` (`contract.ReplayReader`); not used by the window yet. Only reads the file it is given. See `docs/research/replay-parser.md` and its `NOTICE`. |
+| `infrastructure/replay/` | Prototype: reads replay files (`.w3g`, Reforged 0x38/0x39 included) into `dto.Replay` (`contract.ReplayReader`): players, leaves, chat (with lines only the map's chat actions hold) and orders naming object types; not used by the window yet. Only reads the file it is given. See `docs/research/replay-parser.md` and its `NOTICE`. |
+| `infrastructure/mapdata/` | Reads unit, item, upgrade and ability names from a map file (an MPQ archive, protected maps included) (`contract.MapObjects`), so replay orders can be named. Only reads the file it is given. |
 | `infrastructure/gamesocket/` | Loopback websocket to the game with the command allowlist; a reader goroutine queues events so `TryReceive` can return the ones already waiting. |
 | `infrastructure/keyboard/` | Types one line in the match chat with keystrokes (`contract.GameKeyboard`, ADR 0007): the sequence and its checks in `keyboard.go`, `SendInput` in `platform_windows.go`, `CGEventPost` in `platform_darwin.go`, not supported elsewhere yet. |
 | `infrastructure/updater/` | Finds the newest stable release and its CHANGELOG.md through GitHub's REST API, downloads and verifies its file (`install.go`), unpacks it safely (`archive.go`) and replaces the app (`replace.go`, chosen per OS in `platform_<os>.go`) (`contract.Updater`, ADR 0009); HTTPS to GitHub's hosts only. |
@@ -134,7 +135,7 @@ To add a dependency (an outbound adapter or a domain service):
 | `make package-linux-amd64` | Linux tarball into `dist/` (Linux only, needs `libwebkit2gtk-4.1-dev`). |
 | `./bin/wc3-team-follow discover` | Find the running game; prints pid, version and port, never the session. |
 | `./bin/wc3-team-follow type [--delay 3s] [--ask-permission] -- "<text>"` | Type one line in the match chat with keystrokes after the delay, only while the game is in front; never brings it forward. For live checks. |
-| `./bin/wc3-team-follow replay <file.w3g> [--json]` | Print what a replay holds (players, leaves, winner, action counts); chat lines only with `--json`. |
+| `./bin/wc3-team-follow replay <file.w3g> [--json] [--map <file.w3x>]` | Print what a replay holds (players, leaves, winner, action counts, each player's most frequent orders named from the map); chat lines only with `--json`. |
 | `./bin/wc3-team-follow say "<text>" [--wait 10s]` | Type one line in the game chat and print the game's events (names, chat lines, channel names only). For live checks. |
 
 Before finishing a change, run `make fmt`, `go vet ./...` and `go test ./...`.

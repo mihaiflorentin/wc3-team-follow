@@ -4,8 +4,10 @@ import "time"
 
 // Replay is what a Warcraft III replay file (.w3g) says about one game. It
 // holds only what the file records: the lobby (map, slots, players), who
-// left when and with which result, chat lines and how many actions each
-// player sent. Kills, gold and the score screen are not in replays.
+// left when and with which result, chat lines, how many actions each player
+// sent and the units, upgrades and research they ordered. Kills, damage, gold
+// and the score screen are not in replays: the game works them out again
+// from the orders when a replay is watched.
 type Replay struct {
 	// VersionNumber is the header's game version, such as 10200; Version is
 	// it formatted the way the community does ("3.00" for 10200).
@@ -40,8 +42,11 @@ type Replay struct {
 	// Leaves are the leave records in the order they happened.
 	Leaves []ReplayLeave `json:"leaves"`
 	// Chat holds the chat lines typed during the game.
-	Chat   []ReplayChat `json:"chat"`
-	Winner ReplayWinner `json:"winner"`
+	Chat []ReplayChat `json:"chat"`
+	// Orders are the orders that name an object type (training or building
+	// a unit, buying, researching), in the order they were given.
+	Orders []ReplayOrder `json:"orders"`
+	Winner ReplayWinner  `json:"winner"`
 
 	// RandomSeed, SelectMode and StartSpots come from the slot table.
 	RandomSeed uint32 `json:"randomSeed"`
@@ -145,9 +150,24 @@ type ReplayLeave struct {
 type ReplayChat struct {
 	Time     time.Duration `json:"time"`
 	PlayerID int           `json:"playerId"`
-	// Mode is "all", "allies", "observers" or "private".
+	// Mode is "all", "allies", "observers" or "private" for a chat record,
+	// which holds only what the saver could see. It is "unseen" for a line
+	// read from the chat action the map's script receives, which every
+	// player's game records: another team's allies chat, whose channel the
+	// action doesn't say.
 	Mode    string `json:"mode"`
 	Message string `json:"message"`
+}
+
+// ReplayOrder is one order naming an object type: a unit trained or built,
+// an item or unit bought, an upgrade or research.
+type ReplayOrder struct {
+	Time     time.Duration `json:"time"`
+	PlayerID int           `json:"playerId"`
+	// Code is the object's four-character type id, such as "h04P".
+	Code string `json:"code"`
+	// Name is the object's name in the map, when the map was read.
+	Name string `json:"name,omitempty"`
 }
 
 // ReplayWinner is the parser's best judgement of who won.

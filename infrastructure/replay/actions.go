@@ -8,10 +8,17 @@ type actionStats struct {
 	lastDeselt bool
 }
 
+// blockFinds is what one command block names: the object type of each
+// order that names one, and the text of each map chat action.
+type blockFinds struct {
+	codes []string
+	chat  []string
+}
+
 // readActions decodes one command block's actions, counting them. It stops
 // at the first unknown action, whose length can't be known, and returns its
 // id with ok false.
-func readActions(b []byte, post202 bool, s *actionStats) (unknown byte, ok bool) {
+func readActions(b []byte, post202 bool, s *actionStats, f *blockFinds) (unknown byte, ok bool) {
 	c := cursor{b: b}
 	s.lastDeselt = false
 	for c.left() > 0 {
@@ -24,7 +31,7 @@ func readActions(b []byte, post202 bool, s *actionStats) (unknown byte, ok bool)
 			// ids above 0x77.
 			id++
 		}
-		counted, known := readAction(&c, id, s)
+		counted, known := readAction(&c, id, s, f)
 		if !known {
 			return raw, false
 		}
@@ -40,7 +47,13 @@ func readActions(b []byte, post202 bool, s *actionStats) (unknown byte, ok bool)
 }
 
 // readAction skips one action's body and says whether it counts for APM.
-func readAction(c *cursor, id int, s *actionStats) (apm, known bool) {
+// It keeps what f collects: an order's object type and a map chat line.
+func readAction(c *cursor, id int, s *actionStats, f *blockFinds) (apm, known bool) {
+	if id >= 0x10 && id <= 0x14 && c.left() >= 6 {
+		if code, ok := objectCode(c.b[c.off+2 : c.off+6]); ok {
+			f.codes = append(f.codes, code)
+		}
+	}
 	switch id {
 	case 0x01, 0x03:
 		c.skip(1)
@@ -112,9 +125,11 @@ func readAction(c *cursor, id int, s *actionStats) (apm, known bool) {
 		c.skip(1 + 4)
 	case 0x51: // transfer resources
 		c.skip(1 + 4 + 4)
-	case 0x60:
+	case 0x60: // a chat line, as the map's chat triggers receive it
 		c.skip(8)
-		c.cstr()
+		if line := c.cstr(); line != "" && c.err == nil {
+			f.chat = append(f.chat, line)
+		}
 	case 0x61: // Esc
 		return true, true
 	case 0x62:
@@ -179,4 +194,17 @@ func skipCacheUnit(c *cursor) {
 	c.skip(int(c.u32()) * 8)       // abilities
 	c.skip(3 * 4)                  // life, mana, sight
 	c.skip(int(c.u32())*4 + 4 + 2) // damage, defense, control groups
+}
+
+// objectCode reads an order's item id as an object type id such as "h04P":
+// four letters or digits, stored backwards. Built-in orders such as move or
+// attack are numbers (0x000D0003) and are not object types.
+func objectCode(b []byte) (string, bool) {
+	code := []byte{b[3], b[2], b[1], b[0]}
+	for _, ch := range code {
+		if (ch < '0' || ch > '9') && (ch < 'A' || ch > 'Z') && (ch < 'a' || ch > 'z') {
+			return "", false
+		}
+	}
+	return string(code), true
 }

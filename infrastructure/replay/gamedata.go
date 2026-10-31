@@ -2,6 +2,7 @@ package replay
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
@@ -29,6 +30,10 @@ type gameData struct {
 	stats      map[int]*actionStats
 	lastAction map[int]time.Duration
 	unknown    map[byte]int // unknown action ids and how often each stopped a block
+	orders     []dto.ReplayOrder
+	// actionChat holds the chat lines read from map chat actions, before
+	// the ones the chat records also hold are dropped.
+	actionChat []dto.ReplayChat
 }
 
 func readGameData(c *cursor, post202 bool, warn func(string, ...any)) gameData {
@@ -62,8 +67,15 @@ func readGameData(c *cursor, post202 bool, warn func(string, ...any)) gameData {
 					g.stats[pid] = s
 				}
 				g.lastAction[pid] = g.elapsed
-				if bad, ok := readActions(actions, post202, s); !ok {
+				var found blockFinds
+				if bad, ok := readActions(actions, post202, s, &found); !ok {
 					g.unknown[bad]++
+				}
+				for _, code := range found.codes {
+					g.orders = append(g.orders, dto.ReplayOrder{Time: g.elapsed, PlayerID: pid, Code: code})
+				}
+				for _, line := range found.chat {
+					g.actionChat = append(g.actionChat, dto.ReplayChat{Time: g.elapsed, PlayerID: pid, Mode: "unseen", Message: line})
 				}
 			}
 			if slot.err != nil {
@@ -140,4 +152,36 @@ func chatMode(v uint32) string {
 		return "observers"
 	}
 	return "private"
+}
+
+// sameLine is how far apart a chat record and the map chat action for the
+// same line may be. The record comes between time slots and the action in
+// one, so they differ by about one slot.
+const sameLine = 2 * time.Second
+
+// mergeChat adds the map chat actions that no chat record holds: the lines
+// the saver couldn't see. The game records one action for each of the map's
+// chat triggers a line matches, so actions with the same player, time and
+// text are one line. A record and an action match when the same player sent
+// the same text within sameLine; each record matches at most one line.
+func mergeChat(records, actions []dto.ReplayChat) []dto.ReplayChat {
+	out := append([]dto.ReplayChat{}, records...)
+	used := make([]bool, len(records))
+	for k, a := range actions {
+		if k > 0 && actions[k-1] == a {
+			continue
+		}
+		seen := false
+		for i, r := range records {
+			if !used[i] && r.PlayerID == a.PlayerID && r.Message == a.Message && (r.Time-a.Time).Abs() <= sameLine {
+				used[i], seen = true, true
+				break
+			}
+		}
+		if !seen {
+			out = append(out, a)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Time < out[j].Time })
+	return out
 }

@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	mockmapobjects "github.com/mihaiflorentin/wc3-team-follow/mock/mapobjects"
+	mockmaps "github.com/mihaiflorentin/wc3-team-follow/mock/maps"
 	mockreplay "github.com/mihaiflorentin/wc3-team-follow/mock/replay"
-	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
@@ -32,7 +35,12 @@ func sampleReplay() dto.Replay {
 
 func runReplay(t *testing.T, r *mockreplay.Reader, args ...string) (string, error) {
 	t.Helper()
-	cmd := replayCmd(func() (contract.ReplayReader, error) { return r, nil })
+	return runReplayWith(t, replayDeps{Reader: r, Objects: &mockmapobjects.Reader{}, Locator: &mockmaps.Locator{}}, args...)
+}
+
+func runReplayWith(t *testing.T, deps replayDeps, args ...string) (string, error) {
+	t.Helper()
+	cmd := replayCmd(func() (replayDeps, error) { return deps, nil })
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetArgs(args)
@@ -78,5 +86,69 @@ func TestReplayReportsFailure(t *testing.T) {
 	_, err := runReplay(t, &mockreplay.Reader{Err: errors.New("not a Warcraft III replay")}, "x.w3g")
 	if err == nil || !strings.Contains(err.Error(), "not a Warcraft III replay") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestReplayNamesOrdersFromTheMapInAMapsFolder(t *testing.T) {
+	maps := t.TempDir()
+	mapFile := filepath.Join(maps, "Download", "Sample.w3x")
+	if err := os.MkdirAll(filepath.Dir(mapFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mapFile, []byte("map"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := sampleReplay()
+	r.Map.Path = "Maps/Download/Sample.w3x"
+	r.Orders = []dto.ReplayOrder{
+		{Time: time.Second, PlayerID: 1, Code: "h04P"}, {Time: 2 * time.Second, PlayerID: 1, Code: "h04P"},
+		{Time: 3 * time.Second, PlayerID: 1, Code: "u008"}, {Time: 4 * time.Second, PlayerID: 2, Code: "zzzz"},
+	}
+	objects := &mockmapobjects.Reader{Result: map[string]string{"h04P": "Bowman", "u008": "Upgrade King Hit Points"}}
+	deps := replayDeps{
+		Reader:  &mockreplay.Reader{Replay: r},
+		Objects: objects,
+		Locator: &mockmaps.Locator{Folders: []dto.MapsFolder{{Path: filepath.Join(t.TempDir(), "elsewhere")}, {Path: maps}}},
+	}
+	text, err := runReplayWith(t, deps, "game.w3g")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(objects.Paths) != 1 || objects.Paths[0] != mapFile {
+		t.Errorf("read maps %v", objects.Paths)
+	}
+	for _, want := range []string{"Orders:    4 (named from " + mapFile + ")",
+		"Player1#1234 [CLAN]: Bowman ×2, Upgrade King Hit Points ×1", "Player2#5678: zzzz ×1"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("output lacks %q:\n%s", want, text)
+		}
+	}
+
+	text, err = runReplayWith(t, deps, "--json", "game.w3g")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got dto.Replay
+	if err := json.Unmarshal([]byte(text), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Orders[0].Name != "Bowman" || got.Orders[3].Name != "" {
+		t.Errorf("orders = %+v", got.Orders)
+	}
+}
+
+func TestReplaySaysWhenTheMapIsMissing(t *testing.T) {
+	r := sampleReplay()
+	r.Orders = []dto.ReplayOrder{{PlayerID: 1, Code: "h04P"}}
+	objects := &mockmapobjects.Reader{}
+	text, err := runReplayWith(t, replayDeps{Reader: &mockreplay.Reader{Replay: r}, Objects: objects, Locator: &mockmaps.Locator{}}, "game.w3g")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "Sample.w3x isn't in a Maps folder; give it with --map") || !strings.Contains(text, "h04P ×1") || len(objects.Paths) != 0 {
+		t.Errorf("read %v, output:\n%s", objects.Paths, text)
+	}
+	if _, err := runReplayWith(t, replayDeps{Reader: &mockreplay.Reader{Replay: r}, Objects: objects, Locator: &mockmaps.Locator{}}, "--map", "/maps/Sample.w3x", "game.w3g"); err != nil || len(objects.Paths) != 1 || objects.Paths[0] != "/maps/Sample.w3x" {
+		t.Errorf("--map read %v, err %v", objects.Paths, err)
 	}
 }

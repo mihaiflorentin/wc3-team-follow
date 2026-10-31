@@ -2,8 +2,11 @@ package replay
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 	"time"
+
+	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
 func parseGame(t *testing.T, g fxGame) []byte {
@@ -316,5 +319,53 @@ func TestParseWarnsAboutAnUnknownActionAndKeepsGoing(t *testing.T) {
 	}
 	if r.Players[0].Actions != 1 || len(r.Leaves) != 1 || len(r.Warnings) != 1 {
 		t.Errorf("actions %d leaves %d warnings %v", r.Players[0].Actions, len(r.Leaves), r.Warnings)
+	}
+}
+
+func TestParseKeepsOrdersThatNameAnObjectType(t *testing.T) {
+	// Item ids are stored backwards: "P40h" is the type h04P.
+	train := (&buf{}).u8(0x10).u16(0).raw([]byte("P40h")).raw(make([]byte, 8)).b
+	research := (&buf{}).u8(0x10).u16(0).raw([]byte("300R")).raw(make([]byte, 8)).b
+	smart := (&buf{}).u8(0x12).u16(0).u32(0x000D0003).raw(make([]byte, 8+8+8)).b
+	g := defaultGame()
+	g.gameData = append(g.gameData, timeSlot(1000, command(1, train, smart))...)
+	g.gameData = append(g.gameData, timeSlot(500, command(2, research))...)
+	r, err := Parse(bytes.NewReader(parseGame(t, g)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []dto.ReplayOrder{
+		{Time: time.Second, PlayerID: 1, Code: "h04P"},
+		{Time: 1500 * time.Millisecond, PlayerID: 2, Code: "R003"},
+	}
+	if !reflect.DeepEqual(r.Orders, want) {
+		t.Errorf("orders = %+v", r.Orders)
+	}
+	if r.Players[0].Actions != 2 || len(r.Warnings) != 0 {
+		t.Errorf("p1 = %+v warnings %v", r.Players[0], r.Warnings)
+	}
+}
+
+func TestParseAddsChatOnlyTheMapsChatActionsHold(t *testing.T) {
+	mapChat := func(msg string) []byte { return (&buf{}).u8(0x60).raw(make([]byte, 8)).cstr(msg).b }
+	g := defaultGame()
+	// Player 1's line is in a chat record and a chat action: one line.
+	g.gameData = append(g.gameData, timeSlot(1000, command(1, mapChat("-ff")))...)
+	g.gameData = append(g.gameData, chat(1, 1, "-ff")...)
+	// Player 2's team line reached only the map, once per matching trigger.
+	g.gameData = append(g.gameData, timeSlot(1000, command(2, mapChat("top send"), mapChat("top send")))...)
+	r, err := Parse(bytes.NewReader(parseGame(t, g)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []dto.ReplayChat{
+		{Time: time.Second, PlayerID: 1, Mode: "allies", Message: "-ff"},
+		{Time: 2 * time.Second, PlayerID: 2, Mode: "unseen", Message: "top send"},
+	}
+	if !reflect.DeepEqual(r.Chat, want) {
+		t.Errorf("chat = %+v", r.Chat)
+	}
+	if r.Players[1].Actions != 2 || len(r.Warnings) != 0 {
+		t.Errorf("p2 = %+v warnings %v", r.Players[1], r.Warnings)
 	}
 }
