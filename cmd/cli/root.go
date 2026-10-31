@@ -30,6 +30,7 @@ func NewRootCmd(c *container.ServiceContainer) *cobra.Command {
 	root.AddCommand(newDiscoverCmd(c))
 	root.AddCommand(newSayCmd(c))
 	root.AddCommand(newTypeCmd(c))
+	root.AddCommand(newReplayCmd(c))
 	return root
 }
 

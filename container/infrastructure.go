@@ -15,6 +15,7 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/keyboard"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/mapreleases"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/maps"
+	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/replay"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/settings"
 	"github.com/mihaiflorentin/wc3-team-follow/infrastructure/updater"
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
@@ -38,6 +39,7 @@ type InfrastructureContainer struct {
 	ranking         lazy[contract.Ranking]
 	updater         lazy[contract.Updater]
 	mapReleases     lazy[contract.MapReleases]
+	replayReader    lazy[contract.ReplayReader]
 }
 
 // Updater returns the GitHub Releases client named by [updates]. It talks
@@ -119,6 +121,13 @@ func (s *ServiceContainer) MapsLocator() (contract.MapsLocator, error) {
 func (s *ServiceContainer) MapLibrary() (contract.MapLibrary, error) {
 	return s.infrastructure.mapLibrary.get(func() (contract.MapLibrary, error) {
 		return maps.New(), nil
+	})
+}
+
+// ReplayReader returns the replay (.w3g) reader. It needs no settings.
+func (s *ServiceContainer) ReplayReader() (contract.ReplayReader, error) {
+	return s.infrastructure.replayReader.get(func() (contract.ReplayReader, error) {
+		return replay.New(), nil
 	})
 }
 
