@@ -38,6 +38,7 @@ Warcraft Team Follow is a hexagonal (ports and adapters) desktop app. The core (
 | Driven adapters | `infrastructure/discovery` | Finds the game, its menu port and session, per OS; closes the game's processes when the player asks |
 | | `infrastructure/gamesocket` | Loopback websocket with the command allowlist |
 | | `infrastructure/keyboard` | Types one line in the match chat with keystrokes, only while the game is in front (Windows, macOS) |
+| | `infrastructure/replay` | Prototype replay (`.w3g`) reader for a future scoreboard; used only by the `replay` command (`docs/research/replay-parser.md`) |
 | | `infrastructure/settings` | `friends.json`, `recent-players.json`, `ranking.json` and `notes.json` in the per-user data folder |
 | | `infrastructure/updater` | The newest stable release and its changelog from GitHub's REST API, over HTTPS |
 | | `infrastructure/mapreleases` | A tracked map's newest release and its verified download into the Maps folder, over HTTPS |
