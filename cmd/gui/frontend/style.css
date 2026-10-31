@@ -629,6 +629,9 @@ h2 .icon { color: var(--lichen); }
 .blacklist .added { color: var(--lichen); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .blacklist .remove { display: inline-flex; align-items: center; gap: 5px; }
 .blacklist .remove .icon { width: 13px; height: 13px; }
+/* Why a player is blacklisted, under their name, in at most two lines. */
+.ban-who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ban-reason { color: var(--lichen); font-size: 12px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
 #ban-form { margin-top: 10px; }
 #ban-form button { display: inline-flex; align-items: center; gap: 6px; }
 #ban-tag[aria-invalid="true"] { border-color: var(--danger); }
@@ -1705,6 +1708,8 @@ dialog.sheet.ranking .fine, dialog.sheet.ranking h2 { margin: 0; }
 .tip-standing .icon { flex: none; width: 13px; height: 13px; color: var(--lichen); }
 .tip-standing .group, .tip-standing .group .icon { color: var(--open); }
 .tip-standing .banned, .tip-standing .banned .icon { color: var(--danger); }
+.tip-standing li:has(.tip-reason) { flex-wrap: wrap; }
+.tip-standing .tip-reason { flex-basis: 100%; padding-left: 20px; color: var(--lichen); font-size: 12px; line-height: 1.4; }
 
 .tip-history {
   display: grid;

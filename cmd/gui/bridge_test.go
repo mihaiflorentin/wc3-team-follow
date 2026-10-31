@@ -139,6 +139,9 @@ func TestBridgePassesBlacklistCallsOn(t *testing.T) {
 	if _, err := b.SetBlacklistManualBans(false); err != nil || c.LastConfig.BlacklistManualBans == nil || *c.LastConfig.BlacklistManualBans {
 		t.Fatalf("manual bans: %+v, %v", c.LastConfig, err)
 	}
+	if _, err := b.SetBlacklistLeavers(true); err != nil || c.LastConfig.BlacklistLeavers == nil || !*c.LastConfig.BlacklistLeavers {
+		t.Fatalf("leavers: %+v, %v", c.LastConfig, err)
+	}
 	c.Err = errors.New("You can't blacklist yourself.")
 	if _, err := b.AddToBlacklist([]string{"Self#1111"}); err == nil || err.Error() != c.Err.Error() {
 		t.Fatalf("err = %v", err)

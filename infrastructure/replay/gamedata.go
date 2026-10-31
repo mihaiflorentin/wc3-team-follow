@@ -34,6 +34,8 @@ type gameData struct {
 	// actionChat holds the chat lines read from map chat actions, before
 	// the ones the chat records also hold are dropped.
 	actionChat []dto.ReplayChat
+	// clock watches the game clock actions for the end of the match.
+	clock clockWatch
 }
 
 func readGameData(c *cursor, post202 bool, warn func(string, ...any)) gameData {
@@ -73,6 +75,9 @@ func readGameData(c *cursor, post202 bool, warn func(string, ...any)) gameData {
 				}
 				for _, code := range found.codes {
 					g.orders = append(g.orders, dto.ReplayOrder{Time: g.elapsed, PlayerID: pid, Code: code})
+				}
+				for _, tick := range found.clocks {
+					g.clock.see(tick, g.elapsed)
 				}
 				for _, line := range found.chat {
 					g.actionChat = append(g.actionChat, dto.ReplayChat{Time: g.elapsed, PlayerID: pid, Mode: "unseen", Message: line})

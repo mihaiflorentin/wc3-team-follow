@@ -109,6 +109,30 @@ func TestOlderFileLoadsAnEmptyBlacklistWithAutoBanOn(t *testing.T) {
 	}
 }
 
+func TestBlacklistReasonsAndLeaversRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(dir, "settings"), 0o700)
+	// A file saved before reasons and Blacklist players who leave existed.
+	older := `{"tags":[],"includeTeam":true,"blacklist":[{"tag":"Arthas#1123","added":"2026-10-28T09:30:00Z"}]}`
+	_ = os.WriteFile(filepath.Join(dir, "settings", "friends.json"), []byte(older), 0o600)
+	got, err := settings.New(dir).Load()
+	if err != nil || got.BlacklistLeavers || len(got.Blacklist) != 1 || got.Blacklist[0].Reason != "" {
+		t.Fatalf("older file: loaded %+v, %v", got, err)
+	}
+	if fresh, err := settings.New(t.TempDir()).Load(); err != nil || fresh.BlacklistLeavers {
+		t.Fatalf("no file: loaded %+v, %v", fresh, err)
+	}
+	reason := "Left early: Legion TD 11.4c-hf9, 12 min into a 38 min match, 31 Oct 2026"
+	got.Blacklist[0].Reason, got.BlacklistLeavers = reason, true
+	if err := settings.New(dir).Save(got); err != nil {
+		t.Fatal(err)
+	}
+	again, err := settings.New(dir).Load()
+	if err != nil || !again.BlacklistLeavers || again.Blacklist[0].Reason != reason {
+		t.Fatalf("saved: loaded %+v, %v", again, err)
+	}
+}
+
 func TestBlacklistManualBansIsOnUnlessSavedOff(t *testing.T) {
 	dir := t.TempDir()
 	if got, err := settings.New(dir).Load(); err != nil || !got.BlacklistManualBans {

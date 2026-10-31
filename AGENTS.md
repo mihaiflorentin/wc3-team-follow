@@ -14,12 +14,12 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 | `container/` | `ServiceContainer`: lazy `(T, error)` accessors and `Close`. Used only by the wiring layer. |
 | `config/` | `config.toml` (embedded into the binary) and `NewConfig`. |
 | `logging/` | `Setup` (console + rotated log file + crash file), `New` (console only) and the log handlers. Cross-cutting: every layer may receive a `*slog.Logger`. |
-| `domain/follow/` | The follow state machine (port of 0.4's `team-follow.cjs`), Auto-host (`host.go`), the recent players recorder (`recent.go`), the ranking recorder (`ranking.go`) and the blacklist with auto-ban (`blacklist.go`, `ban.go`). Pure. |
-| `domain/companion/` | `contract.Companion`: discovery loop, game session, saving friends and recent players, running update checks, publishing state. |
+| `domain/follow/` | The follow state machine (port of 0.4's `team-follow.cjs`), Auto-host (`host.go`), the recent players recorder (`recent.go`), the ranking recorder (`ranking.go`), the blacklist with auto-ban (`blacklist.go`, `ban.go`) and the early-leaver rule (`leavers.go`, ADR 0013). Pure. |
+| `domain/companion/` | `contract.Companion`: discovery loop, game session, saving friends and recent players, running update checks, reading the last replay after a match for early leavers (`leavers.go`), publishing state. |
 | `domain/update/` | The update check's decisions (ADR 0009): when to check, version comparison, Later and Skip, the restart warning, the changelog parser (`changelog.go`) and the in-app update's states (`install.go`). Pure. |
 | `port/contract/` | Interfaces (ports) that domain and adapters meet at. Interfaces only, no structs. |
 | `port/dto/` | Plain data shapes, `package dto`, no subfolders. |
-| `infrastructure/discovery/` | Finds the game, menu port, session and version, and the Maps folders (`MapsLocator`, with Wine path translation). `Processes` closes the game's own processes when the player asks (`contract.GameProcesses`). `platform_<os>.go` per OS; portable parsing beside it. |
+| `infrastructure/discovery/` | Finds the game, menu port, session and version, and the Maps folders (`MapsLocator`, with Wine path translation). `Processes` closes the game's own processes when the player asks (`contract.GameProcesses`). `NewReplayLocator` finds the newest `LastReplay.w3g` in the BattleNet account folders (`contract.ReplayLocator`, `replays.go`). `platform_<os>.go` per OS; portable parsing beside it. |
 | `domain/mapupdate/` | Keep maps up to date's decisions (ADR 0012): when to check tracked maps, what to download, retries and each map's state and Activity lines; which tracked map a file is and its newest installed version, for Auto-host (`newest.go`). Pure. |
 | `infrastructure/maps/` | Lists and searches maps in a Maps folder, and finds a tracked map's installed versions by its file-name pattern (`MapLibrary`, `installed.go`). |
 | `infrastructure/mapreleases/` | Finds a tracked map's newest GitHub Release with its SHA-256 digest and downloads it into the Maps folder, verified, never over an existing file (`contract.MapReleases`, ADR 0012); HTTPS to GitHub's hosts only, through the updater's client. |
@@ -40,6 +40,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 - `[follow] verified_builds` gates live joining (`3.0.1.24371`). Never add a build without a live test.
 - `[logging] default` is `color`, `level` is `debug`; the log file (`file = true`) is JSON at `debug`, 5 MB × 3 rotations.
 - `[maps]` tracks Legion TD (`team-oze/Legion-TD`, files `Legion_TD_<version>_Team_OZE.w3x` and variants, into `Download`) on `https://api.github.com` every `6h` (retry `30m`, timeout `20s`, at most `256` MB per file).
+- `[leavers]` names the tracked map whose early leavers may be blacklisted (`map = "Legion TD"`) and the final round nobody is judged in (`final_round = "4m"`).
 - `[updates]` checks `mihaiflorentin/wc3-team-follow` on `https://api.github.com` every `6h` (retry `30m`, timeout `20s`); `main.go` sets `cfg.App.Version` from the build info, and `cfg.App.Executable` and `cfg.App.Updated` (the program an update replaces, and whether this start follows one).
 - Per-user data: `%LOCALAPPDATA%\WarcraftTeamFollow` (Windows), `~/Library/Application Support/WarcraftTeamFollow` (macOS), `$XDG_CONFIG_HOME/WarcraftTeamFollow` (Linux). `WF_DATA_DIR` overrides it. On Windows the WebView2 profile is its `webview` subfolder.
 - `LICENSE`: MIT, copyright 2026 Mihai Mihaila.
@@ -60,7 +61,8 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 - Recent players (`follow.Recent`) only read the lobby events the game already sends; recording sends nothing. The list (BattleTags, map, last seen) stays in `recent-players.json` on this computer, never in `Diagnostics` or the log (only `recent.saved` with a count).
 - The ranking (`follow.Ranking`) only reads lobby and score events the game already sends; recording sends nothing. Recording and the Scoreboard are off for now (`companion.Options.RecordRanking`, `SCOREBOARD_SHOWN` in `app.js`): some custom maps report every player as a winner. Wins and losses (BattleTags, counts, last played) stay in `ranking.json` on this computer, never in `Diagnostics` or the log (only `ranking.saved` with a count).
 - Map updates (ADR 0012) go only through `contract.MapReleases` (`infrastructure/mapreleases`) under the same network rule as update checks: plain GETs to `api.github.com` and GitHub's release hosts, over HTTPS only, redirects included, with no token, cookie or anything about the player; only for the maps in `[maps] tracked`, which publish official GitHub Releases (no scraping). Never pre-releases. A release without a `sha256` digest is refused. A download goes into the chosen subfolder of the Maps folder only, as a temporary `.wc3-team-follow-map-*.part` file, is size-capped, and is moved into place under its asset name only when its SHA-256 matches; otherwise it is deleted. The asset name must match the map's pattern and contain no path separator. An existing file is never overwritten, and old versions are never deleted; Team Follow removes only its own temporary files. Maps are downloaded for the player's own play and never redistributed. Downloads run automatically only while Keep maps up to date is on (`mapUpdates`, on by default); turning it off stops a running download. The bridge opens only the `https://github.com/` release page from the companion's state. Tests never call the real GitHub API or write outside temporary folders.
-- Player notes are written only by `Companion.SetNote` into `notes.json` on this computer. They are never sent to the game, logged (only `notes.saved` with a count) or put in `Diagnostics`, and the window shows them as plain text, never HTML.
+- Blacklisting early leavers (ADR 0013) is off by default and only reads: after a match the player played, the companion finds the newest `LastReplay.w3g` through `contract.ReplayLocator` and reads it through `contract.ReplayReader`; replay files are never written, moved or deleted. The Battle.net account id in the replay's folder is never logged, printed, shown or saved (log only whether a replay was found; never the path). Only matches on `[leavers] map` with the player among the replay's humans count. `follow.EarlyLeavers` decides from leave times, the game clock and `-draw`/`-ff` votes, never result codes; `Engine.AddLeavers` never adds the player, a Battle.net friend, the game team or follow group, a computer or someone already listed, and adds nobody unless the game is connected and has sent the friends list. Log only counts (`leavers.added`), never BattleTags, chat, notes, reasons or paths.
+- Player notes are written only by `Companion.SetNote` into `notes.json` on this computer, and by the early-leaver check, which adds its reason line (ADR 0013). They are never sent to the game, logged (only `notes.saved` with a count) or put in `Diagnostics`, and the window shows them as plain text, never HTML.
 
 ## Dependency rules
 
@@ -72,7 +74,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 
 - `main.go` calls `config.NewConfig()`, `logging.New(cfg.Logging, os.Stdout)`, `container.New(cfg, logger)` and `cli.Execute(c)`, then `c.Close()`. Nothing else builds a container.
 - Each command receives the container through its constructor and resolves what it needs before doing any work. The root command resolves `gui.Deps` in `guiDeps` and builds `gui.Options` from `[window]`. `discover` takes a resolve function, so tests run it with mocks.
-- Every collaborator arrives as a constructor parameter and is stored in a field: `companion.New(companion.Ports{Discovery, Dialer, Prefs, Maps, Library, Processes, Keyboard, Recent, Ranking, Updater, Notes, MapReleases}, logger, opts)`. No globals, no `init()`, no config lookups inside domain code or the window.
+- Every collaborator arrives as a constructor parameter and is stored in a field: `companion.New(companion.Ports{Discovery, Dialer, Prefs, Maps, Library, Processes, Keyboard, Recent, Ranking, Updater, Notes, MapReleases, Replays, ReplayFiles}, logger, opts)`. No globals, no `init()`, no config lookups inside domain code or the window.
 - Container accessors are lazy singletons returning `(T, error)`. A missing config section is an error, and a failed build is retried on the next call. Adapters that hold connections register `s.onClose`.
 
 To add a dependency (an outbound adapter or a domain service):
@@ -171,6 +173,7 @@ Architectural decisions are recorded as ADRs in `docs/adr/`, one numbered file p
 - `0007`: typing in the match chat with keystrokes.
 - `0008`: banning blacklisted players from lobbies the player hosts.
 - `0009`: self-update: checking GitHub Releases, asking the player, then downloading, verifying, installing and restarting.
+- `0013`: blacklisting players who leave Legion TD early, from the last replay.
 
 ## Agent skills
 

@@ -30,6 +30,9 @@ type FollowConfig struct {
 	// BlacklistManualBans adds players the player bans by hand, in a lobby
 	// they host, to the blacklist.
 	BlacklistManualBans *bool `json:"blacklistManualBans,omitempty"`
+	// BlacklistLeavers adds players who leave a Legion TD match early to the
+	// blacklist, after each match (ADR 0013); off by default.
+	BlacklistLeavers *bool `json:"blacklistLeavers,omitempty"`
 	// CheckUpdates switches automatic update checks on or off.
 	CheckUpdates *bool `json:"checkUpdates,omitempty"`
 	// MapUpdates switches "Keep maps up to date" on or off (ADR 0012).
@@ -108,6 +111,9 @@ type FollowState struct {
 	// BlacklistManualBans reports whether players banned by hand join the
 	// blacklist.
 	BlacklistManualBans bool `json:"blacklistManualBans"`
+	// BlacklistLeavers reports whether players who leave Legion TD early
+	// join the blacklist (ADR 0013).
+	BlacklistLeavers bool `json:"blacklistLeavers"`
 	// Update is the update check: the running version, a newer release and
 	// the banner (ADR 0009).
 	Update UpdateState `json:"update"`
@@ -125,6 +131,11 @@ type BlacklistEntry struct {
 	Tag string `json:"tag"`
 	// Added is when the player was blacklisted.
 	Added time.Time `json:"added"`
+	// Reason says why, in plain text, such as "Left early: Legion TD
+	// 11.4c-hf9, 12 min into a 38 min match, 31 Oct 2026"; empty for
+	// players added by BattleTag and entries saved before it existed. It
+	// stays on this computer and is never logged.
+	Reason string `json:"reason,omitempty"`
 }
 
 // TeamMember is one player of the game's current team.
@@ -219,6 +230,9 @@ type Preferences struct {
 	// BlacklistManualBans adds players banned by hand to the blacklist; on
 	// by default.
 	BlacklistManualBans bool `json:"blacklistManualBans"`
+	// BlacklistLeavers adds players who leave Legion TD early to the
+	// blacklist; off by default.
+	BlacklistLeavers bool `json:"blacklistLeavers,omitempty"`
 	// CheckUpdates checks GitHub for a newer release at start-up and every
 	// few hours; on by default.
 	CheckUpdates bool `json:"checkUpdates"`

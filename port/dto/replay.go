@@ -2,6 +2,15 @@ package dto
 
 import "time"
 
+// ReplayFile is a replay file the game wrote: where it is, when it last
+// changed and how big it is. Path holds the Battle.net account folder, so
+// it is never logged, shown or saved.
+type ReplayFile struct {
+	Path     string    `json:"-"`
+	Modified time.Time `json:"modified"`
+	Size     int64     `json:"size"`
+}
+
 // Replay is what a Warcraft III replay file (.w3g) says about one game. It
 // holds only what the file records: the lobby (map, slots, players), who
 // left when and with which result, chat lines, how many actions each player
@@ -23,6 +32,12 @@ type Replay struct {
 	Duration time.Duration `json:"duration"`
 	// GameTime is the sum of the time slots: how long the recorded game ran.
 	GameTime time.Duration `json:"gameTime"`
+	// Ended is when the match ended by the game clock (action 0x62): the
+	// time its last value was first sent, once that value was sent again
+	// with a rising repeat counter, as it is after a king dies or an end
+	// vote passes. Zero when the clock never stopped in the replay, as
+	// when the saver left before the end.
+	Ended time.Duration `json:"ended,omitempty"`
 	// Post202 is true for replays from game 2.0.2 on, whose Reforged player
 	// records start with 0x38 and whose action ids above 0x77 shift by one.
 	Post202 bool `json:"post202"`

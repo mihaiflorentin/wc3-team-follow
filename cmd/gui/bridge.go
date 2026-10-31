@@ -212,6 +212,12 @@ func (b *Bridge) SetBlacklistManualBans(on bool) (dto.FollowState, error) {
 	return b.companion.Configure(dto.FollowConfig{BlacklistManualBans: &on})
 }
 
+// SetBlacklistLeavers switches adding players who leave Legion TD early to
+// the blacklist on or off (ADR 0013).
+func (b *Bridge) SetBlacklistLeavers(on bool) (dto.FollowState, error) {
+	return b.companion.Configure(dto.FollowConfig{BlacklistLeavers: &on})
+}
+
 // RequestKeyboardPermission asks the system for the permission Game mode's
 // typing needs. The page calls it only when the player clicks to allow
 // typing.

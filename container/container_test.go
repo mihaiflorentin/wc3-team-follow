@@ -126,6 +126,37 @@ func TestCompanion_ReportsAMissingUpdatesSection(t *testing.T) {
 	}
 }
 
+func TestCompanion_ReportsAMissingOrBadLeaversSection(t *testing.T) {
+	t.Setenv(config.DataDirEnv, t.TempDir())
+	for name, change := range map[string]func(*config.Config){
+		"[leavers]":            func(c *config.Config) { c.Leavers = nil },
+		"leavers.final_round":  func(c *config.Config) { c.Leavers.FinalRound = "soon" },
+		"leavers.map":          func(c *config.Config) { c.Leavers.Map = "Footmen Frenzy" },
+		"leavers.final_round ": func(c *config.Config) { c.Leavers.FinalRound = "0s" },
+	} {
+		cfg, err := config.NewConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		change(cfg)
+		c := New(cfg, slog.New(slog.DiscardHandler))
+		if _, err := c.Companion(); err == nil || !strings.Contains(err.Error(), strings.TrimSpace(name)) {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestReplayLocator_IsBuiltOnce(t *testing.T) {
+	c := New(&config.Config{}, slog.New(slog.DiscardHandler))
+	first, err := c.ReplayLocator()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second, _ := c.ReplayLocator(); second != first {
+		t.Fatal("the replay locator was built twice")
+	}
+}
+
 func TestUpdater_ReportsAMissingUpdatesSection(t *testing.T) {
 	c := New(&config.Config{}, slog.New(slog.DiscardHandler))
 	if _, err := c.Updater(); err == nil {

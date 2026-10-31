@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"time"
 
 	"github.com/mihaiflorentin/wc3-team-follow/domain/companion"
 	"github.com/mihaiflorentin/wc3-team-follow/port/contract"
+	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
 type DomainContainer struct {
@@ -98,6 +100,25 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve map releases: %w", err)
 		}
+		leaversCfg := s.config.Leavers
+		if leaversCfg == nil {
+			return nil, errors.New("missing [leavers] config section")
+		}
+		finalRound, err := time.ParseDuration(leaversCfg.FinalRound)
+		if err != nil || finalRound <= 0 {
+			return nil, fmt.Errorf("invalid leavers.final_round %q: %w", leaversCfg.FinalRound, errors.Join(err, errors.New("must be positive")))
+		}
+		if !slices.ContainsFunc(tracked, func(m dto.TrackedMap) bool { return m.Name == leaversCfg.Map }) {
+			return nil, fmt.Errorf("invalid leavers.map %q: not a tracked map", leaversCfg.Map)
+		}
+		replays, err := s.ReplayReader()
+		if err != nil {
+			return nil, fmt.Errorf("resolve replay reader: %w", err)
+		}
+		replayFiles, err := s.ReplayLocator()
+		if err != nil {
+			return nil, fmt.Errorf("resolve replay locator: %w", err)
+		}
 		checkEvery, err := time.ParseDuration(updatesCfg.CheckInterval)
 		if err != nil {
 			return nil, fmt.Errorf("invalid updates.check_interval %q: %w", updatesCfg.CheckInterval, err)
@@ -108,7 +129,7 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 		}
 		ports := companion.Ports{Discovery: discovery, Dialer: dialer, Prefs: prefs, Maps: locator, Library: library, Processes: processes,
 			Keyboard: keyboard, Recent: recent, Notes: notes, Ranking: ranking, Updater: updates,
-			MapReleases: mapReleases}
+			MapReleases: mapReleases, Replays: replays, ReplayFiles: replayFiles}
 		return companion.New(ports, s.logger, companion.Options{
 			VerifiedBuilds:      cfg.VerifiedBuilds,
 			RefreshInterval:     refresh,
@@ -124,6 +145,8 @@ func (s *ServiceContainer) Companion() (contract.Companion, error) {
 			TrackedMaps:         tracked,
 			MapInterval:         mapEvery,
 			MapRetryInterval:    mapRetry,
+			LeaverMap:           leaversCfg.Map,
+			LeaverFinalRound:    finalRound,
 		}), nil
 	})
 }

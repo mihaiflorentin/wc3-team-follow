@@ -1,6 +1,6 @@
 # Replay parser prototype
 
-Status: prototype, for a future scoreboard. `infrastructure/replay` parses `.w3g` files into `dto.Replay`; `wc3-team-follow replay <file.w3g> [--json]` prints the result. Nothing in the companion or the window uses it yet.
+Status: in use by Blacklist players who leave Legion TD early (ADR 0013); still a prototype for a future scoreboard. `infrastructure/replay` parses `.w3g` files into `dto.Replay`; `wc3-team-follow replay <file.w3g> [--json]` prints the result. The companion finds the last replay with `contract.ReplayLocator` (`infrastructure/discovery/replays.go`) and reads it after each match while that switch is on.
 
 ## Where replays are
 
@@ -8,8 +8,8 @@ Status: prototype, for a future scoreboard. `infrastructure/replay` parses `.w3g
 | --- | --- |
 | macOS, game 2.0 and later | `~/Library/Application Support/Warcraft III/BattleNet/<account id>/Replays/LastReplay.w3g` (confirmed) |
 | macOS, older Reforged | `~/Library/Application Support/Blizzard/Warcraft III/Replay/LastReplay.w3g`; also `Logs/*_replay.w3g` and crash copies in `Errors/<date>/` |
-| Windows | Probably `Documents\Warcraft III\BattleNet\<account id>\Replays\` (the Documents folder follows OneDrive). Not confirmed: neither reference nor our docs name it. |
-| Linux | The Windows path inside the Wine or Proton prefix (not checked). |
+| Windows | Probably `Documents\Warcraft III\BattleNet\<account id>\Replays\` (the Documents folder follows OneDrive). Not confirmed: neither reference nor our docs name it. The locator tries the Documents known folder, `%USERPROFILE%\Documents` and OneDrive's Documents. |
+| Linux | The Windows path inside the Wine or Proton prefix (not checked). The locator tries `drive_c/users/*/Documents` and `My Documents` in every prefix discovery knows. |
 
 The account id folder name must never be logged or saved, like the menu session.
 
@@ -21,6 +21,7 @@ The account id folder name must never be logged or saved, like the menu session.
 - In 2.0.2+ replays action ids from **0x77** are one lower than before (raw 0x77 has the old 0x78 layout: a map sync such as `SyncCode`). w3gjs shifts only ids above 0x77 and misreads them.
 - Leave result 0x0D, undocumented, appears from 1.32 to 3.0 for players who quit.
 - Chat records (0x20) hold only what the saver could see: another team's allies chat is missing. Action **0x60** (8 bytes, then the line) is the line as the map's chat triggers receive it; every player's game records it, so it holds those lines too, without their channel. One line gives one 0x60 per matching trigger, so identical actions in the same time slot are one line. The parser adds the 0x60 lines that no chat record holds, with mode `unseen`.
+- Action **0x62** (12 bytes, not shifted in 2.0.2+) is the game clock, sent by every player about once a second: a u32 that varies, the u32 clock value and a u32 repeat counter. While the match runs the value rises and the counter is 1. When it ends (a king dies, or a `-ff` or `-draw` vote passes) the clock stops: the same value is sent again with the counter going 2, 3, 4 … until players leave. The parser sets `Replay.ended` to when the last value was first sent with counter 1, once it was repeated; zero when the clock never stopped (the saver left before the end), and a value repeated mid-game that then rises again doesn't count. In real replays: a forfeit whose last `-ff` came at 21:35.6 froze at 21:36.49, players leaving 21:42 to 21:58; a game against computers froze at 20:54.37 when a king died, the player leaving at 21:07.8. 0x62 still counts as an action, not for APM.
 - Orders 0x10 to 0x14 start with 2 flag bytes and a 4-byte item id. For training, building, buying and research the item id is the object type, stored backwards (`P40h` is `h04P`); built-in orders such as move and attack are numbers (0x000D0003). The parser keeps the object types as `Orders`.
 
 ## Naming orders from the map

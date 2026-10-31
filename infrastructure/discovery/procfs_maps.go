@@ -116,6 +116,18 @@ func (p procfs) mapsFolders(_ context.Context, g *game) []dto.MapsFolder {
 	return out
 }
 
+// replayFolders looks for <prefix>/drive_c/users/<user>/Documents/Warcraft
+// III/BattleNet in every prefix, like mapsFolders.
+func (p procfs) replayFolders(_ context.Context, g *game) []string {
+	var docs []string
+	for _, pf := range p.prefixes(g) {
+		for _, user := range subdirs(path.Join(pf.dir, "drive_c", "users")) {
+			docs = append(docs, path.Join(user, "Documents"), path.Join(user, "My Documents"))
+		}
+	}
+	return documentsReplayFolders(docs)
+}
+
 // gamePath turns a Linux path into the Windows path the game sees: under a
 // prefix's drive_c it's on C:, in a folder a Wine user folder links to
 // (Documents -> ~/Documents) it's on C: through that link, otherwise on the

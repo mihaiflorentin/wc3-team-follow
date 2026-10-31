@@ -101,6 +101,10 @@ type platform interface {
 	// mapsFolders lists places the game's Maps folder may be, most likely
 	// first; g is nil when no game is running. They need not exist.
 	mapsFolders(ctx context.Context, g *game) []dto.MapsFolder
+	// replayFolders lists the game's BattleNet folders, which hold one
+	// folder per Battle.net account with its Replays inside; g is nil when
+	// no game is running. They need not exist.
+	replayFolders(ctx context.Context, g *game) []string
 	// gamePath converts a path on this computer to the game's view of it.
 	gamePath(ctx context.Context, g *game, path string) string
 	// closable reports whether g belongs to this user, where the operating

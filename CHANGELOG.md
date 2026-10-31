@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Blacklist players who leave Legion TD early**: a new switch in the Blacklist tab, off until you turn it on. After each Legion TD match you play, Team Follow reads the game's replay of it and adds anyone who left at least a round before the end, or before the others voted the game over with -draw or -ff. It never adds you, your Battle.net friends or the people you follow. Each player it adds gets a reason, such as "Left early: Legion TD 11.4c-hf9, 12 min into a 38 min match, 31 Oct 2026", which is also added to your note about them, and Activity says who was added.
+- Blacklisted players now show why they are on your blacklist, under their name and in the player tooltip. Players you ban by hand in your lobby get "You banned them in" and the lobby's name and date.
+
 ### Fixed
 
 - Buttons such as Set up, Check now and Choose map no longer look greyed out; they have a clear outline, and only buttons you can't use right now look faded.

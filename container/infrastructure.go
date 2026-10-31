@@ -41,6 +41,7 @@ type InfrastructureContainer struct {
 	updater         lazy[contract.Updater]
 	mapReleases     lazy[contract.MapReleases]
 	replayReader    lazy[contract.ReplayReader]
+	replayLocator   lazy[contract.ReplayLocator]
 	mapObjects      lazy[contract.MapObjects]
 }
 
@@ -130,6 +131,14 @@ func (s *ServiceContainer) MapLibrary() (contract.MapLibrary, error) {
 func (s *ServiceContainer) ReplayReader() (contract.ReplayReader, error) {
 	return s.infrastructure.replayReader.get(func() (contract.ReplayReader, error) {
 		return replay.New(), nil
+	})
+}
+
+// ReplayLocator returns the finder of the game's last replay for this
+// operating system (docs/adr/0013). It needs no settings.
+func (s *ServiceContainer) ReplayLocator() (contract.ReplayLocator, error) {
+	return s.infrastructure.replayLocator.get(func() (contract.ReplayLocator, error) {
+		return discovery.NewReplayLocator(s.logger), nil
 	})
 }
 

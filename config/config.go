@@ -20,6 +20,17 @@ type Config struct {
 	Window  *WindowConfig  `mapstructure:"window"`
 	Updates *UpdatesConfig `mapstructure:"updates"`
 	Maps    *MapsConfig    `mapstructure:"maps"`
+	Leavers *LeaversConfig `mapstructure:"leavers"`
+}
+
+// LeaversConfig is Blacklist players who leave Legion TD early
+// (docs/adr/0013).
+type LeaversConfig struct {
+	// Map is the tracked map, by its [[maps.tracked]] name, whose matches
+	// count.
+	Map string `mapstructure:"map"`
+	// FinalRound is the last part of a match nobody is judged in.
+	FinalRound string `mapstructure:"final_round"`
 }
 
 type AppConfig struct {

@@ -46,6 +46,8 @@ type fileShape struct {
 	AutoBan *bool `json:"autoBan,omitempty"`
 	// BlacklistManualBans is written only when off: a file without it is on.
 	BlacklistManualBans *bool `json:"blacklistManualBans,omitempty"`
+	// BlacklistLeavers is written only when on: a file without it is off.
+	BlacklistLeavers bool `json:"blacklistLeavers,omitempty"`
 	// CheckUpdates is written only when off: a file without it is on.
 	CheckUpdates   *bool  `json:"checkUpdates,omitempty"`
 	SkippedVersion string `json:"skippedVersion,omitempty"`
@@ -100,6 +102,7 @@ func (s *Store) Load() (dto.Preferences, error) {
 		JoinHostTeam: saved.JoinHostTeam == nil || *saved.JoinHostTeam, MapsFolder: saved.MapsFolder,
 		Host: (*dto.HostSettings)(saved.Host), Blacklist: blacklist, AutoBan: saved.AutoBan == nil || *saved.AutoBan,
 		BlacklistManualBans: saved.BlacklistManualBans == nil || *saved.BlacklistManualBans,
+		BlacklistLeavers:    saved.BlacklistLeavers,
 		CheckUpdates:        saved.CheckUpdates == nil || *saved.CheckUpdates, SkippedVersion: saved.SkippedVersion,
 		MapUpdates:  saved.MapUpdates == nil || *saved.MapUpdates,
 		LastVersion: saved.LastVersion, Stored: true}, nil
@@ -133,7 +136,7 @@ func (s *Store) Save(prefs dto.Preferences) error {
 	}
 	content, err := json.MarshalIndent(fileShape{Tags: tags, IncludeTeam: &prefs.IncludeTeam, AskPassword: prefs.AskPassword, JoinHostTeam: joinHostTeam,
 		MapsFolder: prefs.MapsFolder, Host: (*savedHost)(prefs.Host), Blacklist: prefs.Blacklist, AutoBan: autoBan,
-		BlacklistManualBans: manualBans, CheckUpdates: checkUpdates, SkippedVersion: prefs.SkippedVersion,
+		BlacklistManualBans: manualBans, BlacklistLeavers: prefs.BlacklistLeavers, CheckUpdates: checkUpdates, SkippedVersion: prefs.SkippedVersion,
 		MapUpdates: mapUpdates, LastVersion: prefs.LastVersion}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode friends: %w", err)

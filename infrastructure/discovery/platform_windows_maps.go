@@ -39,6 +39,21 @@ func (windowsPlatform) mapsFolders(_ context.Context, g *game) []dto.MapsFolder 
 	return out
 }
 
+func (windowsPlatform) replayFolders(_ context.Context, _ *game) []string {
+	var docs []string
+	// The Documents known folder follows OneDrive and moved folders.
+	if known, err := windows.KnownFolderPath(windows.FOLDERID_Documents, 0); err == nil {
+		docs = append(docs, known)
+	}
+	if profile := os.Getenv("USERPROFILE"); profile != "" {
+		docs = append(docs, filepath.Join(profile, "Documents"))
+	}
+	if onedrive := os.Getenv("OneDrive"); onedrive != "" {
+		docs = append(docs, filepath.Join(onedrive, "Documents"))
+	}
+	return documentsReplayFolders(docs)
+}
+
 // gamePath writes the path with forward slashes, as the game's own map list
 // does.
 func (windowsPlatform) gamePath(_ context.Context, _ *game, path string) string {

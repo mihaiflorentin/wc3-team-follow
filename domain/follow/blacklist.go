@@ -42,7 +42,7 @@ func (e *Engine) configureBlacklist(cfg dto.FollowConfig) error {
 			if !tagPattern.MatchString(tag) || slices.ContainsFunc(list, func(x dto.BlacklistEntry) bool { return tagKey(x.Tag) == tagKey(tag) }) {
 				continue
 			}
-			list = append(list, dto.BlacklistEntry{Tag: tag, Added: b.Added.UTC()})
+			list = append(list, dto.BlacklistEntry{Tag: tag, Added: b.Added.UTC(), Reason: reasonText(b.Reason)})
 		}
 		slices.SortStableFunc(list, func(a, b dto.BlacklistEntry) int { return b.Added.Compare(a.Added) })
 		if len(list) > dto.MaxBlacklist {
@@ -90,12 +90,28 @@ func (e *Engine) configureBlacklist(cfg dto.FollowConfig) error {
 	if cfg.BlacklistManualBans != nil {
 		e.manualBans = *cfg.BlacklistManualBans
 	}
+	if cfg.BlacklistLeavers != nil {
+		e.leavers = *cfg.BlacklistLeavers
+	}
 	// Never follow and ban the same player.
 	if kept := slices.DeleteFunc(slices.Clone(e.manualTags), e.blacklisted); len(kept) != len(e.manualTags) {
 		e.manualTags = kept
 		e.selectionChanged()
 	}
 	return nil
+}
+
+// maxReason is how many characters a blacklist reason keeps.
+const maxReason = 300
+
+// reasonText trims a saved reason to one plain line of at most maxReason
+// characters.
+func reasonText(reason string) string {
+	reason = strings.Join(strings.Fields(reason), " ")
+	if r := []rune(reason); len(r) > maxReason {
+		reason = string(r[:maxReason])
+	}
+	return reason
 }
 
 // isSelf reports whether tag is the player's own BattleTag, as the team or

@@ -732,7 +732,13 @@ function blacklistRow(s, entry) {
     }
   };
   const name = nameCell(entry.tag, false, Boolean(noteOf(s, entry.tag)));
-  row.append(avatar(entry.tag, {banned: true}), name, added, remove);
+  // The reason is plain text, as Team Follow or the player wrote it.
+  let who = name;
+  if (entry.reason) {
+    who = el('span', 'ban-who');
+    who.append(name, el('span', 'ban-reason', entry.reason));
+  }
+  row.append(avatar(entry.tag, {banned: true}), who, added, remove);
   markPlayer(row, remove, entry.tag);
   li.append(row);
   return li;
@@ -749,11 +755,12 @@ function renderBlacklist(s) {
   else $('tab-blacklist').removeAttribute('aria-label');
   $('auto-ban').checked = Boolean(s.autoBan);
   $('ban-manual').checked = Boolean(s.blacklistManualBans);
+  $('ban-leavers').checked = Boolean(s.blacklistLeavers);
   if (tab !== 'blacklist') return;
 
   const query = $('friend-search').value.trim().toLowerCase();
   const visible = query ? entries.filter(b => matchesPlayer(s, b.tag, query)) : entries;
-  const signature = JSON.stringify([visible.map(b => [b.tag, addedOn(b.added), noteOf(s, b.tag)?.text ?? '']), query, entries.length]);
+  const signature = JSON.stringify([visible.map(b => [b.tag, addedOn(b.added), b.reason ?? '', noteOf(s, b.tag)?.text ?? '']), query, entries.length]);
   if (signature !== blacklistSignature) {
     blacklistSignature = signature;
     const list = $('blacklist');
@@ -804,6 +811,7 @@ $('ban-form').onsubmit = async event => {
 };
 $('auto-ban').onchange = () => act(() => bridge.SetAutoBan($('auto-ban').checked));
 $('ban-manual').onchange = () => act(() => bridge.SetBlacklistManualBans($('ban-manual').checked));
+$('ban-leavers').onchange = () => act(() => bridge.SetBlacklistLeavers($('ban-leavers').checked));
 
 function openClearConfirm() {
   const n = state?.recent?.length ?? 0;
@@ -1352,7 +1360,8 @@ function playerFacts(s, tag) {
   const ban = (s.blacklist ?? []).find(b => key(b.tag) === k);
   if (ban) {
     const since = dayOf(ban.added);
-    standing.push({kind: 'banned', text: since ? `Blacklisted since ${['Today', 'Yesterday'].includes(since) ? since.toLowerCase() : since}` : 'Blacklisted'});
+    standing.push({kind: 'banned', text: since ? `Blacklisted since ${['Today', 'Yesterday'].includes(since) ? since.toLowerCase() : since}` : 'Blacklisted',
+      detail: ban.reason ?? ''});
   }
   const history = [];
   const p = (s.recent ?? []).find(r => key(r.tag) === k);
@@ -1393,6 +1402,7 @@ function fillTip(tag) {
     for (const item of f.standing) {
       const li = el('li', item.kind);
       li.append(icon({group: 'users', friend: 'check', banned: 'ban'}[item.kind]), el('span', '', item.text));
+      if (item.detail) li.append(el('span', 'tip-reason', item.detail));
       list.append(li);
     }
     parts.push(list);
@@ -1908,6 +1918,7 @@ async function demoOpen(what) {
     case 'blacklist':
     case 'blacklist-empty':
     case 'blacklist-off':
+    case 'blacklist-leavers':
       selectTab('blacklist');
       break;
     case 'update-open':
@@ -2861,7 +2872,7 @@ $('map-updates-auto').onchange = e => act(() => bridge.SetMapUpdates(e.target.ch
    paused|password|waiting|many|linux|unverified|host-waiting|host-lobby|
    host-newest|host-newest-off|host-newest-untracked|host-newest-card|
    game-mode|keyboard-ask|keyboard-linux|recent|recent-empty|recent-clear|
-   recent-select|recent-select-confirm|blacklist|blacklist-empty|blacklist-off|
+   recent-select|recent-select-confirm|blacklist|blacklist-empty|blacklist-off|blacklist-leavers|
    update|update-open|update-warning|update-notes|update-later|update-skipped|
    update-latest|update-offline|update-dev|update-downloading|update-verifying|
    update-installing|update-failed|update-translocated|update-linux|update-after-linux|
@@ -2934,10 +2945,15 @@ function demoBridge() {
     lobbies: [1, 1, 37, 4, 1, 12, 2, 6, 1, 3, 1, 1][i]}));
   // Blacklist: sample BattleTags only. Garrosh is also a recent player.
   const blacklist = [
-    ['Garrosh#7781', 60 * 26],
-    ['Deathwing#6666', 60 * 24 * 9],
-    ['Mannoroth#1404', 60 * 24 * 33],
-  ].map(([tag, mins]) => ({tag, added: at(mins)}));
+    ['Garrosh#7781', 60 * 26, 'Left early: Legion TD 11.4c-hf9, 12 min into a 38 min match, 30 Oct 2026'],
+    ['Deathwing#6666', 60 * 24 * 9, ''],
+    ['Mannoroth#1404', 60 * 24 * 33, 'You banned them in LTD with friends, 28 Sep 2026'],
+  ].map(([tag, mins, reason]) => (reason ? {tag, added: at(mins), reason} : {tag, added: at(mins)}));
+  const leaverList = [
+    {tag: 'Illidan#4040', added: at(3), reason: 'Left early: Legion TD 11.4c-hf9, 3 min into a 5 min match that ended in a draw, 31 Oct 2026'},
+    {tag: 'Kaelthas#2525', added: at(3), reason: 'Left early: Legion TD 11.4c-hf9, 20 min into a 21 min match that their team forfeited, 31 Oct 2026'},
+    ...blacklist,
+  ];
   // Updates: a sample changelog spanning three versions.
   const t = text => ({text});
   const b = text => ({text, bold: true});
@@ -3011,7 +3027,7 @@ function demoBridge() {
     update: scene.startsWith('update') ? updateOffer : updateIdle,
     notes,
     recent, lobbyTags: ['Medivh#3310', 'Varimathras#2207'],
-    blacklist, autoBan: true, blacklistManualBans: true, ranking: [], selfTag: 'Player#1234',
+    blacklist, autoBan: true, blacklistManualBans: true, blacklistLeavers: false, ranking: [], selfTag: 'Player#1234',
     connected: true, version: '3.0.1.24371', verifiedBuild: true, enabled: false, diagnostic: false,
     manualTags: ['Arthas#1123', 'Jaina#2214', 'Thrall#1820', 'Uther#5521'], includeTeam: true, joinHostTeam: true,
     status: '', screen: 'CUSTOM_LOBBIES', busy: false, queued: false, inMatch: false, paused: false, inMenus: true,
@@ -3094,6 +3110,8 @@ function demoBridge() {
       {time: at(1), message: 'Banned Garrosh#7781 (on your blacklist).'}, {time: at(0), message: 'Added Mannoroth#1404 to your blacklist (you banned them).'}]},
     'blacklist-empty': {blacklist: []},
     'blacklist-off': {autoBan: false},
+    'blacklist-leavers': {blacklistLeavers: true, blacklist: leaverList,
+      log: [...s.log.slice(0, 2), {time: at(3), message: 'Blacklisted 2 players for leaving Legion TD early.'}]},
     update: {},
     'update-warning': {enabled: true, paused: true, busy: true, inMatch: true, inMenus: false, status: 'Follow is on but paused during the match.',
       update: {...updateOffer, warning: 'You’re in a lobby or a match. Updating restarts Team Follow and turns Follow off.'}},
@@ -3259,6 +3277,7 @@ function demoBridge() {
     RemoveFromBlacklist: async tag => { s.blacklist = s.blacklist.filter(b => key(b.tag) !== key(tag)); return clone(); },
     SetAutoBan: async on => { s.autoBan = on; return clone(); },
     SetBlacklistManualBans: async on => { s.blacklistManualBans = on; return clone(); },
+    SetBlacklistLeavers: async on => { s.blacklistLeavers = on; return clone(); },
     RequestKeyboardPermission: async () => { s.keyboard = {supported: true, permitted: true, reason: ''}; return clone(); },
     HostMap: async (path, useNewest) => demoHostMap(path, useNewest),
     ConfigureHost: async cfg => {

@@ -83,6 +83,15 @@ type Options struct {
 	TrackedMaps      []dto.TrackedMap
 	MapInterval      time.Duration
 	MapRetryInterval time.Duration
+	// LeaverMap names the tracked map whose early leavers may be
+	// blacklisted ("Legion TD", ADR 0013); LeaverFinalRound is the last
+	// part of a match nobody is judged in, zero using 4 minutes.
+	LeaverMap        string
+	LeaverFinalRound time.Duration
+	// ReplayPoll and ReplayWait time the wait for a match's replay; zero
+	// uses 2 seconds and 2 minutes.
+	ReplayPoll time.Duration
+	ReplayWait time.Duration
 	// Now reads the clock; nil uses time.Now.
 	Now func() time.Time
 }
@@ -110,6 +119,10 @@ type Ports struct {
 	Notes contract.PlayerNotes
 	// MapReleases finds and downloads tracked maps' newest releases.
 	MapReleases contract.MapReleases
+	// Replays reads a match's replay, and ReplayFiles finds it, for
+	// blacklisting early leavers (ADR 0013).
+	Replays     contract.ReplayReader
+	ReplayFiles contract.ReplayLocator
 }
 
 type Service struct {
@@ -126,6 +139,8 @@ type Service struct {
 	notesDB   contract.PlayerNotes
 	// mapReleases finds and downloads tracked maps' releases.
 	mapReleases contract.MapReleases
+	replays     contract.ReplayReader
+	replayFiles contract.ReplayLocator
 	logger      *slog.Logger
 	opts        Options
 
@@ -173,6 +188,12 @@ type Service struct {
 	hostMap      dto.HostMap
 	hostMapStale bool
 	hostMapBusy  bool
+	// matchStarted is when the current match began, or zero outside one;
+	// leaversBusy is set while a match's replay is waited for, and
+	// lastReplay identifies the last replay read, so each is read once.
+	matchStarted time.Time
+	leaversBusy  bool
+	lastReplay   string
 	// lastStatus is the last status line written to the log.
 	lastStatus string
 	// gamePID is the connected game's process id, for typing.
@@ -207,6 +228,8 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 		updater:     ports.Updater,
 		notesDB:     ports.Notes,
 		mapReleases: ports.MapReleases,
+		replays:     ports.Replays,
+		replayFiles: ports.ReplayFiles,
 		logger:      logger,
 		opts:        opts,
 		subscribers: map[int]func(dto.FollowState){},
@@ -239,6 +262,15 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 	if opts.UpdateRetryInterval <= 0 {
 		opts.UpdateRetryInterval = 30 * time.Minute
 	}
+	if opts.LeaverFinalRound <= 0 {
+		opts.LeaverFinalRound = defaultFinalRound
+	}
+	if opts.ReplayPoll <= 0 {
+		opts.ReplayPoll = defaultReplayPoll
+	}
+	if opts.ReplayWait <= 0 {
+		opts.ReplayWait = defaultReplayWait
+	}
 	s.opts = opts
 
 	saved, err := s.prefs.Load()
@@ -258,7 +290,7 @@ func New(ports Ports, logger *slog.Logger, opts Options) *Service {
 	if err == nil {
 		// After the group, so a player on both lists leaves the group.
 		err = s.engine.Configure(dto.FollowConfig{Blacklist: &saved.Blacklist, AutoBan: &saved.AutoBan,
-			BlacklistManualBans: &saved.BlacklistManualBans})
+			BlacklistManualBans: &saved.BlacklistManualBans, BlacklistLeavers: &saved.BlacklistLeavers})
 	}
 	if err == nil && saved.Host != nil {
 		err = s.engine.ConfigureHost(dto.HostConfig{Settings: saved.Host})
@@ -539,7 +571,9 @@ func (s *Service) handle(ctx context.Context, ev dto.GameEvent) (loggedOut bool)
 	} else if !quietEvents[ev.MessageType] {
 		s.logger.DebugContext(ctx, "companion.event", slog.String("type", ev.MessageType))
 	}
+	wasInMatch := s.engine.InMatch()
 	s.engine.Receive(ev)
+	s.matchSeen(ctx, wasInMatch)
 	for _, warning := range s.engine.TakeBanMistakes() {
 		s.logger.WarnContext(ctx, "follow.ban_mistake", slog.String("warning", warning))
 	}
@@ -655,7 +689,7 @@ func (s *Service) Configure(cfg dto.FollowConfig) (dto.FollowState, error) {
 	s.logger.Info("follow.configure", configAttrs(cfg, err)...)
 	if err == nil && (cfg.Tags != nil || cfg.CheckUpdates != nil || cfg.MapUpdates != nil || cfg.IncludeTeam != nil || cfg.AskPassword != nil || cfg.JoinHostTeam != nil ||
 		cfg.Blacklist != nil || cfg.BlacklistAdd != nil || cfg.BlacklistRemove != nil || cfg.AutoBan != nil ||
-		cfg.BlacklistManualBans != nil) {
+		cfg.BlacklistManualBans != nil || cfg.BlacklistLeavers != nil) {
 		if saveErr := s.save(); saveErr != nil {
 			s.logger.Error("companion.preferences_save", slog.Any("error", saveErr))
 			s.prefsError = saveFailed
@@ -697,6 +731,9 @@ func configAttrs(cfg dto.FollowConfig, err error) []any {
 	}
 	if cfg.BlacklistManualBans != nil {
 		attrs = append(attrs, slog.Bool("blacklist_manual_bans", *cfg.BlacklistManualBans))
+	}
+	if cfg.BlacklistLeavers != nil {
+		attrs = append(attrs, slog.Bool("blacklist_leavers", *cfg.BlacklistLeavers))
 	}
 	if cfg.CheckUpdates != nil {
 		attrs = append(attrs, slog.Bool("check_updates", *cfg.CheckUpdates))
@@ -778,7 +815,8 @@ func (s *Service) save() error {
 		JoinHostTeam: s.engine.JoinHostTeam(),
 		MapsFolder:   s.mapsFolder, Host: &host,
 		Blacklist: s.engine.Blacklist(), AutoBan: s.engine.AutoBan(), BlacklistManualBans: s.engine.BlacklistManualBans(),
-		CheckUpdates: s.updates.Automatic(), SkippedVersion: s.updates.SkippedVersion(), MapUpdates: s.mapUpdates.Enabled(),
+		BlacklistLeavers: s.engine.BlacklistLeavers(),
+		CheckUpdates:     s.updates.Automatic(), SkippedVersion: s.updates.SkippedVersion(), MapUpdates: s.mapUpdates.Enabled(),
 		LastVersion: s.whatsNew.LastVersion(),
 	})
 }

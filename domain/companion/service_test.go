@@ -24,6 +24,7 @@ import (
 	mockprefs "github.com/mihaiflorentin/wc3-team-follow/mock/preferences"
 	mockranking "github.com/mihaiflorentin/wc3-team-follow/mock/ranking"
 	mockrecent "github.com/mihaiflorentin/wc3-team-follow/mock/recent"
+	mockreplay "github.com/mihaiflorentin/wc3-team-follow/mock/replay"
 	mockupdater "github.com/mihaiflorentin/wc3-team-follow/mock/updater"
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
@@ -44,6 +45,8 @@ type harness struct {
 	releases  *mockmapreleases.Releases
 	notes     *mocknotes.Store
 	ranking   *mockranking.Store
+	replays   *mockreplay.Reader
+	replayLoc *mockreplay.Locator
 	// skew moves the service's clock ahead of the real one, in nanoseconds.
 	skew atomic.Int64
 }
@@ -83,11 +86,13 @@ func newHarnessFull(t *testing.T, prefs *mockprefs.Store, recent *mockrecent.Sto
 		recent:    recent,
 		updater:   &mockupdater.Updater{},
 		releases:  &mockmapreleases.Releases{},
+		replays:   &mockreplay.Reader{},
+		replayLoc: &mockreplay.Locator{},
 	}
 	h.locator = &mockmaps.Locator{Folders: []dto.MapsFolder{{Path: "/detected/Maps", Source: "test"}}, GamePrefix: "GAME:"}
 	h.library = &mockmaps.Library{Entries: []dto.MapEntry{{Name: "Legion TD", Path: "/detected/Maps/Legion TD.w3x"}, {Name: "Footmen Frenzy", Path: "/detected/Maps/ff.w3x"}}}
 	ports := companion.Ports{Discovery: h.discovery, Dialer: &mockgame.Dialer{Session: h.session}, Prefs: prefs, Maps: h.locator, Library: h.library, Processes: h.processes, Keyboard: h.keyboard, Recent: h.recent, Notes: h.notes, Ranking: h.ranking, Updater: h.updater,
-		MapReleases: h.releases}
+		MapReleases: h.releases, Replays: h.replays, ReplayFiles: h.replayLoc}
 	opts := companion.Options{
 		VerifiedBuilds:    []string{build},
 		RefreshInterval:   5 * time.Second,

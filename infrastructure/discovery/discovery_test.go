@@ -257,6 +257,7 @@ func TestParseLsof(t *testing.T) {
 type fakePlatform struct {
 	ports     []int
 	sessionID string
+	replays   []string
 }
 
 func (f fakePlatform) findGames(context.Context) ([]game, error)      { return []game{{pid: 7}}, nil }
@@ -266,6 +267,7 @@ func (f fakePlatform) version(context.Context, game) string           { return "
 func (f fakePlatform) mapsFolders(context.Context, *game) []dto.MapsFolder {
 	return nil
 }
+func (f fakePlatform) replayFolders(context.Context, *game) []string        { return f.replays }
 func (f fakePlatform) gamePath(_ context.Context, _ *game, p string) string { return p }
 func (f fakePlatform) closable(game) bool                                   { return false }
 func (f fakePlatform) stop(game, bool) error                                { return errors.New("not in tests") }

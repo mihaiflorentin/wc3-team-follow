@@ -66,3 +66,14 @@ name       = "Legion TD"
 repository = "team-oze/Legion-TD"
 pattern    = '(?i)^Legion_TD_(?P<version>\d[^_/\\ ]*)_Team_?OZE(?: \(\d+\))?\.w3x$'
 folder     = "Download"
+
+[leavers]
+# Blacklist players who leave Legion TD early (docs/adr/0013), off until the
+# player switches it on in the Blacklist tab. After each match Team Follow
+# reads the game's own LastReplay.w3g: anyone who left before the final round
+# (or before the first -draw or -ff vote that ended the match) is added.
+# map is the tracked map, by its name in [[maps.tracked]], whose matches count.
+map = "Legion TD"
+# The last part of a match nobody is judged in: Legion TD rounds are about
+# 2.5 to 4 minutes.
+final_round = "4m"

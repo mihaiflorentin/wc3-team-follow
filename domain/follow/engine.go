@@ -164,6 +164,12 @@ type Engine struct {
 	// by default); blacklistChanged reports such an add for saving.
 	manualBans       bool
 	blacklistChanged bool
+	// leavers adds players who leave Legion TD early to the blacklist (off
+	// by default, ADR 0013).
+	leavers bool
+	// rosterKnown is set once the game sent the whole friends list on this
+	// connection, so AddLeavers can tell friends apart.
+	rosterKnown bool
 	// banMistakes are warnings about wrong bans, for TakeBanMistakes.
 	banMistakes []string
 	// ignoredBanLines are the senders of ban lines not sent as the player,
@@ -253,6 +259,7 @@ func (e *Engine) Connection(connected bool, version string) {
 	e.team, e.teamAt = nil, time.Time{}
 	clear(e.friends)
 	clear(e.roster)
+	e.rosterKnown = false
 	e.watched = nil
 	e.busy, e.queued, e.screen = false, false, ""
 	e.inMatch, e.awaitingMenu, e.menuReady, e.resumeAt = false, false, false, time.Time{}
@@ -442,6 +449,7 @@ func (e *Engine) Receive(event dto.GameEvent) {
 			for _, f := range friends {
 				e.friend(object(f))
 			}
+			e.rosterKnown = true
 		}
 	case "FriendsFriendUpdated":
 		e.friend(object(field(p, "data", "friend")))
@@ -902,6 +910,14 @@ func (e *Engine) AskPassword() bool { return e.askPassword }
 // team.
 func (e *Engine) JoinHostTeam() bool { return e.joinHostTeam }
 
+// InMatch reports whether the player is in a match, as far as the game's
+// events tell.
+func (e *Engine) InMatch() bool { return e.inMatch }
+
+// SelfTag returns the player's own BattleTag, or "" before the team or a
+// lobby showed it.
+func (e *Engine) SelfTag() string { return e.selfTag }
+
 // Snapshot returns the state for the interface. It never includes account
 // identifiers or passwords.
 func (e *Engine) Snapshot() dto.FollowState {
@@ -918,6 +934,7 @@ func (e *Engine) Snapshot() dto.FollowState {
 		Blacklist:           e.Blacklist(),
 		AutoBan:             e.autoBan,
 		BlacklistManualBans: e.manualBans,
+		BlacklistLeavers:    e.leavers,
 		Status:              e.status,
 		Screen:              e.screen,
 		Busy:                e.busy,

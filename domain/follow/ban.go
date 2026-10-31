@@ -34,6 +34,8 @@ type banState struct {
 	// players are the slots of the newest update of the lobby the player
 	// hosts; nil outside one.
 	players []any
+	// lobby is that lobby's name, for the reason of a ban by hand.
+	lobby string
 	// banned holds the blacklisted players already banned from this lobby
 	// while they are still listed; one who drops out of a lobby update is
 	// forgotten, so a rejoin is banned again.
@@ -127,6 +129,9 @@ func (e *Engine) banBlacklisted(p map[string]any) {
 		return
 	}
 	b.players = players
+	if name, _ := p["lobbyName"].(string); strings.TrimSpace(name) != "" {
+		b.lobby = strings.TrimSpace(name)
+	}
 	now := e.now()
 	b.awaiting = slices.DeleteFunc(b.awaiting, func(r banRequest) bool { return now.Sub(r.sentAt) >= banWait })
 	if r := b.sent; r != nil && (now.Sub(r.sentAt) >= banWait || !e.holdsSlot(r.tag, r.slot)) {
@@ -266,7 +271,13 @@ func (e *Engine) bannedByHand(who string) {
 		len(e.blacklist) >= dto.MaxBlacklist {
 		return
 	}
-	e.blacklist = append([]dto.BlacklistEntry{{Tag: who, Added: e.now().UTC()}}, e.blacklist...)
+	now := e.now()
+	lobby := e.ban.lobby
+	if lobby == "" {
+		lobby = "a lobby you hosted"
+	}
+	reason := reasonText("You banned them in " + lobby + ", " + now.Format("2 Jan 2006"))
+	e.blacklist = append([]dto.BlacklistEntry{{Tag: who, Added: now.UTC(), Reason: reason}}, e.blacklist...)
 	if kept := slices.DeleteFunc(slices.Clone(e.manualTags), e.blacklisted); len(kept) != len(e.manualTags) {
 		e.manualTags = kept
 		e.selectionChanged()

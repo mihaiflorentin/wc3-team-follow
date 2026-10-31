@@ -21,4 +21,12 @@ func (darwinPlatform) mapsFolders(_ context.Context, _ *game) []dto.MapsFolder {
 	}
 }
 
+func (darwinPlatform) replayFolders(_ context.Context, _ *game) []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	return darwinReplayFolders(home)
+}
+
 func (darwinPlatform) gamePath(_ context.Context, _ *game, path string) string { return path }

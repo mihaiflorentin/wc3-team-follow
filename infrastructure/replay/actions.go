@@ -1,5 +1,7 @@
 package replay
 
+import "time"
+
 // Action lengths follow w3gjs's ActionParser (MIT), for game 1.13 and later.
 
 // actionStats counts one player's actions.
@@ -11,8 +13,43 @@ type actionStats struct {
 // blockFinds is what one command block names: the object type of each
 // order that names one, and the text of each map chat action.
 type blockFinds struct {
-	codes []string
-	chat  []string
+	codes  []string
+	chat   []string
+	clocks []clockTick
+}
+
+// clockTick is one 0x62 action: the game clock's value and how many times
+// in a row it was sent. While the match runs the value rises and the
+// counter is 1; once it ends the value stops and the counter goes 2, 3, …
+type clockTick struct {
+	value, counter uint32
+}
+
+// clockWatch finds when the game clock stopped: the time the last clock
+// value was first sent with counter 1, once that value was repeated.
+type clockWatch struct {
+	have     bool
+	value    uint32
+	since    time.Duration
+	repeated bool
+}
+
+// see reads one tick sent at elapsed.
+func (w *clockWatch) see(t clockTick, elapsed time.Duration) {
+	switch {
+	case t.counter <= 1 && (!w.have || t.value > w.value):
+		*w = clockWatch{have: true, value: t.value, since: elapsed}
+	case t.counter > 1 && w.have && t.value == w.value:
+		w.repeated = true
+	}
+}
+
+// ended is when the clock stopped, or zero when it never did.
+func (w *clockWatch) ended() time.Duration {
+	if !w.repeated {
+		return 0
+	}
+	return w.since
 }
 
 // readActions decodes one command block's actions, counting them. It stops
@@ -132,8 +169,12 @@ func readAction(c *cursor, id int, s *actionStats, f *blockFinds) (apm, known bo
 		}
 	case 0x61: // Esc
 		return true, true
-	case 0x62:
-		c.skip(12)
+	case 0x62: // the game clock, about once a second per player
+		c.skip(4)
+		value, counter := c.u32(), c.u32()
+		if c.err == nil {
+			f.clocks = append(f.clocks, clockTick{value: value, counter: counter})
+		}
 	case 0x63, 0x64, 0x65:
 		c.skip(8)
 	case 0x66, 0x67: // skill and build submenus
