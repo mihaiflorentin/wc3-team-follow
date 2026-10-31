@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-31
+
 ### Added
 
 - **Keep maps up to date**: Team Follow checks for the newest version of Legion TD (Team OZE) when it starts and every few hours, and downloads it into your Maps folder when it's missing, with a progress bar while it downloads and a message once it's ready. Every download is checked against the checksum the map's authors publish on GitHub, and older versions stay in your Maps folder so you can still join lobbies on them. The new Maps section shows the version you have and the newest one, with Check now and a switch to turn it off.
@@ -148,7 +150,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A friends picker, watching before joining, and log files for reporting problems.
 - Warcraft Team Follow rebuilt in Go, with one app for Windows, macOS and Linux.
 
-[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.6...HEAD
+[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.6...v0.10.0
 [0.9.6]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.3...v0.9.4
