@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- **Greeting** now waits for someone new: Team Follow says hello 3 to 10 seconds after the first player you don't follow joins your lobby, once per lobby. It greets in lobbies you host too, including Auto-host's, and stays quiet when only your followed friends and computers are there.
+
 ## [0.9.6] - 2026-10-30
 
 ### Fixed

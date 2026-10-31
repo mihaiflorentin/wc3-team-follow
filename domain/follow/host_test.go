@@ -10,6 +10,29 @@ import (
 	"github.com/mihaiflorentin/wc3-team-follow/port/dto"
 )
 
+// swaps counts the !swap lines typed in the lobby chat; the greeting is
+// typed there too and doesn't count.
+func (f *fixture) swaps() int {
+	n := 0
+	for _, c := range f.commands {
+		if line, _ := c.payload["content"].(string); c.message == follow.CmdSendGameChatMessage && strings.HasPrefix(line, "!swap") {
+			n++
+		}
+	}
+	return n
+}
+
+// lastSwap returns the last !swap line typed in the lobby chat.
+func (f *fixture) lastSwap() (string, bool) {
+	for i := len(f.commands) - 1; i >= 0; i-- {
+		c := f.commands[i]
+		if line, _ := c.payload["content"].(string); c.message == follow.CmdSendGameChatMessage && strings.HasPrefix(line, "!swap") {
+			return line, true
+		}
+	}
+	return "", false
+}
+
 func hostSettings() dto.HostSettings {
 	return dto.HostSettings{MapPath: "/maps/Legion TD.w3x", MapName: "Legion TD", GameName: "LTD friends", DelaySeconds: 10, Visibility: 2, Observers: 32}
 }
@@ -128,7 +151,7 @@ func TestAutoHostTypesNothingWhenTheGamesControlsSuffice(t *testing.T) {
 	if f.count(follow.CmdCreateLobby) < 2 {
 		t.Fatal("the flow did not run through a full cycle")
 	}
-	if n := f.count(follow.CmdSendGameChatMessage); n != 0 {
+	if n := f.swaps(); n != 0 {
 		t.Fatalf("%d chat messages sent", n)
 	}
 }
@@ -411,7 +434,7 @@ func TestSameTeamNeverMovesTheHostOrAComputer(t *testing.T) {
 	for range 3 {
 		f.receive("GameLobbySetup", lobby)
 	}
-	if f.count(follow.CmdSetTeam) != 0 || f.count(follow.CmdSendGameChatMessage) != 0 || notes(f, "Friend#1234 can't be moved to your team") != 1 {
+	if f.count(follow.CmdSetTeam) != 0 || f.swaps() != 0 || notes(f, "Friend#1234 can't be moved to your team") != 1 {
 		t.Fatalf("setTeam=%d log=%+v", f.count(follow.CmdSetTeam), f.state().Log)
 	}
 	if len(f.state().Host.OffTeam) != 1 {
@@ -462,8 +485,8 @@ func TestSameTeamSwapsAMemberWithAStrangerOnTheHostsTeam(t *testing.T) {
 	f := sameTeamHost(t, true)
 	f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0, canMove: true}, seat{name: "Player#5678", team: 0},
 		seat{name: "Friend#1234", team: 1}, seat{name: "Computer (Normal)", team: 1, computer: true}))
-	c, ok := f.lastCommand(follow.CmdSendGameChatMessage)
-	if !ok || c.payload["content"] != "!swap 3 2" || f.count(follow.CmdSetTeam) != 0 {
+	c, ok := f.lastSwap()
+	if !ok || c != "!swap 3 2" || f.count(follow.CmdSetTeam) != 0 {
 		t.Fatalf("chat = %+v, %v, setTeam=%d", c, ok, f.count(follow.CmdSetTeam))
 	}
 	if notes(f, "Asked the game to swap Friend#1234 with Player#5678.") != 1 {
@@ -475,8 +498,8 @@ func TestSameTeamSwapsAMemberWithAStrangerOnTheHostsTeam(t *testing.T) {
 	// The swap worked: the group is together and the full lobby starts.
 	f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0, canMove: true}, seat{name: "Friend#1234", team: 0},
 		seat{name: "Player#5678", team: 1}, seat{name: "Computer (Normal)", team: 1, computer: true}))
-	if f.count(follow.CmdSendGameChatMessage) != 1 || f.count(follow.CmdLobbyStart) != 1 {
-		t.Fatalf("chat=%d start=%d", f.count(follow.CmdSendGameChatMessage), f.count(follow.CmdLobbyStart))
+	if f.swaps() != 1 || f.count(follow.CmdLobbyStart) != 1 {
+		t.Fatalf("chat=%d start=%d", f.swaps(), f.count(follow.CmdLobbyStart))
 	}
 }
 
@@ -492,7 +515,7 @@ func TestSameTeamSwapsOneAtATimeAndGivesUpAfterThreeUnansweredSwaps(t *testing.T
 	f.receive("GameLobbySetup", strangerOnHostsTeam())
 	f.advance(2 * time.Second)
 	f.engine.Tick()
-	if n := f.count(follow.CmdSendGameChatMessage); n != 1 {
+	if n := f.swaps(); n != 1 {
 		t.Fatalf("%d swaps before the first was answered", n)
 	}
 	// No change within the timeout: ask again, up to three times.
@@ -501,7 +524,7 @@ func TestSameTeamSwapsOneAtATimeAndGivesUpAfterThreeUnansweredSwaps(t *testing.T
 		f.engine.Tick()
 		f.receive("GameLobbySetup", strangerOnHostsTeam())
 	}
-	if n := f.count(follow.CmdSendGameChatMessage); n != 3 {
+	if n := f.swaps(); n != 3 {
 		t.Fatalf("%d swaps, want 3", n)
 	}
 	if notes(f, "didn't answer the swap") != 1 {
@@ -514,7 +537,7 @@ func TestSameTeamSwapsOneAtATimeAndGivesUpAfterThreeUnansweredSwaps(t *testing.T
 	f.engine.Tick()
 	f.receive("SetGlueScreen", map[string]any{"screen": "GAME_LOBBY"})
 	f.receive("GameLobbySetup", strangerOnHostsTeam())
-	if n := f.count(follow.CmdSendGameChatMessage); n != 4 {
+	if n := f.swaps(); n != 4 {
 		t.Fatalf("%d swaps after a new lobby, want 4", n)
 	}
 }
@@ -523,7 +546,7 @@ func TestSameTeamStopsSwappingOnceTheCountdownRuns(t *testing.T) {
 	f := sameTeamHost(t, false)
 	f.receive("LobbyCountdown", countdown(true, true))
 	f.receive("GameLobbySetup", strangerOnHostsTeam())
-	if n := f.count(follow.CmdSendGameChatMessage); n != 0 {
+	if n := f.swaps(); n != 0 {
 		t.Fatalf("%d swaps typed into a starting game", n)
 	}
 }
@@ -537,7 +560,7 @@ func TestSameTeamNeverSwapsGroupMembersOffTheHostsTeam(t *testing.T) {
 	f.openOwnLobby()
 	f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0}, seat{name: "Arthas#1123", team: 0},
 		seat{name: "Friend#1234", team: 1}, seat{name: "Player#5678", team: 1}))
-	if n := f.count(follow.CmdSendGameChatMessage); n != 0 {
+	if n := f.swaps(); n != 0 {
 		t.Fatalf("%d swaps sent a group member away", n)
 	}
 }
@@ -552,12 +575,12 @@ func TestSameTeamWaitsForTheMemberToMoveIntoAnOpenSlot(t *testing.T) {
 	f.receive("GameLobbySetup", waiting)
 	f.advance(5 * time.Second)
 	f.engine.Tick()
-	if n := f.count(follow.CmdSendGameChatMessage); n != 0 || notes(f, "Waiting for Friend#1234 to move to your team") != 1 {
+	if n := f.swaps(); n != 0 || notes(f, "Waiting for Friend#1234 to move to your team") != 1 {
 		t.Fatalf("chat=%d log=%+v", n, f.state().Log)
 	}
 	f.advance(6 * time.Second)
 	f.engine.Tick()
-	if c, ok := f.lastCommand(follow.CmdSendGameChatMessage); !ok || c.payload["content"] != "!swap 4 2" {
+	if c, ok := f.lastSwap(); !ok || c != "!swap 4 2" {
 		t.Fatalf("chat = %+v, %v", c, ok)
 	}
 }
@@ -570,8 +593,8 @@ func TestSameTeamSaysOnceWhenNothingCanMove(t *testing.T) {
 		f.receive("GameLobbySetup", lobbyWith(seat{name: "Self#1111", team: 0}, seat{name: "Computer (Normal)", team: 0, computer: true},
 			seat{name: "Friend#1234", team: 1}, seat{name: "Computer (Normal)", team: 1, computer: true}))
 	}
-	if f.count(follow.CmdSetTeam) != 0 || f.count(follow.CmdSendGameChatMessage) != 0 || notes(f, "Friend#1234 can't be moved to your team") != 1 {
-		t.Fatalf("setTeam=%d chat=%d log=%+v", f.count(follow.CmdSetTeam), f.count(follow.CmdSendGameChatMessage), f.state().Log)
+	if f.count(follow.CmdSetTeam) != 0 || f.swaps() != 0 || notes(f, "Friend#1234 can't be moved to your team") != 1 {
+		t.Fatalf("setTeam=%d chat=%d log=%+v", f.count(follow.CmdSetTeam), f.swaps(), f.state().Log)
 	}
 }
 

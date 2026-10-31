@@ -32,18 +32,20 @@ var greetingWords = map[string]bool{
 	"sup": true, "hola": true, "howdy": true, "glhf": true, "gl": true, "hai": true, "helo": true, "hallo": true,
 }
 
-// Greetings returns the only lines the engine types when the player joins
-// a lobby (docs/adr/0010).
+// Greetings returns the only lines the engine types to greet a lobby
+// (docs/adr/0010).
 func Greetings() []string {
 	return []string{"hi", "hey", "hello", "hi all", "hey everyone", "hello there", "hiya", "glhf"}
 }
 
-// greeting is the "say hi" for the lobby the player joined as a guest.
+// greeting is the "say hi" for the lobby the player is in, as host or guest.
 type greeting struct {
-	// inLobby is set once a lobby was seen (so it is greeted at most once);
-	// lobby is its name.
+	// inLobby is set once a lobby was seen; lobby is its name.
 	inLobby bool
 	lobby   string
+	// scheduled is set once a greeting was planned for this lobby, so it is
+	// greeted at most once.
+	scheduled bool
 	// pending is set while a greeting waits for at.
 	pending bool
 	at      time.Time
@@ -65,19 +67,45 @@ func (e *Engine) endGreeting() { e.greet = greeting{} }
 // not greeted again.
 func (e *Engine) cancelGreeting() { e.greet.pending = false }
 
-// greetLobby schedules the greeting on a GameLobbySetup: the first one of a
-// lobby the player sits in as a guest, outside Auto-host and any match.
-// isHost must be present and false.
+// greetLobby schedules the greeting on a GameLobbySetup: 3 to 10 seconds
+// after the first human the player doesn't follow is seated in the lobby the
+// player sits in, whether the player hosts it (by hand or with Auto-host) or
+// joined it, outside any match. Each lobby is greeted at most once.
 func (e *Engine) greetLobby(p map[string]any, inSlot bool, name string) {
-	isHost, known := p["isHost"].(bool)
-	if !inSlot || !known || isHost || e.host.enabled || e.inMatch {
+	if !inSlot || e.inMatch {
 		return
 	}
 	g := &e.greet
-	if g.inLobby && g.lobby == name {
+	if !g.inLobby || g.lobby != name {
+		*g = greeting{inLobby: true, lobby: name}
+	}
+	if g.scheduled || !e.strangerSeated(p) {
 		return
 	}
-	*g = greeting{inLobby: true, lobby: name, pending: true, at: e.now().Add(e.randomDelay(minGreetDelay, maxGreetDelay))}
+	g.scheduled, g.pending = true, true
+	g.at = e.now().Add(e.randomDelay(minGreetDelay, maxGreetDelay))
+}
+
+// strangerSeated reports whether the lobby has a human player, other than
+// the player, whom the player doesn't follow. Computers, open slots and
+// players without a name yet don't count.
+func (e *Engine) strangerSeated(p map[string]any) bool {
+	followed := map[string]bool{}
+	for _, tag := range e.group() {
+		followed[tagKey(tag)] = true
+	}
+	players, _ := list(p["players"])
+	for _, raw := range players {
+		x := object(raw)
+		name, _ := x["name"].(string)
+		name = strings.TrimSpace(name)
+		if name == "" || isTrue(x["isSelf"]) || e.isSelf(name) || !numberIs(x["slotStatus"], slotOccupied) ||
+			!numberIs(x["slotType"], slotHuman) || followed[tagKey(name)] {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func (e *Engine) randomDelay(lo, hi time.Duration) time.Duration {
@@ -121,7 +149,7 @@ func (e *Engine) greetStep() {
 		return
 	}
 	g.pending = false
-	if !e.connected || e.inMatch || e.host.enabled {
+	if !e.connected || e.inMatch {
 		return
 	}
 	line := Greetings()[e.random.IntN(len(Greetings()))]

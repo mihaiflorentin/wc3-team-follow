@@ -1,6 +1,6 @@
 # 6. Typing in the game chat
 
-Status: accepted (2026-10-28). Extended by ADR 0007 (the match chat, with keystrokes) and ADR 0010 (a greeting when joining a lobby).
+Status: accepted (2026-10-28). Extended by ADR 0007 (the match chat, with keystrokes) ADR 0010 (a greeting when joining a lobby) and ADR 0011 (which supersedes 0010: a greeting when someone the player doesn't follow joins).
 
 ## Context
 

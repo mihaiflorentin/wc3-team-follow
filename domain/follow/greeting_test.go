@@ -26,10 +26,19 @@ func greetFixture(t *testing.T) *fixture {
 }
 
 // guestLobby is a GameLobbySetup for a lobby someone else hosts, with the
-// player seated.
+// player seated next to a stranger (a player the player doesn't follow).
 func guestLobby(name string, isHost bool) map[string]any {
-	return map[string]any{"lobbyName": name, "isHost": isHost, "playerHost": "Friend#1234",
-		"players": []any{map[string]any{"isSelf": true, "slotStatus": 2}}}
+	return seatedLobby(name, isHost, "Stranger#5678")
+}
+
+// seatedLobby is a GameLobbySetup with the player seated and the named human
+// players in the other slots.
+func seatedLobby(name string, isHost bool, others ...string) map[string]any {
+	players := []any{map[string]any{"isSelf": true, "slotStatus": 2, "slotType": 0, "name": "Self#1111"}}
+	for _, o := range others {
+		players = append(players, map[string]any{"slotStatus": 2, "slotType": 0, "name": o})
+	}
+	return map[string]any{"lobbyName": name, "isHost": isHost, "playerHost": "Friend#1234", "players": players}
 }
 
 func (f *fixture) chat() []string {
@@ -133,25 +142,60 @@ func TestNoGreetingStartsWithACapitalLetter(t *testing.T) {
 	}
 }
 
-func TestDoesNotGreetAsHost(t *testing.T) {
+func TestGreetsAsHostOnceAStrangerJoins(t *testing.T) {
 	f := greetFixture(t)
-	f.receive("GameLobbySetup", guestLobby("My game", true))
-	f.wantNoChat()
+	f.receive("GameLobbySetup", seatedLobby("My game", true))
+	f.wait(12 * time.Second)
+	if got := f.chat(); len(got) != 0 {
+		t.Fatalf("greeted an empty lobby: %q", got)
+	}
+	f.receive("GameLobbySetup", seatedLobby("My game", true, "Stranger#5678"))
+	f.wait(6 * time.Second)
+	if got := f.chat(); len(got) != 0 {
+		t.Fatalf("greeted before the delay: %q", got)
+	}
+	f.wait(time.Second)
+	if got := f.chat(); !slices.Equal(got, []string{"hey"}) {
+		t.Fatalf("chat = %q, want one greeting 6.5 s after the stranger joined", got)
+	}
 }
 
-func TestDoesNotGreetWhenIsHostIsUnknown(t *testing.T) {
-	f := greetFixture(t)
-	p := guestLobby("Fun game", false)
-	delete(p, "isHost")
-	f.receive("GameLobbySetup", p)
-	f.wantNoChat()
-}
-
-func TestDoesNotGreetInAutoHostLobby(t *testing.T) {
+func TestGreetsInAnAutoHostLobbyOnceAStrangerJoins(t *testing.T) {
 	f := greetFixture(t)
 	f.mustHost(hostSettings())
-	f.receive("GameLobbySetup", guestLobby("My game", false))
+	f.receive("GameLobbySetup", seatedLobby("My game", true, "Stranger#5678"))
+	f.wait(7 * time.Second)
+	if got := f.chat(); !slices.Contains(got, "hey") {
+		t.Fatalf("chat = %q, want the greeting in Auto-host's lobby", got)
+	}
+}
+
+func TestDoesNotGreetOnlyThePlayersIFollowOrComputers(t *testing.T) {
+	f := greetFixture(t)
+	if err := f.engine.Configure(dto.FollowConfig{Tags: &[]string{"Friend#1234"}}); err != nil {
+		t.Fatal(err)
+	}
+	lobby := seatedLobby("Fun game", false, "friend#1234")
+	players := lobby["players"].([]any)
+	lobby["players"] = append(players, map[string]any{"slotStatus": 2, "slotType": 1, "name": "Computer (Normal)"},
+		map[string]any{"slotStatus": 0, "slotType": 0, "name": ""})
+	f.receive("GameLobbySetup", lobby)
 	f.wantNoChat()
+}
+
+func TestGreetsWhenTheFirstStrangerJoinsAfterMyFriends(t *testing.T) {
+	f := greetFixture(t)
+	if err := f.engine.Configure(dto.FollowConfig{Tags: &[]string{"Friend#1234"}}); err != nil {
+		t.Fatal(err)
+	}
+	f.receive("GameLobbySetup", seatedLobby("Fun game", false, "Friend#1234"))
+	f.wait(12 * time.Second)
+	f.receive("GameLobbySetup", seatedLobby("Fun game", false, "Friend#1234", "Stranger#5678"))
+	f.receive("GameLobbySetup", seatedLobby("Fun game", false, "Friend#1234", "Stranger#5678", "Other#9012"))
+	f.wait(20 * time.Second)
+	if got := f.chat(); len(got) != 1 {
+		t.Fatalf("chat = %q, want exactly one greeting after the first stranger", got)
+	}
 }
 
 func TestDoesNotGreetWhenNotSeated(t *testing.T) {

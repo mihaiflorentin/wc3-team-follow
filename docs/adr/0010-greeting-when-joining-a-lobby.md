@@ -1,6 +1,6 @@
 # 10. Greeting when joining a lobby
 
-Status: accepted (2026-10-30). Extends ADR 0006.
+Status: superseded by ADR 0011 (2026-10-31). Extended ADR 0006.
 
 ## Context
 
