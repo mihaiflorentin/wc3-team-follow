@@ -40,7 +40,7 @@ Warcraft Team Follow is a Go 1.27 desktop app for Warcraft III: Reforged that fo
 - `[follow] verified_builds` gates live joining (`3.0.1.24371`). Never add a build without a live test.
 - `[logging] default` is `color`, `level` is `debug`; the log file (`file = true`) is JSON at `debug`, 5 MB × 3 rotations.
 - `[maps]` tracks Legion TD (`team-oze/Legion-TD`, files `Legion_TD_<version>_Team_OZE.w3x` and variants, into `Download`) on `https://api.github.com` every `6h` (retry `30m`, timeout `20s`, at most `256` MB per file).
-- `[leavers]` names the tracked map whose early leavers may be blacklisted (`map = "Legion TD"`) and the final round nobody is judged in (`final_round = "4m"`).
+- `[leavers]` names the tracked map whose early leavers may be blacklisted (`map = "Legion TD"`) and the fallback final round for replays that show no rounds (`final_round = "4m"`); rounds normally come from the replay.
 - `[updates]` checks `mihaiflorentin/wc3-team-follow` on `https://api.github.com` every `6h` (retry `30m`, timeout `20s`); `main.go` sets `cfg.App.Version` from the build info, and `cfg.App.Executable` and `cfg.App.Updated` (the program an update replaces, and whether this start follows one).
 - Per-user data: `%LOCALAPPDATA%\WarcraftTeamFollow` (Windows), `~/Library/Application Support/WarcraftTeamFollow` (macOS), `$XDG_CONFIG_HOME/WarcraftTeamFollow` (Linux). `WF_DATA_DIR` overrides it. On Windows the WebView2 profile is its `webview` subfolder.
 - `LICENSE`: MIT, copyright 2026 Mihai Mihaila.

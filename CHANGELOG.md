@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- **Blacklist players who leave Legion TD early**: a new switch in the Blacklist tab, off until you turn it on. After each Legion TD match you play, Team Follow reads the game's replay of it and adds anyone who left at least a round before the end, or before the others voted the game over with -draw or -ff. It never adds you, your Battle.net friends or the people you follow. Each player it adds gets a reason, such as "Left early: Legion TD 11.4c-hf9, 12 min into a 38 min match, 31 Oct 2026", which is also added to your note about them, and Activity says who was added.
+- **Blacklist players who leave Legion TD early**: a new switch in the Blacklist tab, off until you turn it on. After each Legion TD match you play, Team Follow reads the game's replay of it and adds anyone who left before the match's final round began, or before the others voted the game over with -draw or -ff. The rounds come from the replay itself. It never adds you, your Battle.net friends or the people you follow. Each player it adds gets the reason "Left Legion TD early (round 3)", with the round they left in, which is also added to your note about them, and Activity says who was added.
 - Blacklisted players now show why they are on your blacklist, under their name and in the player tooltip. Players you ban by hand in your lobby get "You banned them in" and the lobby's name and date.
 
 ### Fixed

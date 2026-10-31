@@ -89,15 +89,14 @@ func TestLeaversOnBlacklistsTheEarlyLeaverWithANote(t *testing.T) {
 	h.replayLoc.Set(replayFile(time.Now().Add(time.Second)), nil)
 	waitFor(t, "the leaver", func() bool { return len(h.svc.State().Blacklist) == 1 })
 	s := h.svc.State()
-	date := time.Now().Format("2 Jan 2006")
-	reason := "Left early: Legion TD 11.4c-hf9, 12 min into a 38 min match, " + date
+	reason := "Left Legion TD early (minute 13)"
 	if b := s.Blacklist[0]; b.Tag != "Leaver#1234" || b.Reason != reason {
 		t.Fatalf("blacklist = %+v", s.Blacklist)
 	}
 	if got := notes.Saved()["leaver#1234"].Text; got != "Feeds.\n"+reason {
 		t.Fatalf("note = %q", got)
 	}
-	if s.Status != "Blacklisted Leaver#1234 for leaving Legion TD early (12 min into a 38 min match)." {
+	if s.Status != "Blacklisted Leaver#1234 for leaving Legion TD early (minute 13)." {
 		t.Fatalf("status = %q", s.Status)
 	}
 	if saved, _ := h.prefs.Load(); len(saved.Blacklist) != 1 || saved.Blacklist[0].Reason != reason || !saved.BlacklistLeavers {

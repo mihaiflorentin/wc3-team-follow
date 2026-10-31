@@ -84,6 +84,7 @@ func Parse(r io.Reader) (dto.Replay, error) {
 	g := readGameData(&c, meta.post202, warn)
 	out.GameTime = g.elapsed
 	out.Ended = g.clock.ended()
+	out.Rounds = g.rounds.rounds(out.Ended)
 	out.Leaves = g.leaves
 	out.Chat = mergeChat(g.chat, g.actionChat)
 	out.Orders = g.orders

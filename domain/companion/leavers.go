@@ -85,7 +85,7 @@ func (s *Service) checkLeavers(ctx context.Context, started time.Time) {
 	if mapPath == "" {
 		mapPath = replay.Map.File
 	}
-	i, version := mapupdate.Match(s.opts.TrackedMaps, mapPath)
+	i, _ := mapupdate.Match(s.opts.TrackedMaps, mapPath)
 	if i < 0 || s.opts.LeaverMap == "" || !strings.EqualFold(s.opts.TrackedMaps[i].Name, s.opts.LeaverMap) {
 		s.logger.InfoContext(ctx, "leavers.skipped", slog.String("reason", "not the map"))
 		return
@@ -103,7 +103,7 @@ func (s *Service) checkLeavers(ctx context.Context, started time.Time) {
 		s.logger.InfoContext(ctx, "leavers.skipped", slog.String("reason", "not your match"))
 		return
 	}
-	added := s.engine.AddLeavers(report, mapName, version)
+	added := s.engine.AddLeavers(report, mapName)
 	if s.engine.TakeBlacklistChanged() {
 		if err := s.save(); err != nil {
 			s.logger.ErrorContext(ctx, "companion.preferences_save", slog.Any("error", err))

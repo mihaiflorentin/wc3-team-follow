@@ -38,6 +38,13 @@ type Replay struct {
 	// vote passes. Zero when the clock never stopped in the replay, as
 	// when the saver left before the end.
 	Ended time.Duration `json:"ended,omitempty"`
+	// Rounds are when each round began, by the map's timer phases (action
+	// 0x62 sent again with a counter above 1, after at least 30 s without
+	// that): in Legion TD (Team OZE) one phase opens each round, the first
+	// at the start of the match. The phase the end of the match opens is
+	// not a round. Other maps may have no such phases, or phases that mean
+	// something else.
+	Rounds []time.Duration `json:"rounds,omitempty"`
 	// Post202 is true for replays from game 2.0.2 on, whose Reforged player
 	// records start with 0x38 and whose action ids above 0x77 shift by one.
 	Post202 bool `json:"post202"`

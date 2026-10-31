@@ -158,8 +158,11 @@ func TestEarlyLeavers(t *testing.T) {
 			replay: match("38:05", []string{"", "", "", ""}),
 		},
 		{
-			name:   "only the leaver has a record: they are the end",
+			// The recording went on 26 minutes after the only leave: the
+			// match did too, so that leave was early.
+			name:   "a lone leave long before the recording ends is early",
 			replay: match("38:05", []string{"12:00", "", "", ""}),
+			want:   []string{"Player#1001"},
 		},
 	}
 	for _, c := range cases {
@@ -204,7 +207,7 @@ func leaverFixture(t *testing.T) *fixture {
 func report(tags ...string) follow.LeaverReport {
 	r := follow.LeaverReport{End: 37 * time.Minute, Length: 38*time.Minute + 5*time.Second}
 	for _, tag := range tags {
-		r.Leavers = append(r.Leavers, follow.Leaver{Tag: tag, Left: 12*time.Minute + 40*time.Second})
+		r.Leavers = append(r.Leavers, follow.Leaver{Tag: tag, Left: 12*time.Minute + 40*time.Second, Round: 3})
 	}
 	return r
 }
@@ -224,7 +227,7 @@ func TestAddLeaversNeverBlacklistsTheExcluded(t *testing.T) {
 		"Known#6666",    // already blacklisted
 		"Computer",      // not a BattleTag
 		"Stranger#3333", // on the list the game sent, not a friend
-	), "Legion TD", "11.4c-hf9")
+	), "Legion TD")
 	if len(added) != 1 || added[0].Tag != "Stranger#3333" {
 		t.Fatalf("added = %+v", added)
 	}
@@ -235,38 +238,26 @@ func TestAddLeaversNeverBlacklistsTheExcluded(t *testing.T) {
 
 func TestAddLeaversReasonAndActivity(t *testing.T) {
 	f := leaverFixture(t)
-	added := f.engine.AddLeavers(report("Leaver#1234"), "Legion TD", "11.4c-hf9")
-	want := "Left early: Legion TD 11.4c-hf9, 12 min into a 38 min match, 31 Oct 2026"
+	added := f.engine.AddLeavers(report("Leaver#1234"), "Legion TD")
+	want := "Left Legion TD early (round 3)"
 	if len(added) != 1 || added[0].Reason != want || f.state().Blacklist[0].Reason != want {
 		t.Fatalf("added = %+v", added)
 	}
-	if s := f.state().Status; s != "Blacklisted Leaver#1234 for leaving Legion TD early (12 min into a 38 min match)." {
+	if s := f.state().Status; s != "Blacklisted Leaver#1234 for leaving Legion TD early (round 3)." {
 		t.Fatalf("status = %q", s)
 	}
-	f.engine.AddLeavers(report("Leaver#2001", "Leaver#2002"), "Legion TD", "11.4c-hf9")
+	f.engine.AddLeavers(report("Leaver#2001", "Leaver#2002"), "Legion TD")
 	if s := f.state().Status; s != "Blacklisted 2 players for leaving Legion TD early." {
 		t.Fatalf("status = %q", s)
 	}
 }
 
-func TestAddLeaversReasonSaysHowAVoteEnded(t *testing.T) {
-	for _, c := range []struct {
-		ending string
-		team   int
-		want   string
-	}{
-		{follow.EndedDraw, 1, "that ended in a draw"},
-		{follow.EndedForfeit, 0, "that their team forfeited"},
-		{follow.EndedForfeit, 1, "that ended by forfeit"},
-	} {
-		f := leaverFixture(t)
-		r := follow.LeaverReport{Length: 5 * time.Minute, Ending: c.ending, VoteTeam: c.team,
-			Leavers: []follow.Leaver{{Tag: "Leaver#1234", Left: 3 * time.Minute, Team: 0}}}
-		added := f.engine.AddLeavers(r, "Legion TD", "11.4c-hf9")
-		want := "Left early: Legion TD 11.4c-hf9, 3 min into a 5 min match " + c.want + ", 31 Oct 2026"
-		if len(added) != 1 || added[0].Reason != want {
-			t.Fatalf("reason = %+v, want %q", added, want)
-		}
+func TestLeftEarlySaysTheRoundOrElseTheMinute(t *testing.T) {
+	if got := follow.LeftEarly("Legion TD", follow.Leaver{Left: 4 * time.Minute, Round: 2}); got != "Left Legion TD early (round 2)" {
+		t.Errorf("with rounds: %q", got)
+	}
+	if got := follow.LeftEarly("Legion TD", follow.Leaver{Left: 12*time.Minute + 40*time.Second}); got != "Left Legion TD early (minute 13)" {
+		t.Errorf("without rounds: %q", got)
 	}
 }
 
@@ -275,7 +266,7 @@ func TestAddLeaversNeedsTheSwitchAndTheFriendsList(t *testing.T) {
 	if err := f.engine.Configure(dto.FollowConfig{BlacklistLeavers: ptr(false)}); err != nil {
 		t.Fatal(err)
 	}
-	if added := f.engine.AddLeavers(report("Leaver#1234"), "Legion TD", "1"); added != nil || f.state().BlacklistLeavers {
+	if added := f.engine.AddLeavers(report("Leaver#1234"), "Legion TD"); added != nil || f.state().BlacklistLeavers {
 		t.Fatalf("off: added %+v", added)
 	}
 	// Without the friends list, a friend can't be told apart.
@@ -283,12 +274,12 @@ func TestAddLeaversNeedsTheSwitchAndTheFriendsList(t *testing.T) {
 	if err := g.engine.Configure(dto.FollowConfig{BlacklistLeavers: ptr(true)}); err != nil {
 		t.Fatal(err)
 	}
-	if added := g.engine.AddLeavers(report("Leaver#1234"), "Legion TD", "1"); added != nil {
+	if added := g.engine.AddLeavers(report("Leaver#1234"), "Legion TD"); added != nil {
 		t.Fatalf("no friends list: added %+v", added)
 	}
 	h := leaverFixture(t)
 	h.engine.Connection(false, "")
-	if added := h.engine.AddLeavers(report("Leaver#1234"), "Legion TD", "1"); added != nil {
+	if added := h.engine.AddLeavers(report("Leaver#1234"), "Legion TD"); added != nil {
 		t.Fatalf("disconnected: added %+v", added)
 	}
 }
@@ -332,5 +323,77 @@ func TestAppendNote(t *testing.T) {
 	long := strings.Repeat("a", dto.MaxNoteLength-len(line))
 	if got, ok := follow.AppendNote(long, line); ok || got != long {
 		t.Fatalf("too long: %v", ok)
+	}
+}
+
+// withRounds sets the replay's round starts, written m:ss.
+func withRounds(r dto.Replay, starts ...string) dto.Replay {
+	for _, s := range starts {
+		r.Rounds = append(r.Rounds, mmss(s))
+	}
+	return r
+}
+
+func TestEarlyLeaversUseTheRealRounds(t *testing.T) {
+	// The real forfeit game: seven rounds, the clock stopped at 21:36.49.
+	rounds := []string{"0:02.9", "3:11.5", "5:08.9", "8:32.0", "12:23.6", "15:31.7", "19:36.2"}
+	everyone := []string{"21:44", "21:58", "21:58", "21:49", "21:46", "21:42", "21:53", "21:47"}
+	votes := []string{"1 20:45 -ff", "4 21:07 -ff", "2 21:15 -ff", "3 21:35 -ff"}
+	cases := []struct {
+		name   string
+		leaves []string
+		votes  []string
+		want   []string
+		round  int
+	}{
+		{"real forfeit: nobody", everyone, votes, nil, 0},
+		// 18:00 is inside the fixed 4-minute window (from 17:36) but before
+		// the real final round (19:36): round 6, early.
+		{"left in round 6 is early", replace(everyone, 5, "18:00"), nil, []string{"Player#1006"}, 6},
+		{"left in the final round is not", replace(everyone, 5, "19:40"), nil, nil, 0},
+		{"left in the final round before the votes is", replace(everyone, 5, "20:30"), votes, []string{"Player#1006"}, 7},
+		{"left in round 1", replace(everyone, 5, "1:00"), nil, []string{"Player#1006"}, 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := follow.EarlyLeavers(withRounds(endedAt(match("21:58", c.leaves, c.votes...), "21:36.49"), rounds...), 4*time.Minute)
+			if got := leaverTags(r); !slices.Equal(got, c.want) {
+				t.Fatalf("leavers = %v, want %v", got, c.want)
+			}
+			if r.FinalRound != mmss("19:36.2") {
+				t.Errorf("final round = %v", r.FinalRound)
+			}
+			if len(c.want) == 1 && r.Leavers[0].Round != c.round {
+				t.Errorf("round = %d, want %d", r.Leavers[0].Round, c.round)
+			}
+		})
+	}
+}
+
+func TestEarlyLeaversWithoutRoundsUseTheFixedWindow(t *testing.T) {
+	r := follow.EarlyLeavers(match("38:05", replace(lateEnd, 0, "34:30")), 4*time.Minute)
+	if len(r.Leavers) != 0 || r.FinalRound != 0 {
+		t.Fatalf("leavers = %v, final round %v", leaverTags(r), r.FinalRound)
+	}
+	r = follow.EarlyLeavers(match("38:05", replace(lateEnd, 0, "12:00")), 4*time.Minute)
+	if got := leaverTags(r); len(got) != 1 || r.Leavers[0].Round != 0 {
+		t.Fatalf("leavers = %+v", r.Leavers)
+	}
+}
+
+// replace returns leaves with entry i set to left.
+func replace(leaves []string, i int, left string) []string {
+	out := slices.Clone(leaves)
+	out[i] = left
+	return out
+}
+
+func TestEarlyLeaversOneLeaveMidGameIsNotTheEnd(t *testing.T) {
+	// An older replay: one player left at 2:47, the game was recorded to
+	// 16:45 with no leave for the others and no stopped clock.
+	r := withRounds(match("16:45", []string{"2:47", "", "", ""}), "0:04.8", "3:29.4", "6:00.6", "10:12.9", "13:37.3", "15:47.2")
+	rep := follow.EarlyLeavers(r, 4*time.Minute)
+	if rep.End != mmss("16:45") || len(rep.Leavers) != 1 || rep.Leavers[0].Round != 1 {
+		t.Fatalf("end %v, leavers %+v", rep.End, rep.Leavers)
 	}
 }

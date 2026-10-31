@@ -2945,13 +2945,13 @@ function demoBridge() {
     lobbies: [1, 1, 37, 4, 1, 12, 2, 6, 1, 3, 1, 1][i]}));
   // Blacklist: sample BattleTags only. Garrosh is also a recent player.
   const blacklist = [
-    ['Garrosh#7781', 60 * 26, 'Left early: Legion TD 11.4c-hf9, 12 min into a 38 min match, 30 Oct 2026'],
+    ['Garrosh#7781', 60 * 26, 'Left Legion TD early (round 4)'],
     ['Deathwing#6666', 60 * 24 * 9, ''],
     ['Mannoroth#1404', 60 * 24 * 33, 'You banned them in LTD with friends, 28 Sep 2026'],
   ].map(([tag, mins, reason]) => (reason ? {tag, added: at(mins), reason} : {tag, added: at(mins)}));
   const leaverList = [
-    {tag: 'Illidan#4040', added: at(3), reason: 'Left early: Legion TD 11.4c-hf9, 3 min into a 5 min match that ended in a draw, 31 Oct 2026'},
-    {tag: 'Kaelthas#2525', added: at(3), reason: 'Left early: Legion TD 11.4c-hf9, 20 min into a 21 min match that their team forfeited, 31 Oct 2026'},
+    {tag: 'Illidan#4040', added: at(3), reason: 'Left Legion TD early (round 1)'},
+    {tag: 'Kaelthas#2525', added: at(3), reason: 'Left Legion TD early (round 6)'},
     ...blacklist,
   ];
   // Updates: a sample changelog spanning three versions.

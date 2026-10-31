@@ -21,6 +21,9 @@ type Leaver struct {
 	Left time.Duration
 	// Team is the player's team in the lobby.
 	Team int
+	// Round is the round the player left in, counting from 1, or 0 when
+	// the replay shows no rounds.
+	Round int
 }
 
 // How a match ended, for LeaverReport.Ending.
@@ -46,6 +49,9 @@ type LeaverReport struct {
 	Ending   string
 	Vote     time.Duration
 	VoteTeam int
+	// FinalRound is when the round the match ended in began, or zero when
+	// the replay shows no rounds and the final round is a fixed window.
+	FinalRound time.Duration
 	// Leavers are the early leavers, in the order they left.
 	Leavers []Leaver
 }
@@ -53,18 +59,24 @@ type LeaverReport struct {
 // EarlyLeavers decides who left a match early (ADR 0013), from the leave
 // times and the end votes: result codes on custom maps can't be trusted.
 //
+// The final round is the last round (dto.Replay.Rounds) that began before
+// the end; when the replay shows no rounds it is the window finalRound long
+// before the end.
+//
 // The match ends when the game clock stopped (dto.Replay.Ended: a king
 // died or an end vote passed). When the replay doesn't show that, it ends
 // when the remaining humans quit: the start of the last cluster of human
-// leave records (consecutive leaves at most 30 s apart), or the game time
-// when no human has a leave record. An end vote is a
+// leave records (consecutive leaves at most 30 s apart), when that cluster
+// reaches the end of the recording; otherwise at the game time, since the
+// match went on after those leaves. An end vote is a
 // human's chat line (any channel) reading "-draw" or "-ff", ignoring case
-// and spaces, at or after end − finalRound; earlier ones change nothing.
+// and spaces, in the final round; earlier ones change nothing.
 // When there is one, the match ended by vote and the cut-off is the first
 // end vote: whoever left before it is a leaver, even in the final round,
 // so leaving and having the others vote the game over doesn't help.
-// Without one, the cut-off is end − finalRound: anyone who left in the
-// final round or later is never a leaver.
+// Without one, the cut-off is the start of the final round: anyone who
+// left in the final round or later is never a leaver. Each leaver gets the
+// round they left in.
 //
 // Only human, non-observer players with a BattleTag and a leave record
 // count. Who must never be blacklisted (the player, friends, the follow
@@ -97,17 +109,23 @@ func EarlyLeavers(r dto.Replay, finalRound time.Duration) LeaverReport {
 	report := LeaverReport{End: length, Length: length}
 	if r.Ended > 0 {
 		report.End = r.Ended
-	} else if n := len(leaves); n > 0 {
+	} else if n := len(leaves); n > 0 && length-leaves[n-1].Left <= leaveCluster {
 		i := n - 1
 		for i > 0 && leaves[i].Left-leaves[i-1].Left <= leaveCluster {
 			i--
 		}
 		report.End = leaves[i].Left
 	}
-	cutoff := report.End - finalRound
+	finalStart := report.End - finalRound
+	for _, start := range r.Rounds {
+		if start < report.End {
+			finalStart, report.FinalRound = start, start
+		}
+	}
+	cutoff := finalStart
 	for _, c := range r.Chat {
 		p, ok := humans[c.PlayerID]
-		if !ok || c.Time < report.End-finalRound || report.Ending != EndedPlayed && c.Time >= report.Vote {
+		if !ok || c.Time < finalStart || report.Ending != EndedPlayed && c.Time >= report.Vote {
 			continue
 		}
 		switch strings.ToLower(strings.TrimSpace(c.Message)) {
@@ -121,9 +139,18 @@ func EarlyLeavers(r dto.Replay, finalRound time.Duration) LeaverReport {
 		report.Vote, report.VoteTeam, cutoff = c.Time, p.Team, c.Time
 	}
 	for _, l := range leaves {
-		if l.Left < cutoff {
-			report.Leavers = append(report.Leavers, l)
+		if l.Left >= cutoff {
+			continue
 		}
+		for _, start := range r.Rounds {
+			if start <= l.Left {
+				l.Round++
+			}
+		}
+		if len(r.Rounds) > 0 {
+			l.Round = max(l.Round, 1)
+		}
+		report.Leavers = append(report.Leavers, l)
 	}
 	return report
 }
@@ -134,17 +161,16 @@ func (e *Engine) BlacklistLeavers() bool { return e.leavers }
 
 // AddLeavers adds a match's early leavers to the blacklist, each with a
 // reason, and notes one Activity line for the match (ADR 0013). mapName
-// and version name the map, like "Legion TD" and "11.4c-hf9". It never
+// names the map, like "Legion TD". It never
 // adds the player, a Battle.net friend, a member of the current team or
 // the follow group, a player without a BattleTag, or anyone already on the
 // blacklist; and nobody while the game or its friends list isn't known.
 // It returns who it added, with the reason each got, and marks the
 // blacklist changed for saving.
-func (e *Engine) AddLeavers(report LeaverReport, mapName, version string) []dto.BlacklistEntry {
+func (e *Engine) AddLeavers(report LeaverReport, mapName string) []dto.BlacklistEntry {
 	if !e.leavers || len(report.Leavers) == 0 || !e.connected || !e.rosterKnown {
 		return nil
 	}
-	label := strings.TrimSpace(mapName + " " + version)
 	now := e.now()
 	var added []dto.BlacklistEntry
 	var first Leaver
@@ -158,8 +184,7 @@ func (e *Engine) AddLeavers(report LeaverReport, mapName, version string) []dto.
 		if len(added) == 0 {
 			first = l
 		}
-		added = append(added, dto.BlacklistEntry{Tag: tag, Added: now.UTC(), Reason: fmt.Sprintf("Left early: %s, %s, %s",
-			label, leftInto(report, l), now.Format("2 Jan 2006"))})
+		added = append(added, dto.BlacklistEntry{Tag: tag, Added: now.UTC(), Reason: LeftEarly(mapName, l)})
 	}
 	if len(added) == 0 {
 		return nil
@@ -171,28 +196,26 @@ func (e *Engine) AddLeavers(report LeaverReport, mapName, version string) []dto.
 		e.selectionChanged()
 	}
 	if len(added) == 1 {
-		e.Note(fmt.Sprintf("Blacklisted %s for leaving %s early (%s).", added[0].Tag, mapName, leftInto(report, first)))
+		e.Note(fmt.Sprintf("Blacklisted %s for leaving %s early (%s).", added[0].Tag, mapName, leftWhen(first)))
 	} else {
 		e.Note(fmt.Sprintf("Blacklisted %d players for leaving %s early.", len(added), mapName))
 	}
 	return added
 }
 
-// leftInto says when a player left, in whole minutes, and how a match that
-// ended by vote ended: "12 min into a 38 min match", "3 min into a 5 min
-// match that ended in a draw", "… that their team forfeited" (a -ff from
-// the leaver's own team) or "… that ended by forfeit".
-func leftInto(r LeaverReport, l Leaver) string {
-	s := fmt.Sprintf("%d min into a %d min match", int(l.Left/time.Minute), int(r.Length/time.Minute))
-	switch {
-	case r.Ending == EndedDraw:
-		s += " that ended in a draw"
-	case r.Ending == EndedForfeit && r.VoteTeam == l.Team:
-		s += " that their team forfeited"
-	case r.Ending == EndedForfeit:
-		s += " that ended by forfeit"
+// LeftEarly is the reason and note line for a leaver: "Left Legion TD
+// early (round 3)", or "(minute 12)" when the replay shows no rounds.
+func LeftEarly(mapName string, l Leaver) string {
+	return fmt.Sprintf("Left %s early (%s)", strings.TrimSpace(mapName), leftWhen(l))
+}
+
+// leftWhen says when a player left: "round 3", or "minute 12" without
+// rounds (whole minutes, counting from 1).
+func leftWhen(l Leaver) string {
+	if l.Round > 0 {
+		return fmt.Sprintf("round %d", l.Round)
 	}
-	return s
+	return fmt.Sprintf("minute %d", int(l.Left/time.Minute)+1)
 }
 
 // neverLeaver reports whether tag must never be blacklisted as a leaver:

@@ -74,6 +74,8 @@ folder     = "Download"
 # (or before the first -draw or -ff vote that ended the match) is added.
 # map is the tracked map, by its name in [[maps.tracked]], whose matches count.
 map = "Legion TD"
-# The last part of a match nobody is judged in: Legion TD rounds are about
-# 2.5 to 4 minutes.
+# The final round is the round the match ended in, read from the replay.
+# final_round is used only for a replay that shows no rounds: the last part
+# of the match nobody is judged in (Legion TD rounds take about 2 to 6
+# minutes).
 final_round = "4m"

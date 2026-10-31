@@ -63,6 +63,41 @@ func (w *clockWatch) ended() time.Duration {
 	return w.first[w.value]
 }
 
+// roundGap is the quiet time before a timer phase that opens a new round.
+const roundGap = 30 * time.Second
+
+// roundWatch finds when the map's timer phases begin: a tick sent again
+// (counter above 1) at least roundGap after the last repeated tick. In
+// Legion TD each phase opens a round.
+type roundWatch struct {
+	starts []time.Duration
+	last   time.Duration
+}
+
+// see reads one tick sent at elapsed.
+func (w *roundWatch) see(t clockTick, elapsed time.Duration) {
+	if t.counter < 2 {
+		return
+	}
+	if len(w.starts) == 0 || elapsed-w.last >= roundGap {
+		w.starts = append(w.starts, elapsed)
+	}
+	w.last = elapsed
+}
+
+// rounds returns the round starts, leaving out a phase that begins at or
+// after ended (the end of the match), when ended is set.
+func (w *roundWatch) rounds(ended time.Duration) []time.Duration {
+	var out []time.Duration
+	for _, s := range w.starts {
+		if ended > 0 && s >= ended {
+			break
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
 // readActions decodes one command block's actions, counting them. It stops
 // at the first unknown action, whose length can't be known, and returns its
 // id with ok false.
