@@ -1,0 +1,165 @@
+package dto
+
+import "time"
+
+// Replay is what a Warcraft III replay file (.w3g) says about one game. It
+// holds only what the file records: the lobby (map, slots, players), who
+// left when and with which result, chat lines and how many actions each
+// player sent. Kills, gold and the score screen are not in replays.
+type Replay struct {
+	// VersionNumber is the header's game version, such as 10200; Version is
+	// it formatted the way the community does ("3.00" for 10200).
+	VersionNumber uint32 `json:"versionNumber"`
+	Version       string `json:"version"`
+	// Build is the game's build number, such as 7003.
+	Build uint16 `json:"build"`
+	// Expansion is true for The Frozen Throne (every Reforged replay).
+	Expansion bool `json:"expansion"`
+	// Multiplayer is false for single-player games.
+	Multiplayer bool `json:"multiplayer"`
+	// Duration is the replay length the header records.
+	Duration time.Duration `json:"duration"`
+	// GameTime is the sum of the time slots: how long the recorded game ran.
+	GameTime time.Duration `json:"gameTime"`
+	// Post202 is true for replays from game 2.0.2 on, whose Reforged player
+	// records start with 0x38 and whose action ids above 0x77 shift by one.
+	Post202 bool `json:"post202"`
+
+	GameName string `json:"gameName"`
+	// HostID is the player id of the player who created the game.
+	HostID int `json:"hostId"`
+	// SaverID is the player id of whoever saved the replay (the last to leave).
+	SaverID int `json:"saverId"`
+
+	Map      ReplayMap      `json:"map"`
+	Settings ReplaySettings `json:"settings"`
+
+	// Players holds every used slot: humans, computers and observers, in
+	// slot order.
+	Players []ReplayPlayer `json:"players"`
+	// Leaves are the leave records in the order they happened.
+	Leaves []ReplayLeave `json:"leaves"`
+	// Chat holds the chat lines typed during the game.
+	Chat   []ReplayChat `json:"chat"`
+	Winner ReplayWinner `json:"winner"`
+
+	// RandomSeed, SelectMode and StartSpots come from the slot table.
+	RandomSeed uint32 `json:"randomSeed"`
+	SelectMode int    `json:"selectMode"`
+	StartSpots int    `json:"startSpots"`
+	// GameType and LanguageID are raw header fields, as hex.
+	GameType   string `json:"gameType"`
+	LanguageID string `json:"languageId"`
+
+	// Warnings lists parts of the file that could not be read; the rest of
+	// the replay is still filled in.
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// ReplayMap is the map the game was played on.
+type ReplayMap struct {
+	// Path is the map's path as the host's game saw it.
+	Path string `json:"path"`
+	// File is the file name taken from Path.
+	File    string `json:"file"`
+	Creator string `json:"creator"`
+	// Checksum (4 bytes) and SHA1 identify the map file, as hex; SHA1 is
+	// empty in old replays.
+	Checksum string `json:"checksum"`
+	SHA1     string `json:"sha1,omitempty"`
+}
+
+// ReplaySettings are the lobby's game settings.
+type ReplaySettings struct {
+	// Speed is 0 slow, 1 normal, 2 fast.
+	Speed int `json:"speed"`
+	// Observers is "none", "on defeat", "full" or "referees".
+	Observers     string `json:"observers"`
+	HideTerrain   bool   `json:"hideTerrain"`
+	MapExplored   bool   `json:"mapExplored"`
+	AlwaysVisible bool   `json:"alwaysVisible"`
+	TeamsTogether bool   `json:"teamsTogether"`
+	FixedTeams    bool   `json:"fixedTeams"`
+	SharedControl bool   `json:"sharedControl"`
+	RandomHero    bool   `json:"randomHero"`
+	RandomRaces   bool   `json:"randomRaces"`
+}
+
+// ReplayPlayer is one used slot.
+type ReplayPlayer struct {
+	// ID is the player id the game data refers to; Slot is the lobby slot.
+	ID   int `json:"id"`
+	Slot int `json:"slot"`
+	// Name is the name in the player record ("Computer" for computers).
+	Name string `json:"name"`
+	// BattleTag and Clan come from Reforged's player metadata records.
+	BattleTag string `json:"battleTag,omitempty"`
+	Clan      string `json:"clan,omitempty"`
+	// Portrait is the Reforged portrait id, such as "p001".
+	Portrait string `json:"portrait,omitempty"`
+	// Skins is how many unit skins Reforged recorded for the player.
+	Skins int `json:"skins,omitempty"`
+
+	Team  int `json:"team"`
+	Color int `json:"color"`
+	// Race is "human", "orc", "nightelf", "undead", "random" or "" if
+	// unknown; RaceFlag is the raw slot value.
+	Race     string `json:"race"`
+	RaceFlag int    `json:"raceFlag"`
+	Handicap int    `json:"handicap"`
+	Computer bool   `json:"computer"`
+	// AIStrength is 0 easy, 1 normal, 2 insane, for computers.
+	AIStrength int  `json:"aiStrength"`
+	Observer   bool `json:"observer"`
+
+	// Actions counts every action the player sent; APMActions only those
+	// counted for APM (orders, selections, hotkeys), as w3gjs counts them.
+	Actions    int `json:"actions"`
+	APMActions int `json:"apmActions"`
+	// APM is APMActions per minute up to the player's last action.
+	APM        int           `json:"apm"`
+	LastAction time.Duration `json:"lastAction"`
+	// Left is when the player's leave record came, zero if none.
+	Left time.Duration `json:"left"`
+	// Result is the player's own leave result ("won", "lost", ...) or "".
+	Result string `json:"result"`
+}
+
+// ReplayLeave is one leave record.
+type ReplayLeave struct {
+	Time     time.Duration `json:"time"`
+	PlayerID int           `json:"playerId"`
+	// Reason is "remote" (0x01), "local" (0x0C, the saver's own game) or the
+	// raw value as hex; Result is the decoded result ("left", "lost", "won",
+	// "draw", "observer left") or the raw value as hex.
+	Reason    string `json:"reason"`
+	Result    string `json:"result"`
+	RawReason uint32 `json:"rawReason"`
+	RawResult uint32 `json:"rawResult"`
+	// Counter is the record's last field; it is incremented on the saver's
+	// last leave record when the saver won.
+	Counter uint32 `json:"counter"`
+}
+
+// ReplayChat is one chat line.
+type ReplayChat struct {
+	Time     time.Duration `json:"time"`
+	PlayerID int           `json:"playerId"`
+	// Mode is "all", "allies", "observers" or "private".
+	Mode    string `json:"mode"`
+	Message string `json:"message"`
+}
+
+// ReplayWinner is the parser's best judgement of who won.
+type ReplayWinner struct {
+	// Team is the winning team, -1 when unknown or a draw.
+	Team int `json:"team"`
+	// Draw is true when a leave record says the game was a draw.
+	Draw bool `json:"draw"`
+	// Confidence is "certain" (a won or lost result for the team decides
+	// it), "likely" (inferred from the saver's last leave record), "guess"
+	// (the first team to leave lost) or "unknown".
+	Confidence string `json:"confidence"`
+	// Basis says in a few words which records decided it.
+	Basis string `json:"basis"`
+}

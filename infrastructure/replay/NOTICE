@@ -1,0 +1,20 @@
+Third-party notices for infrastructure/replay
+
+The replay decoder in this folder is original code written for Warcraft Team
+Follow (MIT, see LICENSE at the repository root). It was written from these
+references; no source file was copied from either:
+
+- gowarcraft3, Copyright Niels A.D., Mozilla Public License 2.0
+  https://github.com/nielsAD/gowarcraft3
+  Used for: the replay header and data block layout (file/w3g) and the
+  w3g_format.txt notes on leave records and winner detection.
+
+- w3gjs, Copyright PBug90 and contributors, MIT License
+  https://github.com/PBug90/w3gjs
+  Used for: Reforged player metadata records (0x38, 0x39) and their protobuf
+  messages, the action lengths (ActionParser.ts), the post-2.0.2 action id
+  shift and the APM counting rules (W3GReplay.ts, Player.ts).
+
+If code is ever copied from gowarcraft3 into this folder, the file that holds
+it must keep gowarcraft3's MPL-2.0 header at its top (MPL-2.0 applies per
+file).
