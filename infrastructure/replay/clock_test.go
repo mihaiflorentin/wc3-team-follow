@@ -46,3 +46,19 @@ func TestParseWithoutAStoppedClockHasNoEnd(t *testing.T) {
 		t.Errorf("ended = %v", r.Ended)
 	}
 }
+
+func TestParseFindsTheStopPastAStrayTick(t *testing.T) {
+	// A real 3.0 replay: the clock stopped at 20:54.37, one tick with a
+	// higher value came at 20:55.02, then the stopped value repeated.
+	g := defaultGame()
+	for _, tick := range [][2]uint32{{1, 1}, {2, 1}, {3, 1}, {3, 2}, {4, 1}, {3, 3}, {3, 4}} {
+		g.gameData = append(g.gameData, timeSlot(1000, command(1, clockAction(tick[0], tick[1])))...)
+	}
+	r, err := Parse(bytes.NewReader(parseGame(t, g)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Ended != 3*time.Second {
+		t.Errorf("ended = %v", r.Ended)
+	}
+}

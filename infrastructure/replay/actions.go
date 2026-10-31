@@ -25,31 +25,42 @@ type clockTick struct {
 	value, counter uint32
 }
 
-// clockWatch finds when the game clock stopped: the time the last clock
-// value was first sent with counter 1, once that value was repeated.
+// clockWatch finds when the game clock stopped: the value of the last
+// repeated tick (counter above 1), from the time it was first sent with
+// counter 1, unless the clock rose past it after that last repeat. A single
+// tick with a higher value may come between the repeats (seen in a real
+// replay a second after a king died), so only a rise after the last repeat
+// means the clock went on.
 type clockWatch struct {
-	have     bool
+	first    map[uint32]time.Duration
 	value    uint32
-	since    time.Duration
 	repeated bool
+	resumed  bool
 }
 
 // see reads one tick sent at elapsed.
 func (w *clockWatch) see(t clockTick, elapsed time.Duration) {
-	switch {
-	case t.counter <= 1 && (!w.have || t.value > w.value):
-		*w = clockWatch{have: true, value: t.value, since: elapsed}
-	case t.counter > 1 && w.have && t.value == w.value:
-		w.repeated = true
+	if t.counter > 1 {
+		w.value, w.repeated, w.resumed = t.value, true, false
+		return
+	}
+	if w.first == nil {
+		w.first = map[uint32]time.Duration{}
+	}
+	if _, ok := w.first[t.value]; !ok {
+		w.first[t.value] = elapsed
+	}
+	if w.repeated && t.value > w.value {
+		w.resumed = true
 	}
 }
 
 // ended is when the clock stopped, or zero when it never did.
 func (w *clockWatch) ended() time.Duration {
-	if !w.repeated {
+	if !w.repeated || w.resumed {
 		return 0
 	}
-	return w.since
+	return w.first[w.value]
 }
 
 // readActions decodes one command block's actions, counting them. It stops

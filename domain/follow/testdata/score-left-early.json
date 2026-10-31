@@ -14,8 +14,8 @@
   },
   "players": [
    {
-    "battleTag": "Mihai#22569",
-    "toonName": "Mihai#22569",
+    "battleTag": "Player#1234",
+    "toonName": "Player#1234",
     "teamIndex": 0,
     "won": false,
     "isAi": false,
@@ -33,7 +33,7 @@
    },
    {
     "battleTag": "",
-    "toonName": "Mihai",
+    "toonName": "Arthas",
     "teamIndex": 0,
     "won": false,
     "isAi": true,

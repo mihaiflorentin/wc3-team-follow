@@ -138,6 +138,9 @@ func printReplay(w io.Writer, r dto.Replay, mapNote string) error {
 		b.WriteString(", 2.0.2+ format")
 	}
 	fmt.Fprintf(&b, "\nLength:    %s (time slots add up to %s)\n", r.Duration.Round(time.Second), r.GameTime.Round(time.Second))
+	if r.Ended > 0 {
+		fmt.Fprintf(&b, "Ended:     %s (the game clock stopped)\n", r.Ended.Round(10*time.Millisecond))
+	}
 	fmt.Fprintf(&b, "Game name: %s\nHost:      %s\nSaver:     %s\n", r.GameName, name(r.HostID), name(r.SaverID))
 	fmt.Fprintf(&b, "Map:       %s by %s\n           %s\n           checksum %s", r.Map.File, r.Map.Creator, r.Map.Path, r.Map.Checksum)
 	if r.Map.SHA1 != "" {

@@ -305,27 +305,27 @@ func loadFixture(t *testing.T, name string) dto.GameEvent {
 
 func TestRankingLiveCaptureHostLeftEarlyRecordsOneLoss(t *testing.T) {
 	// Event order captured from game 3.0.1.24371 (Legion TD, host left early).
-	lobby := rlobby(rseat{name: "Mihai#22569", team: 0, self: true}, rseat{name: "Player 5", team: 1, computer: true}, rseat{name: "Mihai", team: 0, computer: true})
+	lobby := rlobby(rseat{name: "Player#1234", team: 0, self: true}, rseat{name: "Player 5", team: 1, computer: true}, rseat{name: "Arthas", team: 0, computer: true})
 	fixture := loadFixture(t, "score-left-early.json")
 	r := newRanking()
 	feed(r, []string{"Friend#1234"}, lobby,
 		dto.GameEvent{MessageType: "GameLobbyGracefulExit"}, glue("LOADING_SCREEN"),
 		dto.GameEvent{MessageType: "ExitedGame"}, fixture, glue("SCORE_SCREEN"),
 		dto.GameEvent{MessageType: "MultiplayerGameLeave"}, fixture)
-	expectRanking(t, r, map[string][2]int{"Mihai#22569": {0, 1}})
+	expectRanking(t, r, map[string][2]int{"Player#1234": {0, 1}})
 }
 
 func TestRankingLiveCaptureHostWonRecordsOneWin(t *testing.T) {
 	// Captured from game 3.0.1.24371 (Legion TD against computers, won after
 	// 1100 s): the host's won flag is true, every computer's is false.
-	lobby := rlobby(rseat{name: "Mihai#22569", team: 0, self: true}, rseat{name: "Player 5", team: 1, computer: true}, rseat{name: "Mihai", team: 0, computer: true})
+	lobby := rlobby(rseat{name: "Player#1234", team: 0, self: true}, rseat{name: "Player 5", team: 1, computer: true}, rseat{name: "Arthas", team: 0, computer: true})
 	fixture := loadFixture(t, "score-won.json")
 	r := newRanking()
 	feed(r, []string{"Friend#1234"}, lobby,
 		dto.GameEvent{MessageType: "GameLobbyGracefulExit"}, glue("LOADING_SCREEN"),
 		dto.GameEvent{MessageType: "ExitedGame"}, fixture, glue("SCORE_SCREEN"),
 		dto.GameEvent{MessageType: "MultiplayerGameLeave"}, fixture)
-	expectRanking(t, r, map[string][2]int{"Mihai#22569": {1, 0}})
+	expectRanking(t, r, map[string][2]int{"Player#1234": {1, 0}})
 }
 
 func TestRankingFinishedMatchUsesEachPlayersWonFlag(t *testing.T) {

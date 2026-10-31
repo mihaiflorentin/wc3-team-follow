@@ -19,7 +19,7 @@ import (
 func sampleReplay() dto.Replay {
 	return dto.Replay{
 		VersionNumber: 10200, Version: "3.00", Build: 7003, Expansion: true, Multiplayer: true,
-		Duration: 482 * time.Second, GameTime: 481 * time.Second, Post202: true,
+		Duration: 482 * time.Second, GameTime: 481 * time.Second, Ended: 470 * time.Second, Post202: true,
 		GameName: "Sample game", HostID: 1, SaverID: 2,
 		Map: dto.ReplayMap{Path: "Maps/Sample.w3x", File: "Sample.w3x", Creator: "Map Maker", Checksum: "efbeadde"},
 		Players: []dto.ReplayPlayer{
@@ -58,7 +58,7 @@ func TestReplayPrintsWhatWasParsed(t *testing.T) {
 		t.Errorf("read %q", r.LastPath)
 	}
 	for _, want := range []string{"3.00 (10200), build 7003", "8m2s", "Sample game", "Sample.w3x", "efbeadde",
-		"Player1#1234", "[CLAN]", "human", "100 APM", "lost at 5m0s", "Computer", "2 lines", "team 1 (certain"} {
+		"Ended:     7m50s (the game clock stopped)", "Player1#1234", "[CLAN]", "human", "100 APM", "lost at 5m0s", "Computer", "2 lines", "team 1 (certain"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("output lacks %q:\n%s", want, text)
 		}
