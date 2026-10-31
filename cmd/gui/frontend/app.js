@@ -2158,7 +2158,7 @@ async function updateHostedLine() {
   const hosted = hostedMap(m, useNewest);
   box.hidden = !hosted;
   if (!hosted) return;
-  $('host-newest-help').textContent = `Each lobby uses the newest ${m.tracked} in your Maps folder, including one Keep maps up to date just downloaded.`;
+  $('host-newest-help').textContent = `Each lobby uses the newest ${m.tracked} in your Maps folder, even one downloaded since the last lobby.`;
   $('host-hosted').dataset.newest = String(hosted.newest);
   $('host-hosted-text').replaceChildren('Hosts ', el('strong', '', m.tracked), ' ', el('span', 'version', m.version), `, ${hosted.why}.`);
 }
