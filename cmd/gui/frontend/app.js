@@ -29,15 +29,9 @@ const configure = cfg => act(() => bridge.Configure(cfg));
 
 const autoJoin = fromMenus => configure({enabled: true, diagnostic: false, fromMenus});
 
-// changeGroup applies a new selection. The engine stops auto-join on any
-// change; when it was on and nothing is in the way, it is turned back on
-// for the new group.
-async function changeGroup(cfg) {
-  const before = state;
-  const ok = await configure(cfg);
-  if (ok && before?.enabled && !before.busy && !before.queued && !before.inMatch && hasTargets(state)) await autoJoin(true);
-  return ok;
-}
+// changeGroup applies a new selection. Auto-join, when on, stays on and
+// follows the new group (the engine's regroup).
+const changeGroup = cfg => configure(cfg);
 
 /* Building blocks ------------------------------------------------------- */
 
@@ -202,12 +196,14 @@ function headline(s) {
 
 const WAITING = 'Waiting for Warcraft III.';
 
-// arm keeps a switch the player turned on before the game runs: it shows on,
-// in red, until Warcraft III connects, then in its usual colour until the
-// game reaches its menus, where the feature switches on. Only the page
-// remembers it, so a restart of Team Follow forgets it.
+// arm keeps a switch on while the game can't take it: one the player turned
+// on before the game runs, or one that was on when the game went away. It
+// shows on, in red, until Warcraft III connects, then in its usual colour
+// until the game reaches its menus, where the feature switches on (again).
+// Only the page remembers it, so a restart of Team Follow forgets it.
 function arm(toggle, on) {
   delete toggle.dataset.retryAt;
+  delete toggle.dataset.lost;
   if (on) toggle.dataset.armed = 'true';
   else delete toggle.dataset.armed;
   render(state);
@@ -220,7 +216,12 @@ const ARM_RETRY_MS = 3000;
 // anything that blocks it (the game starting up, a lobby, a match) and calls
 // turnOn once the game says it is in its menus. A refusal is tried again
 // every few seconds: only the player's own click turns an armed switch off.
-function switchBlocked(s, toggle, note, reason, show, feature, turnOn) {
+function switchBlocked(s, toggle, note, reason, show, feature, turnOn, on) {
+  // On when the game went away: wait for it to come back.
+  if (toggle.dataset.wasOn === 'true' && !on && !s.connected) {
+    toggle.dataset.armed = toggle.dataset.lost = 'true';
+  }
+  toggle.dataset.wasOn = String(on);
   const armed = toggle.dataset.armed === 'true';
   toggle.disabled = Boolean(reason) && reason !== WAITING && !armed;
   toggle.dataset.needsGame = String(armed && !s.connected);
@@ -231,7 +232,9 @@ function switchBlocked(s, toggle, note, reason, show, feature, turnOn) {
   }
   toggle.checked = true;
   if (!s.connected) {
-    note.textContent = `Start Warcraft III. ${feature} switches on once the game is found.`;
+    note.textContent = toggle.dataset.lost === 'true'
+      ? `Warcraft III is gone. ${feature} switches back on once the game is found again.`
+      : `Start Warcraft III. ${feature} switches on once the game is found.`;
     return;
   }
   if (reason || !s.inMenus) {
@@ -392,7 +395,7 @@ function renderActions(s) {
   const toggle = $('autojoin');
   const reason = s.enabled ? '' : blockedReason(s);
   toggle.checked = s.enabled;
-  switchBlocked(s, toggle, $('blocked'), reason, s.connected, 'Auto-join', () => autoJoin(true));
+  switchBlocked(s, toggle, $('blocked'), reason, s.connected, 'Auto-join', () => autoJoin(true), s.enabled);
   $('autojoin-help').textContent = s.enabled
     ? (s.paused ? 'On, and paused while you’re in a lobby, match or queue.' : 'On. Joins the first friend in your group who opens a lobby.')
     : 'Join the first friend in your group who opens a lobby. Pauses while you play.';
@@ -2165,7 +2168,7 @@ function renderHost(s) {
   const toggle = $('autohost');
   const reason = h.enabled ? '' : hostBlocked(s);
   toggle.checked = h.enabled;
-  switchBlocked(s, toggle, $('host-blocked'), reason, s.connected || !h.settings.mapPath, 'Auto-host', () => hostAct({enabled: true, fromMenus: true}));
+  switchBlocked(s, toggle, $('host-blocked'), reason, s.connected || !h.settings.mapPath, 'Auto-host', () => hostAct({enabled: true, fromMenus: true}), h.enabled);
   $('host-help').textContent = hostSummary(h);
   $('host-setup').classList.toggle('needs-setup', !h.settings.mapPath || !h.settings.gameName);
   renderKeyboard(s.keyboard);

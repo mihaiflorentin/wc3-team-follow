@@ -6,6 +6,7 @@ package follow
 
 import (
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -155,6 +156,10 @@ type Engine struct {
 	joinHostTeam bool
 	// joined is the lobby Auto-join joined, while the player is in it.
 	joined *joinedLobby
+	// regrouping is set while Auto-join stays on after the selection
+	// changed and a chosen BattleTag hasn't been seen on the Battle.net
+	// friends list yet; each friends update tries again.
+	regrouping bool
 	// blacklist is who auto-ban keeps out of lobbies the player hosts,
 	// newest first; autoBan switches it on (the default).
 	blacklist []dto.BlacklistEntry
@@ -253,7 +258,7 @@ func (e *Engine) Connected() bool { return e.connected }
 // off; the friend selection and mode are kept.
 func (e *Engine) Connection(connected bool, version string) {
 	e.connected, e.version = connected, version
-	e.enabled, e.pending, e.password, e.joined = false, nil, nil, nil
+	e.enabled, e.pending, e.password, e.joined, e.regrouping = false, nil, nil, nil, false
 	e.ban = banState{}
 	e.endGreeting()
 	e.team, e.teamAt = nil, time.Time{}
@@ -276,15 +281,64 @@ func (e *Engine) Connection(connected bool, version string) {
 	}
 }
 
-func (e *Engine) disarm() { e.enabled, e.pending, e.password = false, nil, nil }
+func (e *Engine) disarm() {
+	e.enabled, e.pending, e.password, e.regrouping = false, nil, nil, false
+}
 
-// selectionChanged stops Follow, which only ever follows the group chosen
-// when it was started.
+// selectionChanged keeps Auto-join on and has it follow the new group.
 func (e *Engine) selectionChanged() {
 	if e.enabled {
-		e.Note("Who you follow changed, so Follow stopped. Start again to follow the new group.")
+		e.regroup(true)
 	}
-	e.disarm()
+}
+
+// regroup makes the group chosen now the one Auto-join follows, while it
+// stays on: the team, when it is included, and each chosen BattleTag
+// already seen on the player's Battle.net friends list. A tag not seen yet
+// joins the group once a friends update shows it. Anyone no longer chosen
+// stops being followed at once.
+func (e *Engine) regroup(changed bool) {
+	var members []member
+	if e.includeTeam {
+		for _, m := range e.team {
+			if !m.isSelf && m.battleTag != "" {
+				members = append(members, m)
+			}
+		}
+	}
+	missing := false
+	for _, tag := range e.manualTags {
+		if slices.ContainsFunc(e.team, func(m member) bool { return m.isSelf && tagKey(m.battleTag) == tagKey(tag) }) {
+			continue
+		}
+		record, ok := e.roster[tagKey(tag)]
+		if !ok || !isTrue(record.data["isFriend"]) {
+			missing = true
+			continue
+		}
+		if !slices.ContainsFunc(members, func(m member) bool { return tagKey(m.battleTag) == tagKey(tag) }) {
+			name, _ := record.data["battleTag"].(string)
+			members = append(members, member{battleTag: name, isFriend: true})
+		}
+	}
+	e.regrouping = missing
+	if !changed && sameGroup(e.watched, members) {
+		return
+	}
+	e.watched = members
+	e.attempted, e.nextAttemptAt = nil, time.Time{}
+	switch {
+	case len(members) == 0 && missing:
+		e.Note("Auto-join stays on and waits until someone you chose shows up on your Battle.net friends list.")
+	case len(members) == 0:
+		e.Note("Auto-join stays on, but nobody is chosen to follow. Choose friends or form a team.")
+	default:
+		e.Note(fmt.Sprintf("Auto-join stays on and now follows %d %s.", len(members), map[bool]string{true: "player", false: "players"}[len(members) == 1]))
+	}
+}
+
+func sameGroup(a, b []member) bool {
+	return slices.EqualFunc(a, b, func(x, y member) bool { return tagKey(x.battleTag) == tagKey(y.battleTag) })
 }
 
 // Configure applies a selection or mode change, or switches Follow on or
@@ -391,7 +445,7 @@ func (e *Engine) arm(fromMenus bool) error {
 		e.stopHost("Auto-host is off while Auto-join is on.")
 	}
 	e.watched = members
-	e.enabled, e.pending, e.password = true, nil, nil
+	e.enabled, e.pending, e.password, e.regrouping = true, nil, nil, false
 	clear(e.announced)
 	e.attempted, e.nextAttemptAt = nil, time.Time{}
 	// Demand a new presence response after arming. Never act on a cached
@@ -595,6 +649,9 @@ func (e *Engine) Receive(event dto.GameEvent) {
 	case "GameSearchFailedToJoinGame", "GameSearchGameNotFound":
 		e.pending, e.password = nil, nil
 		e.Note("The game could not join that lobby. Follow stays on and waits for a new lobby.")
+	}
+	if e.enabled && e.regrouping && (kind == "FriendsFriendData" || kind == "FriendsFriendUpdated") {
+		e.regroup(false)
 	}
 	e.hostReceive(kind, p)
 	e.resumeIfReady()

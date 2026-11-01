@@ -417,12 +417,13 @@ func TestInvalidUnknownSelfAndNonFriendTagsCannotStart(t *testing.T) {
 	wantErr(t, f.arm(false), "friends list")
 }
 
-func TestSelectionChangesStopFollowAndReconnectNeverStartsIt(t *testing.T) {
+func TestSelectionChangesKeepFollowOnAndReconnectNeverStartsIt(t *testing.T) {
 	f := newFixture(t)
 	f.mustArm(true)
+	f.presence(nil)
 	_ = f.engine.Configure(dto.FollowConfig{Tags: &[]string{"Friend#1234"}, IncludeTeam: ptr(false)})
-	if f.state().Enabled {
-		t.Fatal("selection change kept Follow on")
+	if s := f.state(); !s.Enabled || len(s.Watched) != 1 {
+		t.Fatalf("selection change: %+v", s)
 	}
 	f.engine.Connection(false, "")
 	s := f.state()
@@ -835,11 +836,36 @@ func TestAGroupFollowsWhoeverOpensALobbyFirst(t *testing.T) {
 	}
 }
 
-func TestChangingTheGroupWhileFollowingSaysFollowStopped(t *testing.T) {
+func TestChangingTheGroupWhileFollowingKeepsAutoJoinOn(t *testing.T) {
 	f := newFixture(t)
 	f.mustArm(true)
 	_ = f.engine.Configure(dto.FollowConfig{IncludeTeam: ptr(false)})
-	if s := f.state(); s.Enabled || !strings.Contains(s.Status, "Follow stopped") {
+	if s := f.state(); !s.Enabled || len(s.Watched) != 0 || !strings.Contains(s.Status, "nobody is chosen") {
+		t.Fatalf("state = %+v", s)
+	}
+}
+
+func TestAChosenFriendSeenLaterJoinsTheGroup(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(true)
+	// Someone not on the friends list yet: Auto-join stays on and waits.
+	_ = f.engine.Configure(dto.FollowConfig{Tags: &[]string{"Later#5678"}, IncludeTeam: ptr(false)})
+	if s := f.state(); !s.Enabled || len(s.Watched) != 0 || !strings.Contains(s.Status, "waits until") {
+		t.Fatalf("state = %+v", s)
+	}
+	f.presence(map[string]any{"battleTag": "Later#5678", "accountId": 77})
+	if s := f.state(); !s.Enabled || len(s.Watched) != 1 || s.Watched[0].BattleTag != "Later#5678" {
+		t.Fatalf("state = %+v", s)
+	}
+}
+
+func TestChangingTheGroupInALobbyKeepsAutoJoinOn(t *testing.T) {
+	f := newFixture(t)
+	f.mustArm(false)
+	f.presence(nil)
+	f.receive("SetGlueScreen", map[string]any{"screen": "GAME_LOBBY"})
+	_ = f.engine.Configure(dto.FollowConfig{Tags: &[]string{"Friend#1234"}})
+	if s := f.state(); !s.Enabled {
 		t.Fatalf("state = %+v", s)
 	}
 }

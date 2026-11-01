@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Changing who you follow no longer turns Auto-join off. It stays on and follows the new group straight away, even while you're in a lobby or match. A friend you add who hasn't shown up on your Battle.net friends list yet is followed as soon as they do.
+- If Warcraft III closes, disconnects or signs out while Auto-join or Auto-host is on, the switch stays on in red and switches back on by itself once the game is back at its main menu.
+
 ### Fixed
 
 - Auto-join and Auto-host switched on before Warcraft III was running turned off again when the game started. They now stay on and start working once the game reaches its main menu.
