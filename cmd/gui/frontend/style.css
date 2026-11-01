@@ -1124,7 +1124,7 @@ dialog.sheet.ranking .fine, dialog.sheet.ranking h2 { margin: 0; }
 
 /* The host card stays readable when its switch can't be used yet: only the
    switch dims, and Set up becomes the obvious next step. */
-.hostcard:has(input:disabled) { opacity: 1; cursor: default; }
+.autojoin.hostcard:has(.host-switch-row input:disabled) { opacity: 1; cursor: default; }
 .hostcard input:disabled { opacity: .45; cursor: not-allowed; }
 .hostcard .host-setup.needs-setup { background: var(--bone); color: var(--spruce-deep); font-weight: 650; }
 .hostcard .host-setup.needs-setup:hover { filter: brightness(1.08); background: var(--bone); }
