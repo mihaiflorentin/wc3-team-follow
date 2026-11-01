@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- Auto-join and Auto-host switched on before Warcraft III was running turned off again when the game started. They now stay on and start working once the game reaches its main menu.
+
 ## [0.11.1] - 2026-11-01
 
 ### Changed

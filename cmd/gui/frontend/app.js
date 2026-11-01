@@ -203,34 +203,51 @@ function headline(s) {
 const WAITING = 'Waiting for Warcraft III.';
 
 // arm keeps a switch the player turned on before the game runs: it shows on,
-// in red, until Warcraft III connects, then switches the feature on. Only the
-// page remembers it, so a restart of Team Follow forgets it.
+// in red, until Warcraft III connects, then in its usual colour until the
+// game reaches its menus, where the feature switches on. Only the page
+// remembers it, so a restart of Team Follow forgets it.
 function arm(toggle, on) {
+  delete toggle.dataset.retryAt;
   if (on) toggle.dataset.armed = 'true';
   else delete toggle.dataset.armed;
   render(state);
 }
 
+const ARM_RETRY_MS = 3000;
+
 // switchBlocked shows why a switch can't be turned on. Before the game runs
-// the switch stays clickable and can be armed. Once the game connects, an
-// armed switch calls turnOn, unless something else still blocks it.
+// the switch stays clickable and can be armed. An armed switch waits through
+// anything that blocks it (the game starting up, a lobby, a match) and calls
+// turnOn once the game says it is in its menus. A refusal is tried again
+// every few seconds: only the player's own click turns an armed switch off.
 function switchBlocked(s, toggle, note, reason, show, feature, turnOn) {
   const armed = toggle.dataset.armed === 'true';
-  const waiting = reason === WAITING;
-  toggle.disabled = Boolean(reason) && !waiting && !armed;
-  if (armed && waiting) {
-    toggle.checked = true;
-    note.textContent = `Start Warcraft III. ${feature} switches on once the game is found.`;
-    note.classList.add('armed');
+  toggle.disabled = Boolean(reason) && reason !== WAITING && !armed;
+  toggle.dataset.needsGame = String(armed && !s.connected);
+  note.classList.toggle('armed', armed && !s.connected);
+  if (!armed) {
+    note.textContent = show ? reason : '';
     return;
   }
-  note.classList.remove('armed');
-  note.textContent = show ? reason : '';
-  if (!armed || !s.connected) return;
-  delete toggle.dataset.armed;
-  if (reason) return;
   toggle.checked = true;
-  queueMicrotask(() => confirmThen(toggle, feature, turnOn));
+  if (!s.connected) {
+    note.textContent = `Start Warcraft III. ${feature} switches on once the game is found.`;
+    return;
+  }
+  if (reason || !s.inMenus) {
+    note.textContent = reason && reason !== WAITING ? `${reason} ${feature} switches on after that.` : `${feature} switches on once the game reaches its menus.`;
+    return;
+  }
+  if (Date.now() < Number(toggle.dataset.retryAt ?? 0)) return;
+  delete toggle.dataset.armed;
+  note.textContent = '';
+  queueMicrotask(async () => {
+    if (await turnOn()) return arm(toggle, false);
+    toggle.dataset.armed = 'true';
+    toggle.dataset.retryAt = String(Date.now() + ARM_RETRY_MS);
+    setTimeout(() => render(state), ARM_RETRY_MS);
+    render(state);
+  });
 }
 
 function blockedReason(s) {
