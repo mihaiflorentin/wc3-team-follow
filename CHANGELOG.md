@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-01
+
 ### Added
 
 - **Overlay**: a new button at the top of the window shrinks Team Follow into a small panel that stays on top of Warcraft III. It shows what's on (Auto-join, Auto-host or Preview), the current status and the last Activity line. The button in its corner brings the full window back. It shows over the game in windowed or borderless fullscreen, but not in exclusive fullscreen.
@@ -180,7 +182,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A friends picker, watching before joining, and log files for reporting problems.
 - Warcraft Team Follow rebuilt in Go, with one app for Windows, macOS and Linux.
 
-[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.6...v0.10.0
