@@ -318,6 +318,7 @@ function render(s) {
   renderRecent(s);
   renderBlacklist(s);
   renderLog(s);
+  renderOverlay(s);
   renderUpdate(s);
   renderMapUpdates(s);
   refreshTip();
@@ -908,6 +909,41 @@ const logKinds = [
   [/^Auto-join is on|resumed/, 'join', 'play'],
   [/^Connected/, 'joined', 'plug'],
 ];
+
+// overlayMode names what Team Follow is doing, for the overlay.
+function overlayMode(s) {
+  const waiting = ['autojoin', 'autohost'].find(id => $(id).dataset.armed === 'true');
+  if (s.host?.enabled) return s.host.phase === 'match' ? 'Auto-host, in the match' : 'Auto-host';
+  if (s.enabled && s.diagnostic) return 'Preview';
+  if (s.enabled) return s.paused ? 'Auto-join, paused' : 'Auto-join';
+  if (waiting) return `${waiting === 'autohost' ? 'Auto-host' : 'Auto-join'}, waiting for the game`;
+  return 'Off';
+}
+
+function renderOverlay(s) {
+  const panel = $('overlay');
+  panel.dataset.tone = tone(s);
+  $('overlay-mode').textContent = overlayMode(s);
+  $('overlay-status').textContent = headline(s)[0];
+  const last = s.log.at(-1);
+  $('overlay-time').textContent = last ? new Date(last.time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
+  $('overlay-activity').textContent = last ? last.message : 'Nothing yet.';
+}
+
+// setOverlay shrinks the window into the overlay panel, or back.
+async function setOverlay(on) {
+  try {
+    await bridge.SetOverlay(on);
+  } catch (err) {
+    $('error').textContent = String(err?.message ?? err);
+    return;
+  }
+  document.body.classList.toggle('overlay-on', on);
+  $('overlay').hidden = !on;
+  $(on ? 'overlay-close' : 'overlay-open').focus();
+}
+$('overlay-open').onclick = () => setOverlay(true);
+$('overlay-close').onclick = () => setOverlay(false);
 
 function renderLog(s) {
   const list = $('log');
@@ -3333,6 +3369,7 @@ function demoBridge() {
     SetAutoBan: async on => { s.autoBan = on; return clone(); },
     SetBlacklistManualBans: async on => { s.blacklistManualBans = on; return clone(); },
     SetBlacklistLeavers: async on => { s.blacklistLeavers = on; return clone(); },
+    SetOverlay: async () => {},
     RequestKeyboardPermission: async () => { s.keyboard = {supported: true, permitted: true, reason: ''}; return clone(); },
     HostMap: async (path, useNewest) => demoHostMap(path, useNewest),
     ConfigureHost: async cfg => {

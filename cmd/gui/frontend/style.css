@@ -1729,3 +1729,48 @@ dialog.sheet.ranking .fine, dialog.sheet.ranking h2 { margin: 0; }
 }
 .tip-history dt { color: var(--lichen); }
 .tip-history dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+
+/* Overlay --------------------------------------------------------------
+   The window shrunk into a small panel on top of the game: the mode that
+   is on, the status and the last Activity line. The whole panel drags the
+   window; only the button doesn't. */
+
+body.overlay-on .app, body.overlay-on dialog { display: none; }
+body.overlay-on { overflow: hidden; }
+.overlay {
+  --tone: var(--offline);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100vh;
+  padding: 9px 12px 10px;
+  box-sizing: border-box;
+  border-left: 3px solid var(--tone);
+  background: var(--spruce-deep);
+  --wails-draggable: drag;
+  cursor: default;
+}
+.overlay[hidden] { display: none; }
+.overlay[data-tone="watching"] { --tone: var(--preview); }
+.overlay[data-tone="live"] { --tone: var(--open); }
+.overlay[data-tone="paused"] { --tone: var(--game); }
+.overlay[data-tone="alert"] { --tone: var(--danger); }
+.overlay-head { display: flex; align-items: center; gap: 8px; }
+.overlay-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); }
+.overlay-mode { flex: 1; font-family: var(--display); font-size: 15px; font-weight: 600; color: var(--bone); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.overlay-close {
+  flex: none; display: grid; place-items: center;
+  width: 26px; height: 26px; padding: 0;
+  border: 0; border-radius: 6px;
+  background: transparent; color: var(--lichen);
+  --wails-draggable: no-drag;
+}
+.overlay-close:hover, .overlay-close:focus-visible { background: var(--spruce-raised); color: var(--bone); }
+.overlay-close .icon { width: 15px; height: 15px; }
+.overlay-status, .overlay-last {
+  margin: 0; font-size: 12.5px; line-height: 1.4;
+  display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
+}
+.overlay-status { color: var(--bone); -webkit-line-clamp: 2; }
+.overlay-last { color: var(--lichen); -webkit-line-clamp: 1; }
+.overlay-last time { font-variant-numeric: tabular-nums; margin-right: 2px; }

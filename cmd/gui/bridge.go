@@ -30,6 +30,9 @@ type Bridge struct {
 	reveal func(dir string) error
 	// openURL opens a web page in the browser.
 	openURL func(link string) error
+	// window is changed by the overlay; nil uses the Wails runtime.
+	window  windowControl
+	overlay overlayState
 }
 
 // NewBridge returns the bridge for companion. logDir is the log folder, or

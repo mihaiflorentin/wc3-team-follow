@@ -81,6 +81,7 @@ func Run(deps Deps, opts Options) error {
 		return fmt.Errorf("load interface: %w", err)
 	}
 	bridge := NewBridge(deps.Companion, opts.AppVersion, opts.Executable, opts.LogDir)
+	bridge.overlay.minSize = [2]int{opts.MinWidth, opts.MinHeight}
 
 	var (
 		restart atomic.Bool

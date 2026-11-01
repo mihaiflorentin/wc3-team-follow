@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Overlay**: a new button at the top of the window shrinks Team Follow into a small panel that stays on top of Warcraft III. It shows what's on (Auto-join, Auto-host or Preview), the current status and the last Activity line. The button in its corner brings the full window back. It shows over the game in windowed or borderless fullscreen, but not in exclusive fullscreen.
+
 ### Changed
 
 - Changing who you follow no longer turns Auto-join off. It stays on and follows the new group straight away, even while you're in a lobby or match. A friend you add who hasn't shown up on your Battle.net friends list yet is followed as soon as they do.
