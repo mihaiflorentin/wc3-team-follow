@@ -202,11 +202,20 @@ const WAITING = 'Waiting for Warcraft III.';
 // until the game reaches its menus, where the feature switches on (again).
 // Only the page remembers it, so a restart of Team Follow forgets it.
 function arm(toggle, on) {
+  disarm(toggle);
+  if (on) {
+    toggle.dataset.armed = 'true';
+    // Only one of Auto-join and Auto-host runs: waiting for one cancels
+    // the other's wait, as turning one on turns the other off.
+    disarm($(toggle.id === 'autojoin' ? 'autohost' : 'autojoin'));
+  }
+  render(state);
+}
+
+function disarm(toggle) {
+  delete toggle.dataset.armed;
   delete toggle.dataset.retryAt;
   delete toggle.dataset.lost;
-  if (on) toggle.dataset.armed = 'true';
-  else delete toggle.dataset.armed;
-  render(state);
 }
 
 const ARM_RETRY_MS = 3000;

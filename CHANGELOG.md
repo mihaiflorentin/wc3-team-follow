@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- Auto-join and Auto-host could both wait for Warcraft III at once, though only one can run. Switching one on now cancels the other.
+
 ## [0.12.1] - 2026-11-01
 
 ### Added
