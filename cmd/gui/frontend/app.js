@@ -926,8 +926,13 @@ function renderOverlay(s) {
   $('overlay-mode').textContent = overlayMode(s);
   $('overlay-status').textContent = headline(s)[0];
   // Both off: offer to switch either on, with the main switches' checks.
-  const off = !s.enabled && !s.host?.enabled && !['autojoin', 'autohost'].some(id => $(id).dataset.armed === 'true');
-  $('overlay-start').hidden = !off;
+  // One on, or waiting for the game: offer to turn it off.
+  const on = s.host?.enabled || $('autohost').dataset.armed === 'true' ? 'autohost'
+    : s.enabled || $('autojoin').dataset.armed === 'true' ? 'autojoin' : '';
+  $('overlay-start').hidden = Boolean(on);
+  $('overlay-stop').hidden = !on;
+  $('overlay-off').dataset.toggle = on;
+  $('overlay-off-text').textContent = `Turn off ${on === 'autohost' ? 'Auto-host' : s.diagnostic ? 'Preview' : 'Auto-join'}`;
   for (const [button, toggle, note] of [['overlay-join', 'autojoin', 'blocked'], ['overlay-host', 'autohost', 'host-blocked']]) {
     $(button).disabled = $(toggle).disabled;
     $(button).title = $(toggle).disabled ? $(note).textContent || 'Not available yet.' : '';
@@ -953,6 +958,10 @@ $('overlay-open').onclick = () => setOverlay(true);
 // The overlay's buttons work the main switches. When the game hasn't said
 // it is in its menus the switch asks first, and that question is in the
 // full window, so the overlay steps aside for it.
+$('overlay-off').onclick = () => {
+  const toggle = $('overlay-off').dataset.toggle;
+  if (toggle) $(toggle).click();
+};
 for (const [button, toggle] of [['overlay-join', 'autojoin'], ['overlay-host', 'autohost']]) {
   $(button).onclick = () => {
     $(toggle).click();
