@@ -278,6 +278,14 @@ input, pre, .log, code { user-select: text; }
 .autojoin input:focus-visible { outline: none; }
 .blocked { margin: 0; }
 .blocked:empty { display: none; }
+/* Switched on before the game runs: on, in red, until Warcraft III connects. */
+.autojoin input[data-armed="true"]:checked { background: var(--danger); }
+.autojoin:has(.host-switch-row input[data-armed="true"]) {
+  background: color-mix(in srgb, var(--danger) 12%, var(--spruce-deep));
+  box-shadow: inset 0 0 0 1.5px var(--danger);
+}
+.autojoin:has(.host-switch-row input[data-armed="true"]) .autojoin-title { color: var(--danger); }
+.blocked.armed { color: var(--danger); }
 
 .command {
   display: flex;

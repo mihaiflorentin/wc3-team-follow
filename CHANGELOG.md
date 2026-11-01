@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- You can now switch on Auto-join and Auto-host before Warcraft III is running. The switch stays on in red and asks you to start the game, then turns its usual colour and starts working once the game is found.
+
 ## [0.11.0] - 2026-10-31
 
 ### Added

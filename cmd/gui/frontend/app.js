@@ -200,8 +200,41 @@ function headline(s) {
   return [watching, 'You’ll see here when one of them opens a lobby. Turn on Auto-join to follow them in.'];
 }
 
+const WAITING = 'Waiting for Warcraft III.';
+
+// arm keeps a switch the player turned on before the game runs: it shows on,
+// in red, until Warcraft III connects, then switches the feature on. Only the
+// page remembers it, so a restart of Team Follow forgets it.
+function arm(toggle, on) {
+  if (on) toggle.dataset.armed = 'true';
+  else delete toggle.dataset.armed;
+  render(state);
+}
+
+// switchBlocked shows why a switch can't be turned on. Before the game runs
+// the switch stays clickable and can be armed. Once the game connects, an
+// armed switch calls turnOn, unless something else still blocks it.
+function switchBlocked(s, toggle, note, reason, show, feature, turnOn) {
+  const armed = toggle.dataset.armed === 'true';
+  const waiting = reason === WAITING;
+  toggle.disabled = Boolean(reason) && !waiting && !armed;
+  if (armed && waiting) {
+    toggle.checked = true;
+    note.textContent = `Start Warcraft III. ${feature} switches on once the game is found.`;
+    note.classList.add('armed');
+    return;
+  }
+  note.classList.remove('armed');
+  note.textContent = show ? reason : '';
+  if (!armed || !s.connected) return;
+  delete toggle.dataset.armed;
+  if (reason) return;
+  toggle.checked = true;
+  queueMicrotask(() => confirmThen(toggle, feature, turnOn));
+}
+
 function blockedReason(s) {
-  if (!s.connected) return 'Waiting for Warcraft III.';
+  if (!s.connected) return WAITING;
   if (!s.verifiedBuild) return `Auto-join isn’t available on game build ${s.version} until it’s been tested. Watching still works.`;
   if (!hasTargets(s)) return 'Choose friends or form a team first.';
   if (s.joinPending) return 'A join is still in progress.';
@@ -342,11 +375,10 @@ function renderActions(s) {
   const toggle = $('autojoin');
   const reason = s.enabled ? '' : blockedReason(s);
   toggle.checked = s.enabled;
-  toggle.disabled = !s.enabled && Boolean(reason);
+  switchBlocked(s, toggle, $('blocked'), reason, s.connected, 'Auto-join', () => autoJoin(true));
   $('autojoin-help').textContent = s.enabled
     ? (s.paused ? 'On, and paused while you’re in a lobby, match or queue.' : 'On. Joins the first friend in your group who opens a lobby.')
     : 'Join the first friend in your group who opens a lobby. Pauses while you play.';
-  $('blocked').textContent = s.connected ? reason : '';
   if (confirmFor === 'Auto-join' && (s.enabled || reason)) closeConfirm();
 }
 
@@ -1545,7 +1577,9 @@ function confirmThen(toggle, feature, action) {
 
 $('autojoin').onchange = event => {
   if (!state) return;
+  if (event.target.dataset.armed === 'true') return arm(event.target, false);
   if (!event.target.checked) return configure({enabled: false});
+  if (!state.connected) return arm(event.target, true);
   confirmThen(event.target, 'Auto-join', () => autoJoin(true));
 };
 function closeConfirm() {
@@ -2068,7 +2102,7 @@ function hostBlocked(s) {
   const st = s.host.settings;
   if (!st.mapPath) return 'Choose a map in Set up first.';
   if (!st.gameName) return 'Name your lobby in Set up first.';
-  if (!s.connected) return 'Waiting for Warcraft III.';
+  if (!s.connected) return WAITING;
   if (!s.verifiedBuild) return `Auto-host isn’t available on game build ${s.version} until it’s been tested.`;
   if (s.busy || s.queued || s.inMatch) return 'Go back to the game’s menus first.';
   return '';
@@ -2114,17 +2148,18 @@ function renderHost(s) {
   const toggle = $('autohost');
   const reason = h.enabled ? '' : hostBlocked(s);
   toggle.checked = h.enabled;
-  toggle.disabled = !h.enabled && Boolean(reason);
+  switchBlocked(s, toggle, $('host-blocked'), reason, s.connected || !h.settings.mapPath, 'Auto-host', () => hostAct({enabled: true, fromMenus: true}));
   $('host-help').textContent = hostSummary(h);
   $('host-setup').classList.toggle('needs-setup', !h.settings.mapPath || !h.settings.gameName);
-  $('host-blocked').textContent = s.connected || !h.settings.mapPath ? reason : '';
   renderKeyboard(s.keyboard);
   if (confirmFor === 'Auto-host' && (h.enabled || reason)) closeConfirm();
 }
 
 $('autohost').onchange = event => {
   if (!state) return;
+  if (event.target.dataset.armed === 'true') return arm(event.target, false);
   if (!event.target.checked) return hostAct({enabled: false});
+  if (!state.connected) return arm(event.target, true);
   confirmThen(event.target, 'Auto-host', () => hostAct({enabled: true, fromMenus: true}));
 };
 
