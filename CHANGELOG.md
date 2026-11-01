@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-01
+
 ### Added
 
 - The overlay now has buttons to switch Auto-join or Auto-host on when both are off, and to turn off the one that's on.
@@ -186,7 +188,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A friends picker, watching before joining, and log files for reporting problems.
 - Warcraft Team Follow rebuilt in Go, with one app for Windows, macOS and Linux.
 
-[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.10.0...v0.11.0
