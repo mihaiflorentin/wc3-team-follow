@@ -27,7 +27,7 @@ func TestOverlayShrinksTheWindowOnTopAndPutsItBack(t *testing.T) {
 	if err := b.SetOverlay(true); err != nil {
 		t.Fatal(err)
 	}
-	if !w.onTop || w.frame != gui.NewFrame(780, 50, 300, 136) || w.min != [2]int{300, 136} {
+	if !w.onTop || w.frame != gui.NewFrame(780, 50, 300, 164) || w.min != [2]int{300, 164} {
 		t.Fatalf("overlay: %+v", w)
 	}
 	// Asking again changes nothing.

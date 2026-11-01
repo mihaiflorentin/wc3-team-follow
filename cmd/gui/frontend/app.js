@@ -925,6 +925,13 @@ function renderOverlay(s) {
   panel.dataset.tone = tone(s);
   $('overlay-mode').textContent = overlayMode(s);
   $('overlay-status').textContent = headline(s)[0];
+  // Both off: offer to switch either on, with the main switches' checks.
+  const off = !s.enabled && !s.host?.enabled && !['autojoin', 'autohost'].some(id => $(id).dataset.armed === 'true');
+  $('overlay-start').hidden = !off;
+  for (const [button, toggle, note] of [['overlay-join', 'autojoin', 'blocked'], ['overlay-host', 'autohost', 'host-blocked']]) {
+    $(button).disabled = $(toggle).disabled;
+    $(button).title = $(toggle).disabled ? $(note).textContent || 'Not available yet.' : '';
+  }
   const last = s.log.at(-1);
   $('overlay-time').textContent = last ? new Date(last.time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
   $('overlay-activity').textContent = last ? last.message : 'Nothing yet.';
@@ -943,6 +950,15 @@ async function setOverlay(on) {
   $(on ? 'overlay-close' : 'overlay-open').focus();
 }
 $('overlay-open').onclick = () => setOverlay(true);
+// The overlay's buttons work the main switches. When the game hasn't said
+// it is in its menus the switch asks first, and that question is in the
+// full window, so the overlay steps aside for it.
+for (const [button, toggle] of [['overlay-join', 'autojoin'], ['overlay-host', 'autohost']]) {
+  $(button).onclick = () => {
+    $(toggle).click();
+    if (!$('confirm').hidden) setOverlay(false);
+  };
+}
 $('overlay-close').onclick = () => setOverlay(false);
 
 function renderLog(s) {

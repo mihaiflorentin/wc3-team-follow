@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- When neither Auto-join nor Auto-host is on, the overlay shows buttons to switch either one on.
+
 ## [0.12.0] - 2026-11-01
 
 ### Added

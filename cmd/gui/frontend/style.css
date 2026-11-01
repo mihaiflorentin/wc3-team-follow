@@ -1773,4 +1773,7 @@ body.overlay-on { overflow: hidden; }
 }
 .overlay-status { color: var(--bone); -webkit-line-clamp: 2; }
 .overlay-last { color: var(--lichen); -webkit-line-clamp: 1; }
+.overlay-start { display: flex; gap: 6px; margin: 2px 0; --wails-draggable: no-drag; }
+.overlay-start[hidden] { display: none; }
+.overlay-start .ghost { flex: 1; justify-content: center; }
 .overlay-last time { font-variant-numeric: tabular-nums; margin-right: 2px; }

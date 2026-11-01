@@ -10,7 +10,7 @@ import (
 // The overlay's window size: a small panel kept on top of the game.
 const (
 	overlayWidth  = 300
-	overlayHeight = 136
+	overlayHeight = 164
 )
 
 // frame is the window's position and size.
