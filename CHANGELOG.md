@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-11-01
+
 ### Changed
 
 - You can now switch on Auto-join and Auto-host before Warcraft III is running. The switch stays on in red and asks you to start the game, then turns its usual colour and starts working once the game is found.
@@ -165,7 +167,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A friends picker, watching before joining, and log files for reporting problems.
 - Warcraft Team Follow rebuilt in Go, with one app for Windows, macOS and Linux.
 
-[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.6...v0.10.0
 [0.9.6]: https://github.com/mihaiflorentin/wc3-team-follow/compare/v0.9.5...v0.9.6
